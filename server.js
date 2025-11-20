@@ -4,7 +4,7 @@ const ewelink = require('ewelink-api');
 
 const app = express();
 
-// DOMINI PERMESSI (metti il tuo dominio di Altervista)
+// Domini frontend permessi (aggiungi/varia se necessario)
 const allowedOrigins = [
   'https://oratoriosluigi.altervista.org',
   'http://localhost:5500'
@@ -21,10 +21,10 @@ app.use(cors({
 
 app.use(express.json());
 
-// connessione globale basata su token (per il toggle)
+// Connessione globale (dopo login)
 let conn = null;
 
-// LOGIN + LETTURA DISPOSITIVI
+// LOGIN + GET DEVICES
 app.post('/api/login', async (req, res) => {
   const { email, password, region } = req.body;
 
@@ -33,29 +33,15 @@ app.post('/api/login', async (req, res) => {
   }
 
   try {
-    // 1) primo step: login con email/password
-    const loginConn = new ewelink({ email, password, region });
-    const credentials = await loginConn.getCredentials();
+    // Connessione diretta con email/password/region
+    conn = new ewelink({ email, password, region });
 
+    const credentials = await conn.getCredentials();
     console.log('DEBUG credentials:', credentials);
-
-    if (!credentials || !credentials.at || !credentials.user || !credentials.user.apikey) {
-      return res.status(500).json({ ok: false, error: 'Credenziali eWeLink non valide' });
-    }
-
-    const finalRegion = credentials.region || region || 'eu';
-
-    // 2) seconda connessione con token
-    conn = new ewelink({
-      at: credentials.at,
-      apiKey: credentials.user.apikey,
-      region: finalRegion,
-    });
 
     const devicesResp = await conn.getDevices();
     console.log('DEBUG devicesResp:', devicesResp);
 
-    // Normalizzo la risposta
     if (!devicesResp) {
       return res.status(500).json({ ok: false, error: 'Risposta vuota da getDevices' });
     }
@@ -64,7 +50,7 @@ app.post('/api/login', async (req, res) => {
     if (typeof devicesResp.error !== 'undefined' && devicesResp.error !== 0) {
       return res.status(500).json({
         ok: false,
-        error: devicesResp.msg || 'Errore getDevices: ' + devicesResp.error
+        error: devicesResp.msg || ('Errore getDevices: ' + devicesResp.error)
       });
     }
 
@@ -106,7 +92,7 @@ app.post('/api/toggle', async (req, res) => {
     if (resp && typeof resp.error !== 'undefined' && resp.error !== 0) {
       return res.status(500).json({
         ok: false,
-        error: resp.msg || 'Errore setDevicePowerState: ' + resp.error
+        error: resp.msg || ('Errore setDevicePowerState: ' + resp.error)
       });
     }
 
