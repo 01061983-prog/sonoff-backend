@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "ewelink-api": "^3.1.0",
-    "express": "^4.19.0"
+    "express": "^4.19.0",
+    "ewelink-api-next": "^1.0.4"
   }
 }
