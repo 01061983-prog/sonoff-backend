@@ -24,6 +24,35 @@ app.use(express.json());
 // Connessione globale (dopo login)
 let conn = null;
 
+// Funzione di utilità per estrarre i dispositivi
+function estraiDispositivi(devicesResp) {
+  // Caso 1: direttamente un array
+  if (Array.isArray(devicesResp)) return devicesResp;
+
+  // Caso 2: { data: [...] }
+  if (devicesResp && Array.isArray(devicesResp.data)) {
+    return devicesResp.data;
+  }
+
+  // Caso 3: { devicelist: [...] }
+  if (devicesResp && Array.isArray(devicesResp.devicelist)) {
+    return devicesResp.devicelist;
+  }
+
+  // Caso 4: nuovo formato "thingList"
+  if (
+    devicesResp &&
+    devicesResp.data &&
+    Array.isArray(devicesResp.data.thingList)
+  ) {
+    // spesso gli oggetti sono in data.thingList[i].itemData
+    return devicesResp.data.thingList.map(t => t.itemData || t);
+  }
+
+  // Nessun formato riconosciuto
+  return [];
+}
+
 // LOGIN + GET DEVICES
 app.post('/api/login', async (req, res) => {
   const { email, password, region } = req.body;
@@ -54,16 +83,16 @@ app.post('/api/login', async (req, res) => {
       });
     }
 
-    let devices = [];
+    const devices = estraiDispositivi(devicesResp);
 
-    if (Array.isArray(devicesResp)) {
-      devices = devicesResp;
-    } else if (Array.isArray(devicesResp.data)) {
-      devices = devicesResp.data;
-    } else if (Array.isArray(devicesResp.devicelist)) {
-      devices = devicesResp.devicelist;
-    } else {
-      console.warn('Formato sconosciuto devicesResp:', devicesResp);
+    // Se ancora vuoto, rimando anche la risposta grezza per debug
+    if (!devices || devices.length === 0) {
+      console.warn('Nessun dispositivo estratto, devicesResp formato sconosciuto');
+      return res.json({
+        ok: true,
+        devices: [],
+        raw: devicesResp   // così puoi vedere in console cosa arriva
+      });
     }
 
     return res.json({ ok: true, devices });
