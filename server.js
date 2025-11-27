@@ -1,10 +1,11 @@
+// server.js
 const express = require('express');
 const cors = require('cors');
 const eWeLink = require('ewelink-api-next').default;
 
 const app = express();
 
-// Domini frontend permessi (aggiungi/varia se necessario)
+// Domini frontend permessi
 const allowedOrigins = [
   'https://oratoriosluigi.altervista.org',
   'http://localhost:5500'
@@ -21,39 +22,57 @@ app.use(cors({
 
 app.use(express.json());
 
-// Leggo le variabili d'ambiente per l'app developer
-// Supporta sia EWELINK_APP_ID che EWELINK_APPID, e sia EWELINK_APP_SECRET che EWELINK_APPSECRET
-const APP_ID = process.env.EWELINK_APP_ID || process.env.EWELINK_APPID;
-const APP_SECRET = process.env.EWELINK_APP_SECRET || process.env.EWELINK_APPSECRET;
+/**
+ * Variabili d'ambiente (Render → Environment)
+ *
+ * Imposta almeno queste:
+ *   EWELINK_APP_ID      = AppID eWeLink Developer
+ *   EWELINK_APP_SECRET  = AppSecret eWeLink Developer
+ *   EWELINK_REGION      = eu
+ *
+ * In alternativa puoi usare:
+ *   EWELINK_APPID       / EWELINK_APPSECRET
+ */
+const APP_ID =
+  process.env.EWELINK_APP_ID ||
+  process.env.EWELINK_APPID;
+
+const APP_SECRET =
+  process.env.EWELINK_APP_SECRET ||
+  process.env.EWELINK_APPSECRET;
+
 const REGION = process.env.EWELINK_REGION || 'eu';
 
-// Controllo di base
 if (!APP_ID || !APP_SECRET) {
-  console.warn('ATTENZIONE: APP_ID o APP_SECRET non trovati nelle variabili di ambiente');
+  console.warn('ATTENZIONE: APP_ID / APP_SECRET NON trovati nelle variabili di ambiente.');
 }
 
-// Client globale verso eWeLink v2
+// Client WebAPI v2
 const client = new eWeLink.WebAPI({
   appId: APP_ID,
   appSecret: APP_SECRET,
-  region: REGION,
-  logObj: eWeLink.createLogger(REGION) // oppure console
+  region: REGION
 });
 
-// LOGIN + GET DEVICES
+// LOGIN + LETTURA DISPOSITIVI
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.status(400).json({ ok: false, error: 'Email o password mancanti' });
+    return res
+      .status(400)
+      .json({ ok: false, error: 'Email o password mancanti' });
   }
 
   if (!APP_ID || !APP_SECRET) {
-    return res.status(500).json({ ok: false, error: 'Configurazione APP_ID/APP_SECRET mancante sul server' });
+    return res.status(500).json({
+      ok: false,
+      error: 'Configurazione server mancante (APP_ID/APP_SECRET)'
+    });
   }
 
   try {
-    // 1) Login con account e prefisso Italia (+39)
+    // 1) LOGIN ACCOUNT (prefisso Italia +39)
     const loginResp = await client.user.login({
       account: email,
       password,
@@ -70,14 +89,16 @@ app.post('/api/login', async (req, res) => {
       });
     }
 
-    // 2) Lista dispositivi (thingList)
+    // 2) LISTA DISPOSITIVI (thingList)
     const devicesResp = await client.device.getThingList({});
     console.log('DEBUG devicesResp:', JSON.stringify(devicesResp));
 
     if (!devicesResp || devicesResp.error !== 0) {
       return res.status(500).json({
         ok: false,
-        error: (devicesResp && devicesResp.msg) ? devicesResp.msg : 'Errore getThingList',
+        error: (devicesResp && devicesResp.msg)
+          ? devicesResp.msg
+          : 'Errore getThingList',
         raw: devicesResp
       });
     }
@@ -86,10 +107,10 @@ app.post('/api/login', async (req, res) => {
       ? devicesResp.data.thingList
       : [];
 
-    // Adattiamo al formato che il tuo frontend si aspetta:
-    // name, deviceid, online, params.switch
+    // Adatto al formato che usa il tuo frontend:
+    // { name, deviceid, online, params }
     const devices = things.map(t => {
-      const device = t.itemData || t; // dipende dal formato
+      const device = t.itemData || t;           // dipende dal formato
       const params = device.params || device.itemParams || {};
       const online = device.online || device.onlineStatus === 1;
 
@@ -117,7 +138,9 @@ app.post('/api/toggle', async (req, res) => {
   const { deviceId, state } = req.body;
 
   if (!deviceId || !['on', 'off'].includes(state)) {
-    return res.status(400).json({ ok: false, error: 'Parametri non validi per toggle' });
+    return res
+      .status(400)
+      .json({ ok: false, error: 'Parametri non validi per toggle' });
   }
 
   try {
@@ -149,5 +172,8 @@ app.post('/api/toggle', async (req, res) => {
   }
 });
 
+// AVVIO SERVER
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('Server eWeLink v2 attivo sulla porta ' + PORT));
+app.listen(PORT, () => {
+  console.log('Server eWeLink v2 attivo sulla porta ' + PORT);
+});
