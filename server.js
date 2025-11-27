@@ -21,14 +21,16 @@ app.use(cors({
 
 app.use(express.json());
 
-/**
- * Config presi da Render (Environment Variables)
- * EWELINK_APP_ID  -> AppID della tua app su developer.ewelink
- * EWELINK_APP_SECRET -> AppSecret della stessa app
- */
-const APP_ID = process.env.EWELINK_APP_ID;
-const APP_SECRET = process.env.EWELINK_APP_SECRET;
-const REGION = 'eu';
+// Leggo le variabili d'ambiente per l'app developer
+// Supporta sia EWELINK_APP_ID che EWELINK_APPID, e sia EWELINK_APP_SECRET che EWELINK_APPSECRET
+const APP_ID = process.env.EWELINK_APP_ID || process.env.EWELINK_APPID;
+const APP_SECRET = process.env.EWELINK_APP_SECRET || process.env.EWELINK_APPSECRET;
+const REGION = process.env.EWELINK_REGION || 'eu';
+
+// Controllo di base
+if (!APP_ID || !APP_SECRET) {
+  console.warn('ATTENZIONE: APP_ID o APP_SECRET non trovati nelle variabili di ambiente');
+}
 
 // Client globale verso eWeLink v2
 const client = new eWeLink.WebAPI({
@@ -38,15 +40,16 @@ const client = new eWeLink.WebAPI({
   logObj: eWeLink.createLogger(REGION) // oppure console
 });
 
-// Ci teniamo l'ultimo familyId (casa) usato
-let lastFamilyId = null;
-
 // LOGIN + GET DEVICES
 app.post('/api/login', async (req, res) => {
-  const { email, password, region } = req.body;
+  const { email, password } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({ ok: false, error: 'Email o password mancanti' });
+  }
+
+  if (!APP_ID || !APP_SECRET) {
+    return res.status(500).json({ ok: false, error: 'Configurazione APP_ID/APP_SECRET mancante sul server' });
   }
 
   try {
@@ -67,36 +70,8 @@ app.post('/api/login', async (req, res) => {
       });
     }
 
-    // 2) Recupero lista "famiglie/case" per avere un familyId
-    let familyId = null;
-    try {
-      const familyResp = await client.home.getFamilyList();
-      console.log('DEBUG familyResp:', JSON.stringify(familyResp));
-
-      if (
-        familyResp &&
-        familyResp.error === 0 &&
-        familyResp.data &&
-        Array.isArray(familyResp.data.familyList) &&
-        familyResp.data.familyList.length > 0
-      ) {
-        familyId = familyResp.data.familyList[0].familyId;
-      }
-    } catch (err) {
-      console.warn('Impossibile leggere family list, provo comunque getThingList senza familyId:', err.message);
-    }
-
-    lastFamilyId = familyId;
-
-    // 3) Lista dispositivi
-    let devicesResp;
-    if (familyId) {
-      devicesResp = await client.device.getThingList({ familyId });
-    } else {
-      // alcuni client permettono la chiamata anche senza familyId
-      devicesResp = await client.device.getThingList({});
-    }
-
+    // 2) Lista dispositivi (thingList)
+    const devicesResp = await client.device.getThingList({});
     console.log('DEBUG devicesResp:', JSON.stringify(devicesResp));
 
     if (!devicesResp || devicesResp.error !== 0) {
@@ -114,7 +89,7 @@ app.post('/api/login', async (req, res) => {
     // Adattiamo al formato che il tuo frontend si aspetta:
     // name, deviceid, online, params.switch
     const devices = things.map(t => {
-      const device = t.itemData || t; // in base a come arriva
+      const device = t.itemData || t; // dipende dal formato
       const params = device.params || device.itemParams || {};
       const online = device.online || device.onlineStatus === 1;
 
