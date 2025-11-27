@@ -4,6 +4,10 @@ const ewelink = require('ewelink-api');
 
 const app = express();
 
+// Leggo le variabili d'ambiente per l'app developer
+const APP_ID = process.env.EWELINK_APPID;
+const APP_SECRET = process.env.EWELINK_APPSECRET;
+
 // Domini frontend permessi (aggiungi/varia se necessario)
 const allowedOrigins = [
   'https://oratoriosluigi.altervista.org',
@@ -45,7 +49,6 @@ function estraiDispositivi(devicesResp) {
     devicesResp.data &&
     Array.isArray(devicesResp.data.thingList)
   ) {
-    // spesso gli oggetti sono in data.thingList[i].itemData
     return devicesResp.data.thingList.map(t => t.itemData || t);
   }
 
@@ -61,9 +64,20 @@ app.post('/api/login', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'Email o password mancanti' });
   }
 
+  if (!APP_ID || !APP_SECRET) {
+    console.error('APP_ID o APP_SECRET mancanti nelle variabili di ambiente');
+    return res.status(500).json({ ok: false, error: 'Configurazione server mancante (APP_ID/APP_SECRET)' });
+  }
+
   try {
-    // Connessione diretta con email/password/region
-    conn = new ewelink({ email, password, region });
+    // Connessione diretta con email/password/region + APPID/APPSECRET
+    conn = new ewelink({
+      email,
+      password,
+      region: region || process.env.EWELINK_REGION || 'eu',
+      appId: APP_ID,
+      appSecret: APP_SECRET
+    });
 
     const credentials = await conn.getCredentials();
     console.log('DEBUG credentials:', credentials);
@@ -77,6 +91,7 @@ app.post('/api/login', async (req, res) => {
 
     // Se la libreria usa formato { error, msg, data }
     if (typeof devicesResp.error !== 'undefined' && devicesResp.error !== 0) {
+      console.error('Errore getDevices:', devicesResp);
       return res.status(500).json({
         ok: false,
         error: devicesResp.msg || ('Errore getDevices: ' + devicesResp.error)
@@ -85,13 +100,12 @@ app.post('/api/login', async (req, res) => {
 
     const devices = estraiDispositivi(devicesResp);
 
-    // Se ancora vuoto, rimando anche la risposta grezza per debug
     if (!devices || devices.length === 0) {
       console.warn('Nessun dispositivo estratto, devicesResp formato sconosciuto');
       return res.json({
         ok: true,
         devices: [],
-        raw: devicesResp   // così puoi vedere in console cosa arriva
+        raw: devicesResp   // per debug eventuale
       });
     }
 
