@@ -1,4 +1,4 @@
-// server.js – Backend semplice per pannello Sonoff
+// server.js – Backend semplice per pannello Sonoff usando ewelink-api
 
 const express = require("express");
 const cors = require("cors");
@@ -7,52 +7,41 @@ const Ewelink = require("ewelink-api");
 const app = express();
 app.use(express.json());
 
-// CORS: front-end ammessi
+// ====== ENV DA RENDER ======
+const EWELINK_USERNAME = process.env.EWELINK_USERNAME; // email account eWeLink
+const EWELINK_PASSWORD = process.env.EWELINK_PASSWORD; // password account eWeLink
+const EWELINK_REGION   = process.env.EWELINK_REGION || "eu"; // es. "eu"
+
+if (!EWELINK_USERNAME || !EWELINK_PASSWORD) {
+  console.error("ERRORE: EWELINK_USERNAME o EWELINK_PASSWORD non impostati!");
+}
+
+// ====== CORS: front-end ammessi ======
 app.use(
   cors({
     origin: [
       "https://oratoriosluigi.altervista.org",
-      "http://localhost:5500"
-    ]
+      "http://localhost:5500",
+    ],
   })
 );
 
-// --- CONFIGURAZIONE DA ENV SU RENDER ---
-// (le metti nella sezione Environment)
-const EWELINK_USERNAME = process.env.EWELINK_USERNAME; // la tua mail eWeLink
-const EWELINK_PASSWORD = process.env.EWELINK_PASSWORD; // la tua password
-const EWELINK_REGION   = process.env.EWELINK_REGION || "eu"; // es. "eu"
-const EWELINK_APP_ID   = process.env.EWELINK_APP_ID;
-const EWELINK_APP_SECRET = process.env.EWELINK_APP_SECRET;
-
-// Connessione condivisa
+// ====== CONNESSIONE UNICA A EWeLink ======
 let connection = null;
 
-// Crea (o riusa) la connessione verso eWeLink
 async function getConnection() {
-  if (
-    !EWELINK_USERNAME ||
-    !EWELINK_PASSWORD ||
-    !EWELINK_APP_ID ||
-    !EWELINK_APP_SECRET
-  ) {
-    throw new Error("Mancano le variabili ENV eWeLink sul server");
-  }
-
   if (!connection) {
     connection = new Ewelink({
       email: EWELINK_USERNAME,
       password: EWELINK_PASSWORD,
       region: EWELINK_REGION,
-      APP_ID: EWELINK_APP_ID,
-      APP_SECRET: EWELINK_APP_SECRET
     });
+    console.log("Connessione eWeLink creata per", EWELINK_USERNAME);
   }
-
   return connection;
 }
 
-// --- API: lista dispositivi ---
+// ====== API: lista dispositivi ======
 app.get("/api/devices", async (req, res) => {
   try {
     const conn = await getConnection();
@@ -64,9 +53,9 @@ app.get("/api/devices", async (req, res) => {
   }
 });
 
-// --- API: accendi/spegni ---
+// ====== API: accendi/spegni ======
 app.post("/api/toggle", async (req, res) => {
-  const { deviceId, state, outlet } = req.body; // state: "on" | "off"
+  const { deviceId, state, outlet } = req.body || {}; // state: "on" | "off"
 
   if (!deviceId || !state) {
     return res
@@ -76,10 +65,10 @@ app.post("/api/toggle", async (req, res) => {
 
   try {
     const conn = await getConnection();
-
     let result;
+
     if (typeof outlet === "number") {
-      // multi-canale
+      // device multi-canale
       result = await conn.setDevicePowerState(deviceId, state, outlet);
     } else {
       result = await conn.setDevicePowerState(deviceId, state);
@@ -92,7 +81,7 @@ app.post("/api/toggle", async (req, res) => {
   }
 });
 
-// --- AVVIO SERVER ---
+// ====== AVVIO SERVER ======
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("Server Sonoff attivo sulla porta " + PORT);
