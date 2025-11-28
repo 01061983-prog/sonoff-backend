@@ -9,6 +9,6 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.19.0",
-    "ewelink-api-next": "^1.0.4"
+    "node-fetch": "^2.7.0"
   }
 }
