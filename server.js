@@ -1,248 +1,153 @@
-// server.js - backend Sonoff / eWeLink v2 ufficiale
+// server.js – Backend Sonoff per OAuth2.0 (eWeLink)
 
 const express = require("express");
 const cors = require("cors");
+const fetch = require("node-fetch");
 const crypto = require("crypto");
 
 const app = express();
-
-// ==== CONFIGURAZIONE ====
-
-const APP_ID = process.env.EWELINK_APP_ID;
-const APP_SECRET = process.env.EWELINK_APP_SECRET;
-const DEFAULT_REGION = process.env.EWELINK_REGION || "eu";
-
-// Controllo rapido: se mancano le variabili, il server parte ma segnala errore
-if (!APP_ID || !APP_SECRET) {
-  console.error(
-    "ERRORE: EWELINK_APP_ID o EWELINK_APP_SECRET non impostati nelle Environment Variables di Render."
-  );
-}
-
-// Domini frontend permessi
-const allowedOrigins = [
-  "https://oratoriosluigi.altervista.org",
-  "http://localhost:5500",
-];
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error("Origine non consentita: " + origin), false);
-    },
-  })
-);
-
 app.use(express.json());
 
-// ==== MAPPA DOMAIN API PER REGIONE ====
+const APPID = process.env.EWELINK_APP_ID;
+const APPSECRET = process.env.EWELINK_APP_SECRET;
 
-const API_BASE = {
-  cn: "https://cn-apia.coolkit.cn",
-  as: "https://as-apia.coolkit.cc",
-  us: "https://us-apia.coolkit.cc",
-  eu: "https://eu-apia.coolkit.cc",
+const REDIRECT_URI = "https://sonoff-backend-k8sh.onrender.com/oauth/callback";
+const API_BASE = "https://eu-apia.coolkit.cc"; // Regione EU
+
+let oauth = {
+    access_token: null,
+    refresh_token: null,
+    at_expires: null
 };
 
-// Stato auth in memoria (valido finché il server rimane su)
-let auth = null; // { at, region, apikey }
+// CORS (front-end Altervista)
+app.use(cors({
+    origin: [
+        "https://oratoriosluigi.altervista.org",
+        "http://localhost:5500"
+    ],
+    credentials: true
+}));
 
-// Helper: restituisce base URL in base alla regione corrente
-function getApiBase(region) {
-  return API_BASE[region] || API_BASE[DEFAULT_REGION];
-}
+// 1) LOGIN OAUTH2 – reindirizza alla pagina di autorizzazione eWeLink
+app.get("/oauth/login", (req, res) => {
+    const url =
+        `https://oauth.coolkit.cc/authorize` +
+        `?client_id=${APPID}` +
+        `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
+        `&response_type=code` +
+        `&state=oratorio`;
 
-// ==== LOGIN DIRETTO (senza OAuth) ====
+    res.redirect(url);
+});
 
-// Esegue il login e aggiorna `auth`
-async function ewelinkLogin(email, password, regionHint) {
-  let region = regionHint || DEFAULT_REGION;
-  const payload = { email, password };
+// 2) CALLBACK – scambio “code” → accessToken
+app.get("/oauth/callback", async (req, res) => {
+    const { code } = req.query;
 
-  // Funzione che chiama /v2/user/login per una regione specifica
-  async function tryLoginOnce(reg) {
-    const url = `${getApiBase(reg)}/v2/user/login`;
-    const body = JSON.stringify(payload);
+    if (!code) {
+        return res.status(400).send("Manca il code!");
+    }
 
-    // HMAC SHA256 del body con APP_SECRET, base64
+    const tokenUrl = `${API_BASE}/v2/user/oauth/token`;
+
+    const body = JSON.stringify({
+        code,
+        grant_type: "authorization_code",
+        redirect_uri: REDIRECT_URI
+    });
+
     const sign = crypto
-      .createHmac("sha256", APP_SECRET)
-      .update(Buffer.from(body, "utf8"))
-      .digest("base64");
+        .createHmac("sha256", APPSECRET)
+        .update(body)
+        .digest("base64");
 
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Sign " + sign,
-        "X-CK-Appid": APP_ID,
-      },
-      body,
+    const resp = await fetch(tokenUrl, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Sign " + sign,
+            "X-CK-Appid": APPID
+        },
+        body
     });
 
     const data = await resp.json();
-    return data;
-  }
 
-  // Primo tentativo nella regione indicata
-  let data = await tryLoginOnce(region);
+    if (data.error !== 0) {
+        return res.status(500).send("Login fallito: " + data.msg);
+    }
 
-  // Se la regione è sbagliata, il server risponde con error = 10004
-  if (data.error === 10004 && data.data && data.data.region) {
-    region = data.data.region;
-    data = await tryLoginOnce(region);
-  }
+    oauth.access_token = data.data.access_token;
+    oauth.refresh_token = data.data.refresh_token;
+    oauth.at_expires = Date.now() + data.data.expires_in * 1000;
 
-  if (data.error !== 0) {
-    // error 407 -> appid senza permessi, 400 -> param error, ecc.
-    throw new Error(
-      `Login fallito (error=${data.error}, msg=${data.msg || "unknown"})`
-    );
-  }
+    // Ritorno al frontend
+    res.redirect("https://oratoriosluigi.altervista.org/sonoff.html");
+});
 
-  // Salvo i dati di autenticazione
-  auth = {
-    at: data.data.at, // accessToken
-    region,
-    apikey: data.data.user ? data.data.user.apikey : undefined,
-  };
+// 3) LISTA DISPOSITIVI
+app.get("/api/devices", async (req, res) => {
+    if (!oauth.access_token) {
+        return res.status(401).json({ ok: false, error: "Non autenticato" });
+    }
 
-  console.log("Login OK, regione:", region);
-}
+    const url = `${API_BASE}/v2/device/thing?num=0`;
 
-// ==== GET DEVICES ====
-
-async function ewelinkGetDevices() {
-  if (!auth || !auth.at) {
-    throw new Error("Non autenticato");
-  }
-
-  const url = `${getApiBase(auth.region)}/v2/device/thing?num=0`;
-
-  const resp = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: "Bearer " + auth.at,
-      "X-CK-Appid": APP_ID,
-    },
-  });
-
-  const data = await resp.json();
-
-  if (data.error !== 0) {
-    throw new Error(
-      `Errore getDevices (error=${data.error}, msg=${data.msg || "unknown"})`
-    );
-  }
-
-  // thingList -> itemType 1/2 sono device, itemData contiene il device
-  const devices = (data.data.thingList || [])
-    .filter((i) => i.itemType === 1 || i.itemType === 2)
-    .map((i) => i.itemData);
-
-  return devices;
-}
-
-// ==== TOGGLE DEVICE ====
-
-async function ewelinkToggleDevice(deviceId, state) {
-  if (!auth || !auth.at) {
-    throw new Error("Non autenticato");
-  }
-
-  const url = `${getApiBase(auth.region)}/v2/device/thing/status`;
-
-  const body = JSON.stringify({
-    type: 1, // device
-    id: deviceId,
-    params: {
-      switch: state, // "on" o "off"
-    },
-  });
-
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: "Bearer " + auth.at,
-      "X-CK-Appid": APP_ID,
-    },
-    body,
-  });
-
-  const data = await resp.json();
-
-  if (data.error !== 0) {
-    throw new Error(
-      `Errore toggle (error=${data.error}, msg=${data.msg || "unknown"})`
-    );
-  }
-}
-
-// ==== ENDPOINTS EXPRESS ====
-
-// LOGIN + LISTA DISPOSITIVI
-app.post("/api/login", async (req, res) => {
-  const { email, password, region } = req.body || {};
-
-  if (!APP_ID || !APP_SECRET) {
-    return res.status(500).json({
-      ok: false,
-      error: "Configurazione server mancante (APP_ID/APP_SECRET)",
+    const resp = await fetch(url, {
+        headers: {
+            "Authorization": "Bearer " + oauth.access_token,
+            "X-CK-Appid": APPID
+        }
     });
-  }
 
-  if (!email || !password) {
-    return res
-      .status(400)
-      .json({ ok: false, error: "Email o password mancanti" });
-  }
+    const data = await resp.json();
 
-  try {
-    // login (usa eventuale hint di regione dal client, es. "eu")
-    await ewelinkLogin(email, password, region);
+    if (data.error !== 0) {
+        return res.status(500).json({ ok: false, error: data.msg });
+    }
 
-    // prendo i dispositivi dell'account
-    const devices = await ewelinkGetDevices();
+    const devices = (data.data.thingList || [])
+        .map(i => i.itemData);
 
-    return res.json({ ok: true, devices });
-  } catch (e) {
-    console.error("Errore login/getDevices:", e.message);
-    return res.status(401).json({ ok: false, error: e.message });
-  }
+    res.json({ ok: true, devices });
 });
 
-// TOGGLE ON/OFF
+// 4) TOGGLE – accendi/spegni
 app.post("/api/toggle", async (req, res) => {
-  const { deviceId, state } = req.body || {};
+    const { deviceId, state } = req.body;
 
-  if (!deviceId || !["on", "off"].includes(state)) {
-    return res
-      .status(400)
-      .json({ ok: false, error: "Parametri non validi per toggle" });
-  }
+    if (!oauth.access_token) {
+        return res.status(401).json({ ok: false, error: "Non autenticato" });
+    }
 
-  if (!auth || !auth.at) {
-    return res
-      .status(401)
-      .json({ ok: false, error: "Non sei loggato (manca il token)" });
-  }
+    const url = `${API_BASE}/v2/device/thing/status`;
 
-  try {
-    await ewelinkToggleDevice(deviceId, state);
-    return res.json({ ok: true });
-  } catch (e) {
-    console.error("Errore toggle:", e.message);
-    return res.status(500).json({ ok: false, error: e.message });
-  }
+    const body = JSON.stringify({
+        type: 1,
+        id: deviceId,
+        params: { switch: state }
+    });
+
+    const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + oauth.access_token,
+            "X-CK-Appid": APPID
+        },
+        body
+    });
+
+    const data = await resp.json();
+
+    if (data.error !== 0) {
+        return res.status(500).json({ ok: false, error: data.msg });
+    }
+
+    res.json({ ok: true });
 });
 
-// ==== AVVIO SERVER ====
-
+// START
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Server eWeLink attivo sulla porta " + PORT);
-});
+app.listen(PORT, () => console.log("Server OAuth attivo su porta " + PORT));
