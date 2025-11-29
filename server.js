@@ -48,68 +48,61 @@ async function getConnection() {
   return connection;
 }
 
-// ====== API: lista dispositivi ======
+// 3) LISTA DISPOSITIVI
 app.get("/api/devices", async (req, res) => {
+  if (!oauth.access_token) {
+    return res.status(401).json({ ok: false, error: "Non autenticato" });
+  }
+
   try {
-    const conn = await getConnection();
-    const raw = await conn.getDevices();
+    // 3.1 – recupero la family (casa) principale
+    const familyResp = await fetch(`${API_BASE}/v2/family`, {
+      method: "GET",
+      headers: {
+        "Authorization": "Bearer " + oauth.access_token,
+        "X-CK-Appid": APPID,
+      },
+    });
 
-    console.log("DEBUG getDevices raw:", JSON.stringify(raw).slice(0, 300));
+    const familyData = await familyResp.json();
 
-    // Se la risposta ha error != 0, esponiamolo chiaramente
-    if (raw && typeof raw === "object" && "error" in raw && raw.error !== 0) {
-      return res
-        .status(500)
-        .json({ ok: false, error: `getDevices error=${raw.error}, msg=${raw.msg}` });
+    if (familyData.error !== 0) {
+      throw new Error(
+        `getFamily error=${familyData.error}, msg=${familyData.msg || "unknown"}`
+      );
     }
 
-    let devices = [];
+    const familyList = familyData.data?.familyList || [];
+    const familyId = familyList[0]?.id || null;
 
-    if (Array.isArray(raw)) {
-      devices = raw;
-    } else if (raw && Array.isArray(raw.devices)) {
-      devices = raw.devices;
-    } else if (raw && Array.isArray(raw.data)) {
-      devices = raw.data;
+    // 3.2 – chiamo /v2/device/thing con i parametri richiesti
+    const query = familyId
+      ? `?num=0&familyid=${encodeURIComponent(familyId)}`
+      : `?num=0`;
+
+    const devicesResp = await fetch(`${API_BASE}/v2/device/thing${query}`, {
+      method: "GET",
+      headers: {
+        "Authorization": "Bearer " + oauth.access_token,
+        "X-CK-Appid": APPID,
+      },
+    });
+
+    const devicesData = await devicesResp.json();
+
+    if (devicesData.error !== 0) {
+      throw new Error(
+        `getDevices error=${devicesData.error}, msg=${devicesData.msg || "unknown"}`
+      );
     }
+
+    const devices = (devicesData.data?.thingList || [])
+      .filter((i) => i.itemType === 1 || i.itemType === 2) // solo dispositivi, no gruppi
+      .map((i) => i.itemData);
 
     return res.json({ ok: true, devices });
-  } catch (err) {
-    console.error("Errore /api/devices:", err);
-    res.status(500).json({ ok: false, error: err.message });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ ok: false, error: e.message });
   }
-});
-
-// ====== API: accendi/spegni ======
-app.post("/api/toggle", async (req, res) => {
-  const { deviceId, state, outlet } = req.body || {}; // state: "on" | "off"
-
-  if (!deviceId || !state) {
-    return res
-      .status(400)
-      .json({ ok: false, error: "deviceId o state mancanti" });
-  }
-
-  try {
-    const conn = await getConnection();
-    let result;
-
-    if (typeof outlet === "number") {
-      // device multi-canale
-      result = await conn.setDevicePowerState(deviceId, state, outlet);
-    } else {
-      result = await conn.setDevicePowerState(deviceId, state);
-    }
-
-    res.json({ ok: true, result });
-  } catch (err) {
-    console.error("Errore /api/toggle:", err);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// ====== AVVIO SERVER ======
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Server Sonoff attivo sulla porta " + PORT);
 });
