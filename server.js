@@ -1,4 +1,4 @@
-// server.js – Backend Sonoff usando ewelink-api (senza APP_ID/APP_SECRET custom)
+// server.js – Backend Sonoff / eWeLink con ewelink-api
 
 const express = require("express");
 const cors = require("cors");
@@ -8,16 +8,14 @@ const app = express();
 app.use(express.json());
 
 // ====== ENV DA RENDER ======
-const EWELINK_USERNAME   = process.env.EWELINK_USERNAME;   // email account eWeLink
-const EWELINK_PASSWORD   = process.env.EWELINK_PASSWORD;   // password account eWeLink
-const EWELINK_REGION     = process.env.EWELINK_REGION || "eu";
+const EWELINK_USERNAME = process.env.EWELINK_USERNAME;   // email account eWeLink
+const EWELINK_PASSWORD = process.env.EWELINK_PASSWORD;   // password account eWeLink
+const EWELINK_REGION   = process.env.EWELINK_REGION || "eu";
 
 if (!EWELINK_USERNAME || !EWELINK_PASSWORD) {
   console.error("ERRORE: EWELINK_USERNAME o EWELINK_PASSWORD non impostati!");
 }
-if (!EWELINK_REGION) {
-  console.error("ATTENZIONE: EWELINK_REGION non impostata (es. 'eu', 'us', 'cn')");
-}
+console.log("EWELINK_REGION =", EWELINK_REGION);
 
 // ====== CORS: front-end ammessi ======
 app.use(
@@ -38,7 +36,7 @@ async function getConnection() {
       email: EWELINK_USERNAME,
       password: EWELINK_PASSWORD,
       region: EWELINK_REGION
-      // NIENTE APP_ID / APP_SECRET qui
+      // NON usiamo APP_ID / APP_SECRET qui
     });
     console.log("Connessione eWeLink creata per", EWELINK_USERNAME);
   }
@@ -56,7 +54,6 @@ app.get("/api/devices", async (req, res) => {
     const conn = await getConnection();
 
     const result = await conn.getDevices();
-
     console.log("Risposta grezza getDevices:", result);
 
     // Caso OK: result è un array di dispositivi
@@ -67,7 +64,7 @@ app.get("/api/devices", async (req, res) => {
     // Caso errore restituito da ewelink-api
     if (result && typeof result === "object" && result.error) {
       console.error("getDevices ewelink-api error:", result);
-      // NOTA: niente status(400), rispondo sempre 200 con ok:false
+      // IMPORTANTE: HTTP 200, errore solo nel JSON
       return res.json({
         ok: false,
         error: result.error,
@@ -90,4 +87,59 @@ app.get("/api/devices", async (req, res) => {
       msg: e.message,
     });
   }
+});
+
+// 2) TOGGLE DISPOSITIVO – /api/toggle
+app.post("/api/toggle", async (req, res) => {
+  const { deviceId, state } = req.body;
+
+  if (!deviceId || (state !== "on" && state !== "off")) {
+    return res.json({
+      ok: false,
+      error: "invalid_params",
+      msg: "deviceId o state non validi",
+    });
+  }
+
+  try {
+    const conn = await getConnection();
+
+    const result = await conn.setDevicePowerState(deviceId, state);
+    console.log("Risposta setDevicePowerState:", result);
+
+    if (result && result.error) {
+      console.error("setDevicePowerState error:", result);
+      return res.json({
+        ok: false,
+        error: result.error,
+        msg: result.msg || "Errore da eWeLink",
+      });
+    }
+
+    return res.json({ ok: true, result });
+  } catch (e) {
+    console.error("Errore interno /api/toggle:", e);
+    return res.json({
+      ok: false,
+      error: "internal_error",
+      msg: e.message,
+    });
+  }
+});
+
+// 3) ROUTE DI DEBUG (opzionale, per capire cosa arriva da eWeLink)
+app.get("/api/debug-devices", async (req, res) => {
+  try {
+    const conn = await getConnection();
+    const result = await conn.getDevices();
+    res.json({ raw: result });
+  } catch (e) {
+    res.json({ error: "internal_error", msg: e.message });
+  }
+});
+
+// PORTA (Render usa process.env.PORT)
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server avviato sulla porta ${PORT}`);
 });
