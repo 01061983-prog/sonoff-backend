@@ -1,4 +1,4 @@
-// server.js – Backend Sonoff usando ewelink-api
+// server.js – Backend Sonoff usando ewelink-api (senza APP_ID/APP_SECRET custom)
 
 const express = require("express");
 const cors = require("cors");
@@ -11,14 +11,12 @@ app.use(express.json());
 const EWELINK_USERNAME   = process.env.EWELINK_USERNAME;   // email account eWeLink
 const EWELINK_PASSWORD   = process.env.EWELINK_PASSWORD;   // password account eWeLink
 const EWELINK_REGION     = process.env.EWELINK_REGION || "eu";
-const EWELINK_APP_ID     = process.env.EWELINK_APP_ID;
-const EWELINK_APP_SECRET = process.env.EWELINK_APP_SECRET;
 
 if (!EWELINK_USERNAME || !EWELINK_PASSWORD) {
   console.error("ERRORE: EWELINK_USERNAME o EWELINK_PASSWORD non impostati!");
 }
-if (!EWELINK_APP_ID || !EWELINK_APP_SECRET) {
-  console.error("ATTENZIONE: EWELINK_APP_ID o EWELINK_APP_SECRET non impostati!");
+if (!EWELINK_REGION) {
+  console.error("ATTENZIONE: EWELINK_REGION non impostata (es. 'eu', 'us', 'cn')");
 }
 
 // ====== CORS: front-end ammessi ======
@@ -39,9 +37,8 @@ async function getConnection() {
     connection = new Ewelink({
       email: EWELINK_USERNAME,
       password: EWELINK_PASSWORD,
-      region: EWELINK_REGION,
-      APP_ID: EWELINK_APP_ID,
-      APP_SECRET: EWELINK_APP_SECRET,
+      region: EWELINK_REGION
+      // NIENTE APP_ID / APP_SECRET qui
     });
     console.log("Connessione eWeLink creata per", EWELINK_USERNAME);
   }
@@ -58,15 +55,14 @@ app.get("/api/devices", async (req, res) => {
   try {
     const conn = await getConnection();
 
-    // ewelink-api gestisce internamente login/token
     const result = await conn.getDevices();
 
-    // Se è un array, è la lista dispositivi
+    console.log("Risposta grezza getDevices:", result);
+
     if (Array.isArray(result)) {
       return res.json({ ok: true, devices: result });
     }
 
-    // Se è un oggetto con error, propago come 400
     if (result && typeof result === "object" && result.error) {
       console.error("getDevices ewelink-api error:", result);
       return res
@@ -78,7 +74,6 @@ app.get("/api/devices", async (req, res) => {
         });
     }
 
-    // Risposta inattesa
     console.error("getDevices risposta inattesa:", result);
     return res
       .status(500)
@@ -108,8 +103,9 @@ app.post("/api/toggle", async (req, res) => {
   try {
     const conn = await getConnection();
 
-    // Per dispositivi singolo canale
     const result = await conn.setDevicePowerState(deviceId, state);
+
+    console.log("Risposta setDevicePowerState:", result);
 
     if (result && result.error) {
       console.error("setDevicePowerState error:", result);
