@@ -163,3 +163,14 @@ app.post("/api/toggle", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("SERVER OK PORT", PORT));
+
+// STEP 1 — Redirect utente alla pagina autorizzazione
+app.get("/login", (req, res) => {
+  const url =
+    `https://c2ccdn.coolkit.cc/oauth/index.html?client_id=${APPID}` +
+    `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
+    `&response_type=code&state=xyz123`;
+
+  res.redirect(url);
+});
+
