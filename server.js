@@ -31,7 +31,7 @@ app.use(
   })
 );
 
-// ====== CONNESSIONE UNICA A EWeLink ======
+// ====== CONNESSIONE UNICA A EWeLink (ewelink-api) ======
 let connection = null;
 
 async function getConnection() {
@@ -41,68 +41,46 @@ async function getConnection() {
       password: EWELINK_PASSWORD,
       region: EWELINK_REGION,
       APP_ID: EWELINK_APP_ID,
-      APP_SECRET: EWELINK_APP_SECRET
+      APP_SECRET: EWELINK_APP_SECRET,
     });
     console.log("Connessione eWeLink creata per", EWELINK_USERNAME);
   }
   return connection;
 }
 
-// 3) LISTA DISPOSITIVI
+// 3) LISTA DISPOSITIVI – USO SOLO ewelink-api
 app.get("/api/devices", async (req, res) => {
-  if (!oauth.access_token) {
-    return res.status(401).json({ ok: false, error: "Non autenticato" });
-  }
-
   try {
-    // 3.1 – recupero la family (casa) principale
-    const familyResp = await fetch(`${API_BASE}/v2/family`, {
-      method: "GET",
-      headers: {
-        "Authorization": "Bearer " + oauth.access_token,
-        "X-CK-Appid": APPID,
-      },
-    });
+    const conn = await getConnection();
 
-    const familyData = await familyResp.json();
+    // la libreria gestisce internamente login / token
+    const devices = await conn.getDevices();
 
-    if (familyData.error !== 0) {
-      throw new Error(
-        `getFamily error=${familyData.error}, msg=${familyData.msg || "unknown"}`
-      );
+    // ewelink-api di solito restituisce oppure un array oppure un oggetto { error, msg, ... }
+    if (Array.isArray(devices)) {
+      return res.json({ ok: true, devices });
     }
 
-    const familyList = familyData.data?.familyList || [];
-    const familyId = familyList[0]?.id || null;
-
-    // 3.2 – chiamo /v2/device/thing con i parametri richiesti
-    const query = familyId
-      ? `?num=0&familyid=${encodeURIComponent(familyId)}`
-      : `?num=0`;
-
-    const devicesResp = await fetch(`${API_BASE}/v2/device/thing${query}`, {
-      method: "GET",
-      headers: {
-        "Authorization": "Bearer " + oauth.access_token,
-        "X-CK-Appid": APPID,
-      },
-    });
-
-    const devicesData = await devicesResp.json();
-
-    if (devicesData.error !== 0) {
-      throw new Error(
-        `getDevices error=${devicesData.error}, msg=${devicesData.msg || "unknown"}`
-      );
+    // gestione caso errore dalla libreria/API
+    if (devices && devices.error) {
+      console.error("getDevices ewelink-api error:", devices);
+      return res
+        .status(400)
+        .json({ ok: false, error: devices.error, msg: devices.msg || "Errore da eWeLink" });
     }
 
-    const devices = (devicesData.data?.thingList || [])
-      .filter((i) => i.itemType === 1 || i.itemType === 2) // solo dispositivi, no gruppi
-      .map((i) => i.itemData);
-
-    return res.json({ ok: true, devices });
+    // fallback generico
+    return res
+      .status(500)
+      .json({ ok: false, error: "unknown_response", msg: "Risposta sconosciuta da ewelink-api" });
   } catch (e) {
-    console.error(e);
-    return res.status(500).json({ ok: false, error: e.message });
+    console.error("Errore interno /api/devices:", e);
+    return res.status(500).json({ ok: false, error: "internal_error", msg: e.message });
   }
+});
+
+// porta (Render di solito usa process.env.PORT)
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server avviato sulla porta ${PORT}`);
 });
