@@ -59,76 +59,35 @@ app.get("/api/devices", async (req, res) => {
 
     console.log("Risposta grezza getDevices:", result);
 
+    // Caso OK: result è un array di dispositivi
     if (Array.isArray(result)) {
       return res.json({ ok: true, devices: result });
     }
 
+    // Caso errore restituito da ewelink-api
     if (result && typeof result === "object" && result.error) {
       console.error("getDevices ewelink-api error:", result);
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          error: result.error,
-          msg: result.msg || "Errore da eWeLink",
-        });
+      // NOTA: niente status(400), rispondo sempre 200 con ok:false
+      return res.json({
+        ok: false,
+        error: result.error,
+        msg: result.msg || "Errore da eWeLink",
+      });
     }
 
+    // Risposta inattesa
     console.error("getDevices risposta inattesa:", result);
-    return res
-      .status(500)
-      .json({
-        ok: false,
-        error: "unknown_response",
-        msg: "Risposta sconosciuta da ewelink-api",
-      });
+    return res.json({
+      ok: false,
+      error: "unknown_response",
+      msg: "Risposta sconosciuta da ewelink-api",
+    });
   } catch (e) {
     console.error("Errore interno /api/devices:", e);
-    return res
-      .status(500)
-      .json({ ok: false, error: "internal_error", msg: e.message });
+    return res.json({
+      ok: false,
+      error: "internal_error",
+      msg: e.message,
+    });
   }
-});
-
-// 2) TOGGLE DISPOSITIVO – /api/toggle
-app.post("/api/toggle", async (req, res) => {
-  const { deviceId, state } = req.body;
-
-  if (!deviceId || (state !== "on" && state !== "off")) {
-    return res
-      .status(400)
-      .json({ ok: false, error: "invalid_params", msg: "deviceId o state non validi" });
-  }
-
-  try {
-    const conn = await getConnection();
-
-    const result = await conn.setDevicePowerState(deviceId, state);
-
-    console.log("Risposta setDevicePowerState:", result);
-
-    if (result && result.error) {
-      console.error("setDevicePowerState error:", result);
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          error: result.error,
-          msg: result.msg || "Errore da eWeLink",
-        });
-    }
-
-    return res.json({ ok: true, result });
-  } catch (e) {
-    console.error("Errore interno /api/toggle:", e);
-    return res
-      .status(500)
-      .json({ ok: false, error: "internal_error", msg: e.message });
-  }
-});
-
-// PORTA (Render usa process.env.PORT)
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server avviato sulla porta ${PORT}`);
 });
