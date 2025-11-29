@@ -21,8 +21,8 @@ app.use(
   cors({
     origin: [
       "https://oratoriosluigi.altervista.org",
-      "http://localhost:5500",
-    ],
+      "http://localhost:5500"
+    ]
   })
 );
 
@@ -34,7 +34,8 @@ async function getConnection() {
     connection = new Ewelink({
       email: EWELINK_USERNAME,
       password: EWELINK_PASSWORD,
-      region: EWELINK_REGION,
+      region: EWELINK_REGION
+      // Se vorrai: APP_ID, APP_SECRET, ma NON è obbligatorio
     });
     console.log("Connessione eWeLink creata per", EWELINK_USERNAME);
   }
