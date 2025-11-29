@@ -1,4 +1,4 @@
-// server.js – Backend semplice per pannello Sonoff usando ewelink-api
+// server.js – Backend Sonoff usando ewelink-api (con APP_ID/APP_SECRET)
 
 const express = require("express");
 const cors = require("cors");
@@ -8,11 +8,17 @@ const app = express();
 app.use(express.json());
 
 // ====== ENV DA RENDER ======
-const EWELINK_USERNAME = process.env.EWELINK_USERNAME; // email account eWeLink
-const EWELINK_PASSWORD = process.env.EWELINK_PASSWORD; // password account eWeLink
+const EWELINK_USERNAME   = process.env.EWELINK_USERNAME;   // email account eWeLink
+const EWELINK_PASSWORD   = process.env.EWELINK_PASSWORD;   // password account eWeLink
+const EWELINK_REGION     = process.env.EWELINK_REGION || "eu";
+const EWELINK_APP_ID     = process.env.EWELINK_APP_ID;
+const EWELINK_APP_SECRET = process.env.EWELINK_APP_SECRET;
 
 if (!EWELINK_USERNAME || !EWELINK_PASSWORD) {
   console.error("ERRORE: EWELINK_USERNAME o EWELINK_PASSWORD non impostati!");
+}
+if (!EWELINK_APP_ID || !EWELINK_APP_SECRET) {
+  console.error("ATTENZIONE: EWELINK_APP_ID o EWELINK_APP_SECRET non impostati!");
 }
 
 // ====== CORS: front-end ammessi ======
@@ -32,8 +38,10 @@ async function getConnection() {
   if (!connection) {
     connection = new Ewelink({
       email: EWELINK_USERNAME,
-      password: EWELINK_PASSWORD
-      // niente region: la scopre la libreria
+      password: EWELINK_PASSWORD,
+      region: EWELINK_REGION,
+      APP_ID: EWELINK_APP_ID,
+      APP_SECRET: EWELINK_APP_SECRET
     });
     console.log("Connessione eWeLink creata per", EWELINK_USERNAME);
   }
@@ -46,7 +54,14 @@ app.get("/api/devices", async (req, res) => {
     const conn = await getConnection();
     const raw = await conn.getDevices();
 
-    console.log("DEBUG getDevices raw:", JSON.stringify(raw).slice(0, 500));
+    console.log("DEBUG getDevices raw:", JSON.stringify(raw).slice(0, 300));
+
+    // Se la risposta ha error != 0, esponiamolo chiaramente
+    if (raw && typeof raw === "object" && "error" in raw && raw.error !== 0) {
+      return res
+        .status(500)
+        .json({ ok: false, error: `getDevices error=${raw.error}, msg=${raw.msg}` });
+    }
 
     let devices = [];
 
@@ -58,11 +73,7 @@ app.get("/api/devices", async (req, res) => {
       devices = raw.data;
     }
 
-    if (!devices.length) {
-      return res.json({ ok: true, devices: [], raw });
-    }
-
-    res.json({ ok: true, devices, raw });
+    return res.json({ ok: true, devices });
   } catch (err) {
     console.error("Errore /api/devices:", err);
     res.status(500).json({ ok: false, error: err.message });
