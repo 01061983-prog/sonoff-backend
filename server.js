@@ -1,145 +1,165 @@
-// server.js – Backend Sonoff / eWeLink con ewelink-api
-
+// server.js — eWeLink OAuth2.0 Backend per Sonoff
 const express = require("express");
 const cors = require("cors");
-const Ewelink = require("ewelink-api");
+const fetch = require("node-fetch");
 
 const app = express();
 app.use(express.json());
 
-// ====== ENV DA RENDER ======
-const EWELINK_USERNAME = process.env.EWELINK_USERNAME;   // email account eWeLink
-const EWELINK_PASSWORD = process.env.EWELINK_PASSWORD;   // password account eWeLink
-const EWELINK_REGION   = process.env.EWELINK_REGION || "eu";
+// ===== ENV =====
+const APPID = process.env.EWELINK_APP_ID;
+const APPSECRET = process.env.EWELINK_APP_SECRET;
 
-if (!EWELINK_USERNAME || !EWELINK_PASSWORD) {
-  console.error("ERRORE: EWELINK_USERNAME o EWELINK_PASSWORD non impostati!");
-}
-console.log("EWELINK_REGION =", EWELINK_REGION);
+const REDIRECT_URI = "https://sonoff-backend-k8sh.onrender.com/oauth/callback";
+const API_BASE = "https://eu-api.coolkit.cc";  // EU server
 
-// ====== CORS: front-end ammessi ======
-app.use(
-  cors({
-    origin: [
-      "https://oratoriosluigi.altervista.org",
-      "http://localhost:5500"
-    ]
-  })
-);
+let oauth = {
+  access_token: null,
+  refresh_token: null,
+  at_expires: 0
+};
 
-// ====== CONNESSIONE UNICA A EWeLink (ewelink-api) ======
-let connection = null;
+app.use(cors({
+  origin: [
+    "https://oratoriosluigi.altervista.org",
+    "http://localhost:5500"
+  ]
+}));
 
-async function getConnection() {
-  if (!connection) {
-    connection = new Ewelink({
-      email: EWELINK_USERNAME,
-      password: EWELINK_PASSWORD,
-      region: EWELINK_REGION
-      // NON usiamo APP_ID / APP_SECRET qui
-    });
-    console.log("Connessione eWeLink creata per", EWELINK_USERNAME);
-  }
-  return connection;
-}
+// ============= LOGIN FLOW =============
 
-// ROUTE DI TEST
-app.get("/", (req, res) => {
-  res.json({ ok: true, message: "Backend Sonoff attivo" });
+// STEP 1 — Redirect utente alla pagina autorizzazione
+app.get("/login", (req, res) => {
+  const url =
+    `https://c2ccdn.coolkit.cc/oauth/index.html?client_id=${APPID}` +
+    `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
+    `&response_type=code&state=xyz123`;
+
+  res.redirect(url);
 });
 
-// 1) LISTA DISPOSITIVI – /api/devices
+// STEP 2 — Ricevo il CODE e prendo il token
+app.get("/oauth/callback", async (req, res) => {
+  const code = req.query.code;
+
+  const resp = await fetch(`${API_BASE}/v2/user/oauth/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      grant_type: "authorization_code",
+      code,
+      client_id: APPID,
+      client_secret: APPSECRET,
+      redirect_uri: REDIRECT_URI
+    })
+  });
+
+  const data = await resp.json();
+
+  if (data.error !== 0) {
+    return res.send("Errore OAuth: " + JSON.stringify(data));
+  }
+
+  oauth.access_token = data.data.access_token;
+  oauth.refresh_token = data.data.refresh_token;
+  oauth.at_expires = Date.now() + (data.data.expires_in * 1000);
+
+  return res.send("Autorizzazione completata. Ora torna sulla tua pagina Sonoff.");
+});
+
+// ============= API AUTENTICATE =============
+
+// TOKEN VALIDATION
+async function ensureToken() {
+  if (Date.now() < oauth.at_expires - 5000) return;
+
+  const resp = await fetch(`${API_BASE}/v2/user/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      grant_type: "refresh_token",
+      refresh_token: oauth.refresh_token,
+      client_id: APPID,
+      client_secret: APPSECRET
+    })
+  });
+
+  const data = await resp.json();
+  if (data.error === 0) {
+    oauth.access_token = data.data.access_token;
+    oauth.refresh_token = data.data.refresh_token;
+    oauth.at_expires = Date.now() + (data.data.expires_in * 1000);
+  }
+}
+
+// ====== GET DEVICES ======
 app.get("/api/devices", async (req, res) => {
-  try {
-    const conn = await getConnection();
+  if (!oauth.access_token)
+    return res.json({ ok: false, msg: "Non autenticato su eWeLink" });
 
-    const result = await conn.getDevices();
-    console.log("Risposta grezza getDevices:", result);
+  await ensureToken();
 
-    // Caso OK: result è un array di dispositivi
-    if (Array.isArray(result)) {
-      return res.json({ ok: true, devices: result });
+  // 1) ottieni Family ID
+  const familyResp = await fetch(`${API_BASE}/v2/family`, {
+    method: "GET",
+    headers: {
+      Authorization: "Bearer " + oauth.access_token,
+      "X-CK-Appid": APPID
     }
+  });
+  const familyData = await familyResp.json();
 
-    // Caso errore restituito da ewelink-api
-    if (result && typeof result === "object" && result.error) {
-      console.error("getDevices ewelink-api error:", result);
-      // IMPORTANTE: HTTP 200, errore solo nel JSON
-      return res.json({
-        ok: false,
-        error: result.error,
-        msg: result.msg || "Errore da eWeLink",
-      });
+  if (familyData.error !== 0)
+    return res.json({ ok: false, error: familyData.error, msg: familyData.msg });
+
+  const familyId = familyData.data.familyList[0].id;
+
+  // 2) device list
+  const devResp = await fetch(
+    `${API_BASE}/v2/device/thing?num=0&familyid=${familyId}`, {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + oauth.access_token,
+        "X-CK-Appid": APPID
+      }
     }
+  );
 
-    // Risposta inattesa
-    console.error("getDevices risposta inattesa:", result);
-    return res.json({
-      ok: false,
-      error: "unknown_response",
-      msg: "Risposta sconosciuta da ewelink-api",
-    });
-  } catch (e) {
-    console.error("Errore interno /api/devices:", e);
-    return res.json({
-      ok: false,
-      error: "internal_error",
-      msg: e.message,
-    });
-  }
+  const devData = await devResp.json();
+
+  if (devData.error !== 0)
+    return res.json({ ok: false, error: devData.error, msg: devData.msg });
+
+  const devices = devData.data.thingList
+    .filter(d => d.itemType === 1)
+    .map(i => i.itemData);
+
+  res.json({ ok: true, devices });
 });
 
-// 2) TOGGLE DISPOSITIVO – /api/toggle
+// ====== TOGGLE ======
 app.post("/api/toggle", async (req, res) => {
   const { deviceId, state } = req.body;
 
-  if (!deviceId || (state !== "on" && state !== "off")) {
-    return res.json({
-      ok: false,
-      error: "invalid_params",
-      msg: "deviceId o state non validi",
-    });
-  }
+  await ensureToken();
 
-  try {
-    const conn = await getConnection();
+  const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + oauth.access_token,
+      "Content-Type": "application/json",
+      "X-CK-Appid": APPID
+    },
+    body: JSON.stringify({
+      itemType: 1,
+      id: deviceId,
+      params: { switch: state }
+    })
+  });
 
-    const result = await conn.setDevicePowerState(deviceId, state);
-    console.log("Risposta setDevicePowerState:", result);
-
-    if (result && result.error) {
-      console.error("setDevicePowerState error:", result);
-      return res.json({
-        ok: false,
-        error: result.error,
-        msg: result.msg || "Errore da eWeLink",
-      });
-    }
-
-    return res.json({ ok: true, result });
-  } catch (e) {
-    console.error("Errore interno /api/toggle:", e);
-    return res.json({
-      ok: false,
-      error: "internal_error",
-      msg: e.message,
-    });
-  }
+  const data = await resp.json();
+  res.json({ ok: data.error === 0, raw: data });
 });
 
-// 3) ROUTE DI DEBUG (opzionale, per capire cosa arriva da eWeLink)
-app.get("/api/debug-devices", async (req, res) => {
-  try {
-    const conn = await getConnection();
-    const result = await conn.getDevices();
-    res.json({ raw: result });
-  } catch (e) {
-    res.json({ error: "internal_error", msg: e.message });
-  }
-});
-
-// PORTA (Render usa process.env.PORT)
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server avviato sulla porta ${PORT}`);
-});
+app.listen(PORT, () => console.log("SERVER OK PORT", PORT));
