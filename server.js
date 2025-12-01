@@ -353,48 +353,49 @@ app.post("/api/toggle", async (req, res) => {
 
 // ================== /api/toggle-multi — SCENARI / TUTTI ON-OFF ==================
 
+// ================== /api/toggle-multi — SCENARI / TUTTI ON-OFF ==================
+
 app.post("/api/toggle-multi", async (req, res) => {
-  const { deviceId, outlets, state, deviceType } = req.body;
-  const accessToken = req.cookies.ewelink_access;
-
-  if (!accessToken) {
-    return res.json({
-      ok: false,
-      error: "not_authenticated",
-      msg: "Non autenticato su eWeLink. Vai prima su /login."
-    });
-  }
-
-  if (
-    !deviceId ||
-    !Array.isArray(outlets) ||
-    outlets.length === 0 ||
-    (state !== "on" && state !== "off")
-  ) {
-    return res.json({
-      ok: false,
-      error: "invalid_params",
-      msg: "deviceId, outlets o state non validi"
-    });
-  }
-
-  try {
-    const type = deviceType || 1;
-    const errors = [];
-
-    for (const o of outlets) {
+    const { deviceId, outlets, state } = req.body;
+    const accessToken = req.cookies.ewelink_access;
+  
+    if (!accessToken) {
+      return res.json({
+        ok: false,
+        error: "not_authenticated",
+        msg: "Non autenticato su eWeLink. Vai prima su /login."
+      });
+    }
+  
+    if (
+      !deviceId ||
+      !Array.isArray(outlets) ||
+      outlets.length === 0 ||
+      (state !== "on" && state !== "off")
+    ) {
+      return res.json({
+        ok: false,
+        error: "invalid_params",
+        msg: "deviceId, outlets o state non validi"
+      });
+    }
+  
+    try {
+      // Costruisco l'array switches per tutti i canali richiesti
+      const switches = outlets.map((o) => ({
+        outlet: o,
+        switch: state
+      }));
+  
       const bodyObj = {
-        type,
+        type: 1, // fisso: funziona con i 4CH del portico
         id: deviceId,
-        params: {
-          switch: state,
-          outlet: o
-        }
+        params: { switches }
       };
-      const bodyStr = JSON.stringify(bodyObj);
-
-      console.log("toggle-multi single request:", bodyObj);
-
+  
+      console.log("=== TOGGLE-MULTI REQUEST ===");
+      console.log(JSON.stringify(bodyObj, null, 2));
+  
       const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
         method: "POST",
         headers: {
@@ -402,40 +403,33 @@ app.post("/api/toggle-multi", async (req, res) => {
           Authorization: "Bearer " + accessToken,
           "X-CK-Appid": APPID
         },
-        body: bodyStr
+        body: JSON.stringify(bodyObj)
       });
-
+  
       const data = await resp.json();
-      console.log("toggle-multi single response:", data);
-
+  
+      console.log("=== TOGGLE-MULTI RESPONSE ===");
+      console.log(JSON.stringify(data, null, 2));
+  
       if (data.error !== 0) {
-        errors.push({
-          outlet: o,
+        return res.json({
+          ok: false,
           error: data.error,
-          msg: data.msg || "Errore nel comando"
+          msg: data.msg || "Errore nel comando",
+          raw: data
         });
       }
-    }
-
-    if (errors.length > 0) {
+  
+      return res.json({ ok: true, raw: data, sent: bodyObj });
+    } catch (e) {
+      console.error("Eccezione /api/toggle-multi:", e);
       return res.json({
         ok: false,
-        error: 400,
-        msg: errors[0].msg,
-        details: errors
+        error: "internal_error",
+        msg: e.message
       });
     }
-
-    return res.json({ ok: true });
-  } catch (e) {
-    console.error("Eccezione /api/toggle-multi:", e);
-    return res.json({
-      ok: false,
-      error: "internal_error",
-      msg: e.message
-    });
-  }
-});
+  });  
 
 // ================== AVVIO SERVER ==================
 
