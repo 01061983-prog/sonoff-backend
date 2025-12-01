@@ -345,12 +345,13 @@ app.post("/api/toggle", async (req, res) => {
         ]
       };
     } else if (isG2) {
-      // G2 luci esterne: interruttore singolo con "switch"
-      type = 3;  // come da /api/devices (deviceType/itemType = 3)
-      params = {
-        switch: state
-      };
-    } else {
+        // G2 luci esterne: interruttore singolo, ma l’API vuole type 1 o 2
+        type = 2;   // <<< CORRETTO
+        params = {
+          switch: state
+        };
+      }
+       else {
       // MINIR4 del portico (e altri eventuali switch semplici):
       // possono avere "switches" lato params, ma una singola uscita.
       type = 1;  // come da /api/devices (deviceType/itemType = 1)
