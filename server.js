@@ -303,6 +303,7 @@ if (g2) {
 });
 
 // ================== /api/toggle — SINGOLO CANALE (MINIR4, CANCELLO, G2) ==================
+// ================== /api/toggle — SINGOLO CANALE (MINIR4, CANCELLO, G2) ==================
 app.post("/api/toggle", async (req, res) => {
   const { deviceId, state } = req.body;
   const accessToken = req.cookies.ewelink_access;
@@ -326,30 +327,33 @@ app.post("/api/toggle", async (req, res) => {
   try {
     console.log("TOGGLE richiesto per deviceId:", deviceId, "state:", state);
 
-    const isGate = deviceId === "1000ac81a0";   // cancello
-    const isG2   = deviceId === G2_ID;          // luci esterne G2
+    const isGate = deviceId === "1000ac81a0";   // Cancello
+    const isG2   = deviceId === "1000965dd3";   // Luci esterne (G2)
 
     let type;
     let params;
 
     if (isGate) {
-  // CANCELLO: TRATTALO COME DEVICE (type 1) ma con switches
-  type = 1;   // <<< QUESTA È LA PARTE IMPORTANTE
-  params = {
-    switches: [
-      { outlet: 0, switch: "on" }  // impulso, pulse gestito dal Sonoff
-    ]
-  };
-}
+      // **CANCELLO** PSF-B04-GL
+      // → l’API vuole type=1 e params.switches con outlet 0
+      type = 1;
+      params = {
+        switches: [
+          { outlet: 0, switch: "on" }   // impulso sul CH0
+        ]
+      };
     } else if (isG2) {
-      // G2 luci esterne: lo trattiamo come interruttore singolo
-      // l'endpoint accetta type 1 qui, NON group
+      // G2 luci esterne: singolo interruttore
       type = 1;
-      params = { switch: state };
+      params = {
+        switch: state
+      };
     } else {
-      // MINIR4 del portico (e altri switch semplici)
+      // MINIR4 del portico e altri interruttori semplici
       type = 1;
-      params = { switch: state };
+      params = {
+        switch: state
+      };
     }
 
     const bodyObj = {
@@ -377,11 +381,6 @@ app.post("/api/toggle", async (req, res) => {
     console.log(JSON.stringify(data, null, 2));
 
     const ok = data.error === 0;
-
-    // aggiorno lo stato virtuale del G2 così /api/devices lo mostra corretto
-    if (ok && isG2) {
-      virtualStates[G2_ID] = state;
-    }
 
     return res.json({
       ok,
