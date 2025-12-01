@@ -21,15 +21,10 @@ const REDIRECT_URL =
 const API_BASE =
   process.env.EWELINK_API_BASE || "https://eu-apia.coolkit.cc";
 
-if (!APPID || !APPSECRET) {
-  console.error("ERRORE: EWELINK_APP_ID o EWELINK_APP_SECRET non impostati!");
-}
-
-// ID del G2 "Luci esterne"
+// ID del G2
 const G2_ID = "1000965dd3";
 
-// Stato virtuale dei dispositivi che le API non restituiscono con stato reale
-// (usato per il G2, così nel frontend lo vedi ON/OFF come ultimo comando inviato)
+// Stato virtuale (eWeLink non restituisce lo stato reale per G2)
 const virtualStates = {
   [G2_ID]: "off"
 };
@@ -61,19 +56,17 @@ app.get("/", (_req, res) => {
   res.json({ ok: true, message: "Backend Sonoff OAuth attivo" });
 });
 
-// ================== /login — REDIRECT A PAGINA OAUTH ==================
+// ================== LOGIN ==================
 
 app.get("/login", (req, res) => {
   const returnUrl =
     req.query.returnUrl ||
     "https://oratoriosluigi.altervista.org/sonoff.html.html";
 
-  const state = returnUrl;
-  const encodedState = encodeURIComponent(state);
+  const encodedState = encodeURIComponent(returnUrl);
 
   const seq = Date.now().toString();
   const nonce = "abc12345";
-
   const message = `${APPID}_${seq}`;
   const sign = hmacSign(message);
 
@@ -88,35 +81,21 @@ app.get("/login", (req, res) => {
     `&grantType=authorization_code` +
     `&showQRCode=false`;
 
-  console.log("OAuth URL:", url);
   res.redirect(url);
 });
 
-// ================== /oauth/callback — CODE -> TOKEN + REDIRECT ==================
+// ================== OAUTH CALLBACK ==================
 
 app.get("/oauth/callback", async (req, res) => {
   const { code, error, state } = req.query;
 
-  if (error) {
-    console.error("Errore riportato da OAuth callback:", error);
-    return res.status(400).send("OAuth error from provider: " + error);
-  }
-
-  if (!code) {
-    console.error("Manca il code in callback, query:", req.query);
-    return res
-      .status(400)
-      .send("Missing 'code' in OAuth callback, query=" + JSON.stringify(req.query));
-  }
+  if (error) return res.status(400).send("OAuth error: " + error);
+  if (!code) return res.status(400).send("Missing OAuth code");
 
   let returnUrl = "https://oratoriosluigi.altervista.org/sonoff.html.html";
-  if (state) {
-    try {
-      returnUrl = decodeURIComponent(state);
-    } catch (e) {
-      console.warn("Impossibile decodificare state, uso default:", e);
-    }
-  }
+  try {
+    returnUrl = decodeURIComponent(state);
+  } catch {}
 
   try {
     const bodyObj = {
@@ -124,12 +103,8 @@ app.get("/oauth/callback", async (req, res) => {
       redirectUrl: REDIRECT_URL,
       grantType: "authorization_code"
     };
-    const bodyStr = JSON.stringify(bodyObj);
 
-    const sign = hmacSign(bodyStr);
-
-    console.log("POST /v2/user/oauth/token body:", bodyObj);
-    console.log("Authorization Sign:", sign);
+    const sign = hmacSign(JSON.stringify(bodyObj));
 
     const resp = await fetch(`${API_BASE}/v2/user/oauth/token`, {
       method: "POST",
@@ -138,16 +113,13 @@ app.get("/oauth/callback", async (req, res) => {
         "X-CK-Appid": APPID,
         Authorization: `Sign ${sign}`
       },
-      body: bodyStr
+      body: JSON.stringify(bodyObj)
     });
 
     const data = await resp.json();
-    console.log("oauth token response:", data);
 
-    if (data.error !== 0 || !data.data) {
-      return res
-        .status(400)
-        .send("Errore nello scambio code/token: " + JSON.stringify(data));
+    if (data.error !== 0) {
+      return res.status(400).send("Errore token: " + JSON.stringify(data));
     }
 
     res.cookie("ewelink_access", data.data.accessToken, {
@@ -162,46 +134,29 @@ app.get("/oauth/callback", async (req, res) => {
     });
 
     return res.redirect(returnUrl);
+
   } catch (e) {
-    console.error("Eccezione /oauth/callback:", e);
-    return res
-      .status(500)
-      .send("Eccezione nello scambio token: " + e.message);
+    return res.status(500).send("Callback error: " + e.message);
   }
 });
 
-// ================== /logout — CANCELLA COOKIE ==================
+// ================== LOGOUT ==================
 
 app.post("/logout", (req, res) => {
-  res.clearCookie("ewelink_access", {
-    httpOnly: true,
-    secure: true,
-    sameSite: "None"
-  });
-  res.clearCookie("ewelink_refresh", {
-    httpOnly: true,
-    secure: true,
-    sameSite: "None"
-  });
+  res.clearCookie("ewelink_access", { httpOnly: true, secure: true, sameSite: "None" });
+  res.clearCookie("ewelink_refresh", { httpOnly: true, secure: true, sameSite: "None" });
 
-  return res.json({ ok: true });
+  res.json({ ok: true });
 });
 
-// ================== /api/devices — LISTA DISPOSITIVI (TUTTE LE FAMILY) ==================
+// ================== DEVICES ==================
 
 app.get("/api/devices", async (req, res) => {
   const accessToken = req.cookies.ewelink_access;
-
-  if (!accessToken) {
-    return res.json({
-      ok: false,
-      error: "not_authenticated",
-      msg: "Non autenticato su eWeLink. Vai prima su /login."
-    });
-  }
+  if (!accessToken) return res.json({ ok: false, error: "not_authenticated" });
 
   try {
-    // 1) elenco family
+    // 1) Leggo le family
     const famResp = await fetch(`${API_BASE}/v2/family`, {
       method: "GET",
       headers: {
@@ -209,165 +164,96 @@ app.get("/api/devices", async (req, res) => {
         "X-CK-Appid": APPID
       }
     });
+
     const famData = await famResp.json();
-    console.log("family response:", JSON.stringify(famData, null, 2));
-
-    if (famData.error !== 0 || !famData.data) {
-      return res.json({
-        ok: false,
-        error: famData.error,
-        msg: famData.msg || "Errore lettura family"
-      });
-    }
-
-    const familyList = famData.data.familyList || [];
-    if (!familyList.length) {
-      return res.json({
-        ok: true,
-        devices: [],
-        msg: "Nessuna family associata all'account"
-      });
-    }
 
     const allDevices = [];
 
-    // 2) per ogni family prendo i device
-    for (const fam of familyList) {
-      const familyId = fam.id;
-
-      const devResp = await fetch(
-        `${API_BASE}/v2/device/thing?num=0&familyid=${encodeURIComponent(
-          familyId
-        )}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: "Bearer " + accessToken,
-            "X-CK-Appid": APPID
+    if (famData.error === 0) {
+      for (const fam of famData.data.familyList) {
+        const devResp = await fetch(
+          `${API_BASE}/v2/device/thing?num=0&familyid=${fam.id}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: "Bearer " + accessToken,
+              "X-CK-Appid": APPID
+            }
           }
+        );
+
+        const devData = await devResp.json();
+        if (devData.error === 0) {
+          (devData.data.thingList || []).forEach((i) => {
+            if (i.itemData && i.itemData.deviceid) {
+              allDevices.push({
+                ...i.itemData,
+                deviceType: i.itemType,
+                itemType: i.itemType,
+                familyId: fam.id
+              });
+            }
+          });
         }
-      );
-
-      const devData = await devResp.json();
-      console.log(
-        `device thing response for family ${familyId}:`,
-        JSON.stringify(devData, null, 2)
-      );
-
-      if (devData.error !== 0 || !devData.data) {
-        continue;
       }
+    }
 
-      const list = devData.data.thingList || [];
+    // === G2 SISTEMATO ===
+    let g2 = allDevices.find((d) => d.deviceid === G2_ID);
 
-      list.forEach((i) => {
-        if (!i.itemData || !i.itemData.deviceid) return;
-
-        allDevices.push({
-          ...i.itemData,
-          deviceType: i.itemType, // tipo interno eWeLink
-          itemType: i.itemType,
-          familyId
-        });
+    if (g2) {
+      if (!g2.params) g2.params = {};
+      g2.params.switch = virtualStates[G2_ID];
+      g2.deviceType = 2;
+      g2.itemType = 2;
+    } else {
+      allDevices.push({
+        deviceid: G2_ID,
+        name: "Luci esterne (G2)",
+        online: true,
+        params: { switch: virtualStates[G2_ID] },
+        deviceType: 2,
+        itemType: 2
       });
     }
 
-    // === GESTIONE SPECIALE G2: se non esiste lo aggiungo, altrimenti imposto lo stato virtuale ===
-let g2 = allDevices.find(d => d.deviceid === G2_ID);
+    res.json({ ok: true, devices: allDevices });
 
-if (g2) {
-  // Se esiste già, forzo lo stato in base al virtualStates
-  if (!g2.params) g2.params = {};
-  g2.params.switch = virtualStates[G2_ID] || "off";
-} else {
-  // Se le API non lo restituiscono, lo aggiungo manualmente
-  allDevices.push({
-    deviceid: G2_ID,
-    name: "Luci esterne (G2)",
-    online: true, // non sappiamo lo stato reale, ma lo segniamo online
-    params: { switch: virtualStates[G2_ID] || "off" },
-    familyId: familyList[0]?.id || null,
-    deviceType: 3,   // <<< QUI: tipo GPRS/G2
-    itemType: 3      // idem
-  });
-}
-
-    return res.json({ ok: true, devices: allDevices });
-  } catch (e) {
-    console.error("Eccezione /api/devices:", e);
-    return res.json({
-      ok: false,
-      error: "internal_error",
-      msg: e.message
-    });
+  } catch (err) {
+    return res.json({ ok: false, error: "internal_error", msg: err.message });
   }
 });
 
-// ================== /api/toggle — SINGOLO CANALE (MINIR4, CANCELLO, G2) ==================
+// ================== TOGGLE ==================
+
 app.post("/api/toggle", async (req, res) => {
   const { deviceId, state } = req.body;
   const accessToken = req.cookies.ewelink_access;
 
-  if (!accessToken) {
-    return res.json({
-      ok: false,
-      error: "not_authenticated",
-      msg: "Non autenticato su eWeLink. Vai prima su /login."
-    });
-  }
-
-  if (!deviceId || (state !== "on" && state !== "off")) {
-    return res.json({
-      ok: false,
-      error: "invalid_params",
-      msg: "deviceId o state non validi"
-    });
-  }
+  if (!accessToken)
+    return res.json({ ok: false, error: "not_authenticated" });
 
   try {
-    // Recupero dalla cache dei /api/devices il tipo del device
-    // (se vuoi essere ancora più robusto, puoi fare una mini cache in memoria)
-    console.log("TOGGLE richiesto per deviceId:", deviceId, "state:", state);
+    let type, params;
 
-    // Riconosco i casi speciali
-    const isGate = deviceId === "1000ac81a0";   // PSF-B04, cancello
-    const isG2   = deviceId === "1000965dd3";   // G2 luci esterne
-
-    let params;
-    let type;
+    const isGate = deviceId === "1000ac81a0";
+    const isG2 = deviceId === G2_ID;
 
     if (isGate) {
-      // Cancello: multi-canale con impulso sul CH0
-      type = 2;  // come da /api/devices (deviceType/itemType = 2)
-      params = {
-        switches: [
-          { outlet: 0, switch: "on" }  // impulso, il pulse lo gestisce il device
-        ]
-      };
+      type = 2;
+      params = { switches: [{ outlet: 0, switch: "on" }] };
+
     } else if (isG2) {
-        // G2 luci esterne: interruttore singolo, ma l’API vuole type 1 o 2
-        type = 2;   // <<< CORRETTO
-        params = {
-          switch: state
-        };
-      }
-       else {
-      // MINIR4 del portico (e altri eventuali switch semplici):
-      // possono avere "switches" lato params, ma una singola uscita.
-      type = 1;  // come da /api/devices (deviceType/itemType = 1)
-      params = {
-        switch: state
-      };
+      type = 2;
+      params = { switch: state };
+      virtualStates[G2_ID] = state;
+
+    } else {
+      type = 1;
+      params = { switch: state };
     }
 
-    const bodyObj = {
-      type,
-      id: deviceId,
-      params
-    };
-
-    console.log("=== TOGGLE REQUEST SENT TO EWELINK ===");
-    console.log(JSON.stringify(bodyObj, null, 2));
+    const bodyObj = { type, id: deviceId, params };
 
     const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
       method: "POST",
@@ -381,68 +267,30 @@ app.post("/api/toggle", async (req, res) => {
 
     const data = await resp.json();
 
-    console.log("=== TOGGLE RESPONSE FROM EWELINK ===");
-    console.log(JSON.stringify(data, null, 2));
+    res.json({ ok: data.error === 0, sent: bodyObj, raw: data });
 
-    const ok = data.error === 0;
-
-    return res.json({
-      ok,
-      sent: bodyObj,
-      raw: data
-    });
-  } catch (e) {
-    console.error("Eccezione /api/toggle:", e);
-    return res.json({
-      ok: false,
-      error: "internal_error",
-      msg: e.message
-    });
+  } catch (err) {
+    res.json({ ok: false, error: "internal_error", msg: err.message });
   }
 });
 
-
-// ================== /api/toggle-multi — SCENARI / TUTTI ON-OFF ==================
+// ================== TOGGLE-MULTI ==================
 
 app.post("/api/toggle-multi", async (req, res) => {
   const { deviceId, outlets, state } = req.body;
   const accessToken = req.cookies.ewelink_access;
 
-  if (!accessToken) {
-    return res.json({
-      ok: false,
-      error: "not_authenticated",
-      msg: "Non autenticato su eWeLink. Vai prima su /login."
-    });
-  }
-
-  if (
-    !deviceId ||
-    !Array.isArray(outlets) ||
-    outlets.length === 0 ||
-    (state !== "on" && state !== "off")
-  ) {
-    return res.json({
-      ok: false,
-      error: "invalid_params",
-      msg: "deviceId, outlets o state non validi"
-    });
-  }
+  if (!accessToken)
+    return res.json({ ok: false, error: "not_authenticated" });
 
   try {
-    const switches = outlets.map((o) => ({
-      outlet: o,
-      switch: state
-    }));
+    const switches = outlets.map((o) => ({ outlet: o, switch: state }));
 
     const bodyObj = {
-      type: 1, // fisso: funziona con i 4CH del portico
+      type: 1,
       id: deviceId,
       params: { switches }
     };
-
-    console.log("=== TOGGLE-MULTI REQUEST ===");
-    console.log(JSON.stringify(bodyObj, null, 2));
 
     const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
       method: "POST",
@@ -456,32 +304,14 @@ app.post("/api/toggle-multi", async (req, res) => {
 
     const data = await resp.json();
 
-    console.log("=== TOGGLE-MULTI RESPONSE ===");
-    console.log(JSON.stringify(data, null, 2));
+    res.json({ ok: data.error === 0, sent: bodyObj, raw: data });
 
-    if (data.error !== 0) {
-      return res.json({
-        ok: false,
-        error: data.error,
-        msg: data.msg || "Errore nel comando",
-        raw: data
-      });
-    }
-
-    return res.json({ ok: true, raw: data, sent: bodyObj });
-  } catch (e) {
-    console.error("Eccezione /api/toggle-multi:", e);
-    return res.json({
-      ok: false,
-      error: "internal_error",
-      msg: e.message
-    });
+  } catch (err) {
+    res.json({ ok: false, error: "internal_error", msg: err.message });
   }
 });
 
-// ================== AVVIO SERVER ==================
+// ================== START ==================
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Server avviato sulla porta", PORT);
-});
+app.listen(PORT, () => console.log("Server avviato sulla porta", PORT));
