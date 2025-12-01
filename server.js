@@ -192,6 +192,7 @@ app.get("/api/devices", async (req, res) => {
   }
 
   try {
+    // 1) FAMILY LIST
     const famResp = await fetch(`${API_BASE}/v2/family`, {
       method: "GET",
       headers: {
@@ -200,7 +201,7 @@ app.get("/api/devices", async (req, res) => {
       }
     });
     const famData = await famResp.json();
-    console.log("family response:", famData);
+    console.log("family response:", JSON.stringify(famData, null, 2));
 
     if (famData.error !== 0 || !famData.data) {
       return res.json({
@@ -221,6 +222,7 @@ app.get("/api/devices", async (req, res) => {
 
     const familyId = list[0].id;
 
+    // 2) DEVICE LIST
     const devResp = await fetch(
       `${API_BASE}/v2/device/thing?num=0&familyid=${encodeURIComponent(
         familyId
@@ -235,7 +237,7 @@ app.get("/api/devices", async (req, res) => {
     );
 
     const devData = await devResp.json();
-    console.log("device thing response:", devData);
+    console.log("device thing raw response:", JSON.stringify(devData, null, 2));
 
     if (devData.error !== 0 || !devData.data) {
       return res.json({
@@ -245,14 +247,14 @@ app.get("/api/devices", async (req, res) => {
       });
     }
 
-    // Aggiungo deviceType = itemType così il frontend sa che "type" usare
+    // NON FILTRO PIÙ PER itemType 1 o 2:
+    // rimando tutto, aggiungendo deviceType=itemType per sapere che tipo è
     const devices =
-      (devData.data.thingList || [])
-        .filter((i) => i.itemType === 1 || i.itemType === 2)
-        .map((i) => ({
-          ...i.itemData,
-          deviceType: i.itemType
-        })) || [];
+      (devData.data.thingList || []).map((i) => ({
+        ...i.itemData,
+        deviceType: i.itemType,   // tipo (device, gruppo, scena, ecc.)
+        itemType: i.itemType      // lo teniamo anche con il nome originale
+      })) || [];
 
     return res.json({ ok: true, devices });
   } catch (e) {
