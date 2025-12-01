@@ -301,15 +301,19 @@ app.post("/api/toggle", async (req, res) => {
 
     let params;
     if (isGate) {
-      // PROVA 2: cancello = impulso ON SENZA outlet
-      params = { switch: "on" };
+      // Cancello: usa formato multi-canale "switches"
+      params = {
+        switches: [
+          { outlet: 0, switch: "on" }   // impulso su CH0
+        ]
+      };
     } else {
       // Dispositivi normali (single channel)
       params = { switch: state };
     }
 
     const bodyObj = {
-      type: deviceType || 1,
+      type: deviceType || 1,   // di default 1
       id: deviceId,
       params
     };
@@ -332,6 +336,7 @@ app.post("/api/toggle", async (req, res) => {
     console.log("=== TOGGLE RESPONSE ===");
     console.log(JSON.stringify(data, null, 2));
 
+    // Ritorno tutto al frontend (come prima)
     return res.json({
       ok: data.error === 0,
       sent: bodyObj,
