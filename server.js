@@ -274,10 +274,10 @@ app.get("/api/devices", async (req, res) => {
   }
 });
 
-// ================== /api/toggle — ON/OFF 1 CANALE ==================
+// ================== /api/toggle — DEBUG COMPLETO (singolo canale) ==================
 
 app.post("/api/toggle", async (req, res) => {
-  const { deviceId, state } = req.body;
+  const { deviceId, state, deviceType } = req.body;
   const accessToken = req.cookies.ewelink_access;
 
   if (!accessToken) {
@@ -301,28 +301,22 @@ app.post("/api/toggle", async (req, res) => {
     const isGate = deviceId === "1000ac81a0";
 
     let params;
-
     if (isGate) {
       // Impulso su CH0: ON (il cancello è in inching e torna da solo a OFF)
-      params = {
-        switch: "on",
-        outlet: 0
-      };
+      params = { switch: "on", outlet: 0 };
     } else {
       // Dispositivi normali (single channel)
-      params = {
-        switch: state
-      };
+      params = { switch: state };
     }
 
     const bodyObj = {
-      type: 1,          // per i device normali e il cancello
+      type: deviceType || 1, // di default 1
       id: deviceId,
       params
     };
-    const bodyStr = JSON.stringify(bodyObj);
 
-    console.log("toggle request body:", bodyObj);
+    console.log("=== TOGGLE REQUEST ===");
+    console.log(JSON.stringify(bodyObj, null, 2));
 
     const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
       method: "POST",
@@ -331,22 +325,20 @@ app.post("/api/toggle", async (req, res) => {
         Authorization: "Bearer " + accessToken,
         "X-CK-Appid": APPID
       },
-      body: bodyStr
+      body: JSON.stringify(bodyObj)
     });
 
     const data = await resp.json();
-    console.log("toggle response:", data);
 
-    if (data.error !== 0) {
-      return res.json({
-        ok: false,
-        error: data.error,
-        msg: data.msg || "Errore nel comando",
-        raw: data
-      });
-    }
+    console.log("=== TOGGLE RESPONSE ===");
+    console.log(JSON.stringify(data, null, 2));
 
-    return res.json({ ok: true, result: data });
+    // Ritorno tutto al frontend per debug
+    return res.json({
+      ok: data.error === 0,
+      sent: bodyObj,
+      raw: data
+    });
   } catch (e) {
     console.error("Eccezione /api/toggle:", e);
     return res.json({
