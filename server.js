@@ -5,10 +5,6 @@ const cors = require("cors");
 const crypto = require("crypto");
 const cookieParser = require("cookie-parser");
 
-// fetch compatibile anche con Node < 18
-const fetch = (...args) =>
-  import("node-fetch").then(({ default: fetch }) => fetch(...args));
-
 const app = express();
 app.use(express.json());
 app.use(cookieParser());
@@ -63,7 +59,7 @@ app.get("/login", (req, res) => {
     req.query.returnUrl ||
     "https://oratoriosluigi.altervista.org/sonoff.html.html";
 
-  const state = returnUrl;
+  const state = returnUrl; // URL “pulito”
   const encodedState = encodeURIComponent(state);
 
   const seq = Date.now().toString();
@@ -249,10 +245,14 @@ app.get("/api/devices", async (req, res) => {
       });
     }
 
+    // Aggiungo deviceType = itemType così il frontend sa che "type" usare
     const devices =
       (devData.data.thingList || [])
         .filter((i) => i.itemType === 1 || i.itemType === 2)
-        .map((i) => i.itemData) || [];
+        .map((i) => ({
+          ...i.itemData,
+          deviceType: i.itemType
+        })) || [];
 
     return res.json({ ok: true, devices });
   } catch (e) {
@@ -268,7 +268,7 @@ app.get("/api/devices", async (req, res) => {
 // ================== /api/toggle — ON/OFF 1 CANALE ==================
 
 app.post("/api/toggle", async (req, res) => {
-  const { deviceId, state, outlet } = req.body;
+  const { deviceId, state, outlet, deviceType } = req.body;
   const accessToken = req.cookies.ewelink_access;
 
   if (!accessToken) {
@@ -288,13 +288,15 @@ app.post("/api/toggle", async (req, res) => {
   }
 
   try {
-    // corpo secondo specifica ufficiale
-    const params = outlet !== undefined
-      ? { switch: state, outlet: outlet }
-      : { switch: state };
+    const type = deviceType || 1; // default 1, ma per il cancello useremo il suo valore reale
+
+    const params =
+      typeof outlet !== "undefined"
+        ? { switch: state, outlet: outlet }
+        : { switch: state };
 
     const bodyObj = {
-      type: 1,          // 1 = device
+      type,
       id: deviceId,
       params
     };
@@ -335,10 +337,10 @@ app.post("/api/toggle", async (req, res) => {
   }
 });
 
-// ================== /api/toggle-multi — SCENARI / TUTTI ON-OFF ==================
+// ================== /api/toggle-multi — SCENARI MULTI-CANALE ==================
 
 app.post("/api/toggle-multi", async (req, res) => {
-  const { deviceId, outlets, state } = req.body;
+  const { deviceId, outlets, state, deviceType } = req.body;
   const accessToken = req.cookies.ewelink_access;
 
   if (!accessToken) {
@@ -363,12 +365,14 @@ app.post("/api/toggle-multi", async (req, res) => {
   }
 
   try {
+    const type = deviceType || 1; // prendo il tipo corretto (es. cancello)
+
     const errors = [];
 
-    // invece di usare "switches", mando un comando per ogni outlet
+    // mando un comando per ogni outlet
     for (const o of outlets) {
       const bodyObj = {
-        type: 1,
+        type,
         id: deviceId,
         params: {
           switch: state,
@@ -419,4 +423,11 @@ app.post("/api/toggle-multi", async (req, res) => {
       msg: e.message
     });
   }
+});
+
+// ================== AVVIO SERVER ==================
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("Server avviato sulla porta", PORT);
 });
