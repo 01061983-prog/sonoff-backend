@@ -5,6 +5,10 @@ const cors = require("cors");
 const crypto = require("crypto");
 const cookieParser = require("cookie-parser");
 
+// fetch compatibile anche con Node < 18
+const fetch = (...args) =>
+  import("node-fetch").then(({ default: fetch }) => fetch(...args));
+
 const app = express();
 app.use(express.json());
 app.use(cookieParser());
@@ -284,19 +288,17 @@ app.post("/api/toggle", async (req, res) => {
   }
 
   try {
-    // QUI: type e id passati in query string, params solo nel body
-    const url = `${API_BASE}/v2/device/thing/status?type=1&id=${encodeURIComponent(
-      deviceId
-    )}`;
-
+    // SPEC UFFICIALE: type + id + params nel BODY
     const bodyObj = {
+      type: 1, // 1 = device
+      id: deviceId,
       params: { switch: state }
     };
     const bodyStr = JSON.stringify(bodyObj);
 
-    console.log("toggle request:", url, bodyObj);
+    console.log("toggle request body:", bodyObj);
 
-    const resp = await fetch(url, {
+    const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -313,7 +315,8 @@ app.post("/api/toggle", async (req, res) => {
       return res.json({
         ok: false,
         error: data.error,
-        msg: data.msg || "Errore nel comando"
+        msg: data.msg || "Errore nel comando",
+        raw: data
       });
     }
 
@@ -361,19 +364,18 @@ app.post("/api/toggle-multi", async (req, res) => {
   }));
 
   try {
-    // ANCHE QUI: type e id in query string, params nel body
-    const url = `${API_BASE}/v2/device/thing/status?type=1&id=${encodeURIComponent(
-      deviceId
-    )}`;
-
+    // SPEC UFFICIALE anche per multi-canale:
+    // type + id + params.switches nel BODY
     const bodyObj = {
+      type: 1, // 1 = device (non gruppo)
+      id: deviceId,
       params: { switches }
     };
     const bodyStr = JSON.stringify(bodyObj);
 
-    console.log("toggle-multi request:", url, bodyObj);
+    console.log("toggle-multi request body:", bodyObj);
 
-    const resp = await fetch(url, {
+    const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -390,7 +392,8 @@ app.post("/api/toggle-multi", async (req, res) => {
       return res.json({
         ok: false,
         error: data.error,
-        msg: data.msg || "Errore nel comando"
+        msg: data.msg || "Errore nel comando",
+        raw: data
       });
     }
 
