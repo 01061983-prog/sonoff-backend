@@ -277,7 +277,7 @@ app.get("/api/devices", async (req, res) => {
 // ================== /api/toggle — ON/OFF 1 CANALE ==================
 
 app.post("/api/toggle", async (req, res) => {
-  const { deviceId, state, outlet, deviceType } = req.body;
+  const { deviceId, state } = req.body;
   const accessToken = req.cookies.ewelink_access;
 
   if (!accessToken) {
@@ -297,21 +297,26 @@ app.post("/api/toggle", async (req, res) => {
   }
 
   try {
-    let type = deviceType || 1;
-
-    // Workaround specifico per il cancello (ID 1000ac81a0):
-    // qualunque sia lo stato che arriva, mando SEMPRE "on" come impulso.
+    // Cancello: ID fisso 1000ac81a0
     const isGate = deviceId === "1000ac81a0";
 
-    const effectiveState = isGate ? "on" : state;
+    let params;
 
-    const params =
-      typeof outlet !== "undefined"
-        ? { switch: effectiveState, outlet: outlet }
-        : { switch: effectiveState };
+    if (isGate) {
+      // Impulso su CH0: ON (il cancello è in inching e torna da solo a OFF)
+      params = {
+        switch: "on",
+        outlet: 0
+      };
+    } else {
+      // Dispositivi normali (single channel)
+      params = {
+        switch: state
+      };
+    }
 
     const bodyObj = {
-      type,
+      type: 1,          // per i device normali e il cancello
       id: deviceId,
       params
     };
