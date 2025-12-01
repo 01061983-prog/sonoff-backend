@@ -62,8 +62,9 @@ app.get("/login", (req, res) => {
     req.query.returnUrl ||
     "https://oratoriosluigi.altervista.org/sonoff.html.html";
 
-  // lo mettiamo nello state, già codificato una volta
-  const state = encodeURIComponent(returnUrl);
+  // nello state mettiamo l'URL normale
+  const state = returnUrl;
+  const encodedState = encodeURIComponent(state);
 
   const seq = Date.now().toString();
   const nonce = "abc12345";
@@ -74,7 +75,7 @@ app.get("/login", (req, res) => {
 
   const url =
     "https://c2ccdn.coolkit.cc/oauth/index.html" +
-    `?state=${state}` +
+    `?state=${encodedState}` +
     `&clientId=${encodeURIComponent(APPID)}` +
     `&authorization=${encodeURIComponent(sign)}` +
     `&seq=${encodeURIComponent(seq)}` +
@@ -108,6 +109,7 @@ app.get("/oauth/callback", async (req, res) => {
   let returnUrl = "https://oratoriosluigi.altervista.org/sonoff.html.html";
   if (state) {
     try {
+      // una sola decodifica, perché in /login l'avevamo codificato una sola volta
       returnUrl = decodeURIComponent(state);
     } catch (e) {
       console.warn("Impossibile decodificare state, uso default:", e);
@@ -159,7 +161,7 @@ app.get("/oauth/callback", async (req, res) => {
       sameSite: "None"
     });
 
-    // QUI il redirect al pannello, NIENTE testo
+    // redirect al pannello HTML
     return res.redirect(returnUrl);
   } catch (e) {
     console.error("Eccezione /oauth/callback:", e);
