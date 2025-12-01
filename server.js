@@ -16,14 +16,11 @@ const REDIRECT_URL =
   process.env.EWELINK_REDIRECT_URL ||
   "https://sonoff-backend-k8sh.onrender.com/oauth/callback";
 
-// Host API EU
 const API_BASE =
   process.env.EWELINK_API_BASE || "https://eu-apia.coolkit.cc";
 
 if (!APPID || !APPSECRET) {
-  console.error(
-    "ERRORE: EWELINK_APP_ID o EWELINK_APP_SECRET non impostati!"
-  );
+  console.error("ERRORE: EWELINK_APP_ID o EWELINK_APP_SECRET non impostati!");
 }
 
 // Token in memoria
@@ -32,6 +29,15 @@ let oauth = {
   refreshToken: null,
   expiresAt: 0, // timestamp ms
 };
+
+// ================== UTILITY FIRMA ==================
+
+function hmacSign(message) {
+  return crypto
+    .createHmac("sha256", APPSECRET)
+    .update(message, "utf8")
+    .digest("base64");
+}
 
 // ================== CORS ==================
 
@@ -44,28 +50,7 @@ app.use(
   })
 );
 
-// ================== HMAC SIGN ==================
-
-// Firma generica: HMAC-SHA256(message) con APPSECRET, in base64
-function createSign(message) {
-  return crypto
-    .createHmac("sha256", APPSECRET)
-    .update(message, "utf8")
-    .digest("base64");
-}
-
-/**
- * Utility: costruisce una stringa "canonica" con i parametri ordinati
- * es: {a:1, c:3, b:2} -> "a=1&b=2&c=3"
- */
-function buildCanonicalString(params) {
-  return Object.keys(params)
-    .sort()
-    .map((k) => `${k}=${params[k]}`)
-    .join("&");
-}
-
-// ================== HELPER TOKEN (refresh) ==================
+// ================== HELPER REFRESH TOKEN ==================
 
 async function ensureToken() {
   if (!oauth.accessToken) return;
@@ -77,7 +62,7 @@ async function ensureToken() {
       refreshToken: oauth.refreshToken,
     };
     const bodyStr = JSON.stringify(bodyObj);
-    const sign = createSign(bodyStr);
+    const sign = hmacSign(bodyStr);
 
     const resp = await fetch(`${API_BASE}/v2/user/refresh`, {
       method: "POST",
@@ -129,34 +114,14 @@ app.get("/", (_req, res) => {
 //   &grantType=authorization_code
 //   &showQRCode=false
 //
-// ================== /login — REDIRECT A PAGINA OAUTH ==================
-
 app.get("/login", (req, res) => {
   const state = "xyz123";
-  const seq = Date.now().toString();
+  const seq = Date.now().toString(); // spesso usano timestamp
   const nonce = "abc12345";
 
-  // Parametri richiesti da COOLKIT (dev docs)
-  const params = {
-    clientId: APPID,
-    grantType: "authorization_code",
-    nonce,
-    redirectUrl: REDIRECT_URL,
-    seq,
-    state,
-    showQRCode: "false"
-  };
-
-  // Firma HMAC-SHA256 dell’intera query string ORDINATA
-  const sorted = Object.keys(params)
-    .sort()
-    .map((k) => `${k}=${params[k]}`)
-    .join("&");
-
-  const sign = crypto
-    .createHmac("sha256", APPSECRET)
-    .update(sorted)
-    .digest("base64");
+  // Regola ufficiale: sign = HMAC(APP_SECRET, clientId + "_" + seq)
+  const message = `${APPID}_${seq}`;
+  const sign = hmacSign(message);
 
   const url =
     "https://c2ccdn.coolkit.cc/oauth/index.html" +
@@ -169,59 +134,56 @@ app.get("/login", (req, res) => {
     `&grantType=authorization_code` +
     `&showQRCode=false`;
 
-  console.log("URL OAuth generato:", url);
-
+  console.log("OAuth URL:", url);
   res.redirect(url);
 });
 
-
-// ================== /oauth/callback — SCAMBIO CODE → TOKEN ==================
+// ================== /oauth/callback — SCAMBIO CODE -> TOKEN ==================
 
 app.get("/oauth/callback", async (req, res) => {
   const { code, error } = req.query;
 
   if (error) {
-    console.error("Errore callback OAuth:", error);
-    return res.status(400).send("OAuth error: " + error);
+    console.error("Errore riportato da OAuth callback:", error);
+    return res.status(400).send("OAuth error from provider: " + error);
   }
 
   if (!code) {
-    console.error("Manca il code:", req.query);
-    return res.status(400).send("Manca 'code' in OAuth callback");
+    console.error("Manca il code in callback, query:", req.query);
+    return res
+      .status(400)
+      .send("Missing 'code' in OAuth callback, query=" + JSON.stringify(req.query));
   }
 
   try {
+    // Body ufficiale: code + redirectUrl + grantType
     const bodyObj = {
       code,
       redirectUrl: REDIRECT_URL,
-      grantType: "authorization_code"
+      grantType: "authorization_code",
     };
-
     const bodyStr = JSON.stringify(bodyObj);
 
-    // Firma del body
-    const sign = crypto
-      .createHmac("sha256", APPSECRET)
-      .update(bodyStr)
-      .digest("base64");
+    // Regola v2: sign = HMAC(APP_SECRET, JSON.stringify(body))
+    const sign = hmacSign(bodyStr);
 
-    console.log("Richiesta token, body:", bodyObj);
-    console.log("Sign:", sign);
+    console.log("POST /v2/user/oauth/token body:", bodyObj);
+    console.log("Authorization Sign:", sign);
 
     const resp = await fetch(`${API_BASE}/v2/user/oauth/token`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-CK-Appid": APPID,
-        Authorization: `Sign ${sign}`
+        Authorization: `Sign ${sign}`,
       },
-      body: bodyStr
+      body: bodyStr,
     });
 
     const data = await resp.json();
-    console.log("Risposta token:", data);
+    console.log("oauth token response:", data);
 
-    if (data.error !== 0) {
+    if (data.error !== 0 || !data.data) {
       return res
         .status(400)
         .send("Errore nello scambio code/token: " + JSON.stringify(data));
@@ -231,9 +193,168 @@ app.get("/oauth/callback", async (req, res) => {
     oauth.refreshToken = data.data.refreshToken;
     oauth.expiresAt = Date.now() + data.data.expiresIn * 1000;
 
-    res.send("Autorizzazione completata. Puoi chiudere questa pagina.");
+    return res.send(
+      "Autorizzazione completata. Puoi chiudere questa pagina e tornare al pannello Sonoff."
+    );
   } catch (e) {
-    console.error("Eccezione callback:", e);
-    res.status(500).send("Errore interno callback OAuth");
+    console.error("Eccezione /oauth/callback:", e);
+    return res
+      .status(500)
+      .send("Eccezione nello scambio token: " + e.message);
   }
+});
+
+// ================== /api/devices — LISTA DISPOSITIVI ==================
+
+app.get("/api/devices", async (req, res) => {
+  if (!oauth.accessToken) {
+    return res.json({
+      ok: false,
+      error: "not_authenticated",
+      msg: "Non autenticato su eWeLink. Vai prima su /login.",
+    });
+  }
+
+  await ensureToken();
+
+  try {
+    // 1) family
+    const famResp = await fetch(`${API_BASE}/v2/family`, {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + oauth.accessToken,
+        "X-CK-Appid": APPID,
+      },
+    });
+    const famData = await famResp.json();
+    console.log("family response:", famData);
+
+    if (famData.error !== 0 || !famData.data) {
+      return res.json({
+        ok: false,
+        error: famData.error,
+        msg: famData.msg || "Errore lettura family",
+      });
+    }
+
+    const list = famData.data.familyList || [];
+    if (!list.length) {
+      return res.json({
+        ok: true,
+        devices: [],
+        msg: "Nessuna family associata all'account",
+      });
+    }
+
+    const familyId = list[0].id;
+
+    // 2) devices
+    const devResp = await fetch(
+      `${API_BASE}/v2/device/thing?num=0&familyid=${encodeURIComponent(
+        familyId
+      )}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: "Bearer " + oauth.accessToken,
+          "X-CK-Appid": APPID,
+        },
+      }
+    );
+
+    const devData = await devResp.json();
+    console.log("device thing response:", devData);
+
+    if (devData.error !== 0 || !devData.data) {
+      return res.json({
+        ok: false,
+        error: devData.error,
+        msg: devData.msg || "Errore lettura dispositivi",
+      });
+    }
+
+    const devices =
+      (devData.data.thingList || [])
+        .filter((i) => i.itemType === 1 || i.itemType === 2)
+        .map((i) => i.itemData) || [];
+
+    return res.json({ ok: true, devices });
+  } catch (e) {
+    console.error("Eccezione /api/devices:", e);
+    return res.json({
+      ok: false,
+      error: "internal_error",
+      msg: e.message,
+    });
+  }
+});
+
+// ================== /api/toggle — ON/OFF DISPOSITIVO ==================
+
+app.post("/api/toggle", async (req, res) => {
+  const { deviceId, state } = req.body;
+
+  if (!oauth.accessToken) {
+    return res.json({
+      ok: false,
+      error: "not_authenticated",
+      msg: "Non autenticato su eWeLink. Vai prima su /login.",
+    });
+  }
+
+  if (!deviceId || (state !== "on" && state !== "off")) {
+    return res.json({
+      ok: false,
+      error: "invalid_params",
+      msg: "deviceId o state non validi",
+    });
+  }
+
+  await ensureToken();
+
+  try {
+    const bodyObj = {
+      itemType: 1,
+      id: deviceId,
+      params: { switch: state },
+    };
+    const bodyStr = JSON.stringify(bodyObj);
+
+    const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + oauth.accessToken,
+        "X-CK-Appid": APPID,
+      },
+      body: bodyStr,
+    });
+
+    const data = await resp.json();
+    console.log("toggle response:", data);
+
+    if (data.error !== 0) {
+      return res.json({
+        ok: false,
+        error: data.error,
+        msg: data.msg || "Errore nel comando",
+      });
+    }
+
+    return res.json({ ok: true, result: data });
+  } catch (e) {
+    console.error("Eccezione /api/toggle:", e);
+    return res.json({
+      ok: false,
+      error: "internal_error",
+      msg: e.message,
+    });
+  }
+});
+
+// ================== AVVIO SERVER ==================
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("Server avviato sulla porta", PORT);
 });
