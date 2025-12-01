@@ -186,9 +186,9 @@ app.post("/logout", (req, res) => {
   return res.json({ ok: true });
 });
 
-// ================== /api/devices — LISTA DISPOSITIVI (TUTTE LE FAMILY) ==================
+// ================== /api/scenes — ELENCO SCENE EWeLink PER LA FAMILY ==================
 
-app.get("/api/devices", async (req, res) => {
+app.get("/api/scenes", async (req, res) => {
   const accessToken = req.cookies.ewelink_access;
 
   if (!accessToken) {
@@ -200,7 +200,6 @@ app.get("/api/devices", async (req, res) => {
   }
 
   try {
-    // 1) elenco family
     const famResp = await fetch(`${API_BASE}/v2/family`, {
       method: "GET",
       headers: {
@@ -208,8 +207,9 @@ app.get("/api/devices", async (req, res) => {
         "X-CK-Appid": APPID
       }
     });
+
     const famData = await famResp.json();
-    console.log("family response:", JSON.stringify(famData, null, 2));
+    console.log("family response (scenes):", JSON.stringify(famData, null, 2));
 
     if (famData.error !== 0 || !famData.data) {
       return res.json({
@@ -223,53 +223,51 @@ app.get("/api/devices", async (req, res) => {
     if (!familyList.length) {
       return res.json({
         ok: true,
-        devices: [],
+        scenes: [],
         msg: "Nessuna family associata all'account"
       });
     }
 
-    const allDevices = [];
+    const familyId = familyList[0].id;
 
-    // 2) per ogni family prendo i device
-    for (const fam of familyList) {
-      const familyId = fam.id;
-
-      const devResp = await fetch(
-        `${API_BASE}/v2/device/thing?num=0&familyid=${encodeURIComponent(
-          familyId
-        )}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: "Bearer " + accessToken,
-            "X-CK-Appid": APPID
-          }
+    const sceneResp = await fetch(
+      `${API_BASE}/v2/scene?familyid=${encodeURIComponent(familyId)}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: "Bearer " + accessToken,
+          "X-CK-Appid": APPID
         }
-      );
-
-      const devData = await devResp.json();
-      console.log(
-        `device thing response for family ${familyId}:`,
-        JSON.stringify(devData, null, 2)
-      );
-
-      if (devData.error !== 0 || !devData.data) {
-        continue;
       }
+    );
 
-      const list = devData.data.thingList || [];
+    const sceneData = await sceneResp.json();
+    console.log("scene response:", JSON.stringify(sceneData, null, 2));
 
-      list.forEach((i) => {
-        if (!i.itemData || !i.itemData.deviceid) return;
-
-        allDevices.push({
-          ...i.itemData,
-          deviceType: i.itemType, // tipo interno eWeLink
-          itemType: i.itemType,
-          familyId
-        });
+    if (sceneData.error !== 0 || !sceneData.data) {
+      return res.json({
+        ok: false,
+        error: sceneData.error,
+        msg: sceneData.msg || "Errore lettura scene"
       });
     }
+
+    const sceneList = sceneData.data.sceneList || [];
+
+    return res.json({
+      ok: true,
+      scenes: sceneList
+    });
+  } catch (e) {
+    console.error("Eccezione /api/scenes:", e);
+    return res.json({
+      ok: false,
+      error: "internal_error",
+      msg: e.message
+    });
+  }
+});
+
 
     // === GESTIONE SPECIALE G2: se non esiste lo aggiungo, altrimenti imposto lo stato virtuale ===
 let g2 = allDevices.find(d => d.deviceid === G2_ID);
