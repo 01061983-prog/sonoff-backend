@@ -268,6 +268,92 @@ app.get("/api/scenes", async (req, res) => {
   }
 });
 
+// ================== /api/scenes — ELENCO SCENE EWeLink PER LA FAMILY ==================
+
+app.get("/api/scenes", async (req, res) => {
+  const accessToken = req.cookies.ewelink_access;
+
+  if (!accessToken) {
+    return res.json({
+      ok: false,
+      error: "not_authenticated",
+      msg: "Non autenticato su eWeLink. Vai prima su /login."
+    });
+  }
+
+  try {
+    // 1) elenco family (come in /api/devices)
+    const famResp = await fetch(`${API_BASE}/v2/family`, {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + accessToken,
+        "X-CK-Appid": APPID
+      }
+    });
+
+    const famData = await famResp.json();
+    console.log("family response (scenes):", JSON.stringify(famData, null, 2));
+
+    if (famData.error !== 0 || !famData.data) {
+      return res.json({
+        ok: false,
+        error: famData.error,
+        msg: famData.msg || "Errore lettura family"
+      });
+    }
+
+    const familyList = famData.data.familyList || [];
+    if (!familyList.length) {
+      return res.json({
+        ok: true,
+        scenes: [],
+        msg: "Nessuna family associata all'account"
+      });
+    }
+
+    // per semplicità uso la prima family (come fai per i device)
+    const familyId = familyList[0].id;
+
+    // 2) elenco scene di quella family
+    const sceneResp = await fetch(
+      `${API_BASE}/v2/scene?familyid=${encodeURIComponent(familyId)}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: "Bearer " + accessToken,
+          "X-CK-Appid": APPID
+        }
+      }
+    );
+
+    const sceneData = await sceneResp.json();
+    console.log("scene response:", JSON.stringify(sceneData, null, 2));
+
+    if (sceneData.error !== 0 || !sceneData.data) {
+      return res.json({
+        ok: false,
+        error: sceneData.error,
+        msg: sceneData.msg || "Errore lettura scene"
+      });
+    }
+
+    const sceneList = sceneData.data.sceneList || [];
+
+    return res.json({
+      ok: true,
+      scenes: sceneList
+    });
+  } catch (e) {
+    console.error("Eccezione /api/scenes:", e);
+    return res.json({
+      ok: false,
+      error: "internal_error",
+      msg: e.message
+    });
+  }
+});
+
+
 
     // === GESTIONE SPECIALE G2: se non esiste lo aggiungo, altrimenti imposto lo stato virtuale ===
 let g2 = allDevices.find(d => d.deviceid === G2_ID);
