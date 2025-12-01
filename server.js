@@ -192,6 +192,7 @@ app.get("/api/devices", async (req, res) => {
   }
 
   try {
+    // Family list
     const famResp = await fetch(`${API_BASE}/v2/family`, {
       method: "GET",
       headers: {
@@ -221,6 +222,7 @@ app.get("/api/devices", async (req, res) => {
 
     const familyId = list[0].id;
 
+    // Device list
     const devResp = await fetch(
       `${API_BASE}/v2/device/thing?num=0&familyid=${encodeURIComponent(
         familyId
@@ -285,13 +287,17 @@ app.post("/api/toggle", async (req, res) => {
 
   try {
     const bodyObj = {
-      type: 1, // FIX qui (era itemType)
+      type: 1, // tipo dispositivo (device singolo)
       id: deviceId,
       params: { switch: state }
     };
     const bodyStr = JSON.stringify(bodyObj);
 
-    const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
+    console.log("=== /api/toggle → /v2/device/thing/status request ===");
+    console.log(bodyObj);
+
+    // aggiungo type=1 anche nella query string
+    const resp = await fetch(`${API_BASE}/v2/device/thing/status?type=1`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -302,13 +308,15 @@ app.post("/api/toggle", async (req, res) => {
     });
 
     const data = await resp.json();
-    console.log("toggle response:", data);
+    console.log("=== /api/toggle → eWeLink response ===");
+    console.log(data);
 
     if (data.error !== 0) {
       return res.json({
         ok: false,
         error: data.error,
-        msg: data.msg || "Errore nel comando"
+        msg: data.msg || "Errore nel comando",
+        raw: data
       });
     }
 
@@ -337,8 +345,12 @@ app.post("/api/toggle-multi", async (req, res) => {
     });
   }
 
-  if (!deviceId || !Array.isArray(outlets) || outlets.length === 0 ||
-      (state !== "on" && state !== "off")) {
+  if (
+    !deviceId ||
+    !Array.isArray(outlets) ||
+    outlets.length === 0 ||
+    (state !== "on" && state !== "off")
+  ) {
     return res.json({
       ok: false,
       error: "invalid_params",
@@ -353,13 +365,17 @@ app.post("/api/toggle-multi", async (req, res) => {
 
   try {
     const bodyObj = {
-      type: 1, // FIX qui (era itemType)
+      type: 1, // 1 = device (non gruppo)
       id: deviceId,
       params: { switches }
     };
     const bodyStr = JSON.stringify(bodyObj);
 
-    const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
+    console.log("=== /api/toggle-multi → /v2/device/thing/status request ===");
+    console.log(bodyObj);
+
+    // anche qui type=1 in query string
+    const resp = await fetch(`${API_BASE}/v2/device/thing/status?type=1`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -370,13 +386,15 @@ app.post("/api/toggle-multi", async (req, res) => {
     });
 
     const data = await resp.json();
-    console.log("toggle-multi response:", data);
+    console.log("=== /api/toggle-multi → eWeLink response ===");
+    console.log(data);
 
     if (data.error !== 0) {
       return res.json({
         ok: false,
         error: data.error,
-        msg: data.msg || "Errore nel comando"
+        msg: data.msg || "Errore nel comando",
+        raw: data
       });
     }
 
