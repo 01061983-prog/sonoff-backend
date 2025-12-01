@@ -28,7 +28,6 @@ if (!APPID || !APPSECRET) {
 // ID del G2 "Luci esterne"
 const G2_ID = "1000965dd3";
 
-// Stato virtuale dei dispositivi che le API non restituiscono con stato reale
 // (usato per il G2, così nel frontend lo vedi ON/OFF come ultimo comando inviato)
 const virtualStates = {
   [G2_ID]: "off"
@@ -305,87 +304,98 @@ if (g2) {
 
 // ================== /api/toggle — SINGOLO CANALE (MINIR4, CANCELLO, G2) ==================
 app.post("/api/toggle", async (req, res) => {
-    const { deviceId, state } = req.body;
-    const accessToken = req.cookies.ewelink_access;
-  
-    if (!accessToken) {
-      return res.json({
-        ok: false,
-        error: "not_authenticated",
-        msg: "Non autenticato su eWeLink. Vai prima su /login."
-      });
-    }
-  
-    if (!deviceId || (state !== "on" && state !== "off")) {
-      return res.json({
-        ok: false,
-        error: "invalid_params",
-        msg: "deviceId o state non validi"
-      });
-    }
-  
-    try {
-      console.log("TOGGLE richiesto per deviceId:", deviceId, "state:", state);
-  
-      const isGate = deviceId === "1000ac81a0";   // cancello
-  
-      let type;
-      let params;
-  
-      if (isGate) {
-        // Cancello: impulso su CH0
-        type = 2;   // come da deviceType/itemType = 2
-        params = {
-          switches: [
-            { outlet: 0, switch: "on" }
-          ]
-        };
-      } else {
-        // TUTTI GLI ALTRI (MINIR4 + G2) come interruttore singolo
-        // MINIR4: deviceType/itemType = 1
-        // G2:     deviceType/itemType = 3, MA per questo endpoint l'API vuole comunque type = 1
-        type = 1;
-        params = { switch: state };
-      }
-  
-      const bodyObj = {
-        type,
-        id: deviceId,
-        params
+  const { deviceId, state } = req.body;
+  const accessToken = req.cookies.ewelink_access;
+
+  if (!accessToken) {
+    return res.json({
+      ok: false,
+      error: "not_authenticated",
+      msg: "Non autenticato su eWeLink. Vai prima su /login."
+    });
+  }
+
+  if (!deviceId || (state !== "on" && state !== "off")) {
+    return res.json({
+      ok: false,
+      error: "invalid_params",
+      msg: "deviceId o state non validi"
+    });
+  }
+
+  try {
+    console.log("TOGGLE richiesto per deviceId:", deviceId, "state:", state);
+
+    const isGate = deviceId === "1000ac81a0";   // cancello
+    const isG2   = deviceId === G2_ID;          // luci esterne G2
+
+    let type;
+    let params;
+
+    if (isGate) {
+      // CANCELLO: dispositivo tipo 2, usa "switches" con CH0 a impulso
+      type = 2;
+      params = {
+        switches: [
+          { outlet: 0, switch: "on" }   // impulso, il pulse lo gestisce il device
+        ]
       };
-  
-      console.log("=== TOGGLE REQUEST SENT TO EWELINK ===");
-      console.log(JSON.stringify(bodyObj, null, 2));
-  
-      const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + accessToken,
-          "X-CK-Appid": APPID
-        },
-        body: JSON.stringify(bodyObj)
-      });
-  
-      const data = await resp.json();
-  
-      console.log("=== TOGGLE RESPONSE FROM EWELINK ===");
-      console.log(JSON.stringify(data, null, 2));
-  
-      return res.json({
-        ok: data.error === 0,
-        sent: bodyObj,
-        raw: data
-      });
-    } catch (e) {
-      console.error("Eccezione /api/toggle:", e);
-      return res.json({
-        ok: false,
-        error: "internal_error",
-        msg: e.message
-      });
+    } else if (isG2) {
+      // G2 luci esterne: lo trattiamo come interruttore singolo
+      // l'endpoint accetta type 1 qui, NON group
+      type = 1;
+      params = { switch: state };
+    } else {
+      // MINIR4 del portico (e altri switch semplici)
+      type = 1;
+      params = { switch: state };
     }
-  });
+
+    const bodyObj = {
+      type,
+      id: deviceId,
+      params
+    };
+
+    console.log("=== TOGGLE REQUEST SENT TO EWELINK ===");
+    console.log(JSON.stringify(bodyObj, null, 2));
+
+    const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + accessToken,
+        "X-CK-Appid": APPID
+      },
+      body: JSON.stringify(bodyObj)
+    });
+
+    const data = await resp.json();
+
+    console.log("=== TOGGLE RESPONSE FROM EWELINK ===");
+    console.log(JSON.stringify(data, null, 2));
+
+    const ok = data.error === 0;
+
+    // aggiorno lo stato virtuale del G2 così /api/devices lo mostra corretto
+    if (ok && isG2) {
+      virtualStates[G2_ID] = state;
+    }
+
+    return res.json({
+      ok,
+      sent: bodyObj,
+      raw: data
+    });
+  } catch (e) {
+    console.error("Eccezione /api/toggle:", e);
+    return res.json({
+      ok: false,
+      error: "internal_error",
+      msg: e.message
+    });
+  }
+});
   
 // ================== /api/toggle-multi — SCENARI / TUTTI ON-OFF ==================
 
