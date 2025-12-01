@@ -297,20 +297,19 @@ app.post("/api/toggle", async (req, res) => {
   }
 
   try {
-    // Cancello: ID fisso 1000ac81a0
     const isGate = deviceId === "1000ac81a0";
 
     let params;
     if (isGate) {
-      // Impulso su CH0: ON (il cancello è in inching e torna da solo a OFF)
-      params = { switch: "on", outlet: 0 };
+      // PROVA 2: cancello = impulso ON SENZA outlet
+      params = { switch: "on" };
     } else {
       // Dispositivi normali (single channel)
       params = { switch: state };
     }
 
     const bodyObj = {
-      type: deviceType || 1, // di default 1
+      type: deviceType || 1,
       id: deviceId,
       params
     };
@@ -333,7 +332,6 @@ app.post("/api/toggle", async (req, res) => {
     console.log("=== TOGGLE RESPONSE ===");
     console.log(JSON.stringify(data, null, 2));
 
-    // Ritorno tutto al frontend per debug
     return res.json({
       ok: data.error === 0,
       sent: bodyObj,
