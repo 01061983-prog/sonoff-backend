@@ -268,7 +268,7 @@ app.get("/api/devices", async (req, res) => {
 // ================== /api/toggle — ON/OFF 1 CANALE ==================
 
 app.post("/api/toggle", async (req, res) => {
-  const { deviceId, state } = req.body;
+  const { deviceId, state, outlet } = req.body;
   const accessToken = req.cookies.ewelink_access;
 
   if (!accessToken) {
@@ -288,11 +288,15 @@ app.post("/api/toggle", async (req, res) => {
   }
 
   try {
-    // SPEC UFFICIALE: type + id + params nel BODY
+    // corpo secondo specifica ufficiale
+    const params = outlet !== undefined
+      ? { switch: state, outlet: outlet }
+      : { switch: state };
+
     const bodyObj = {
-      type: 1, // 1 = device
+      type: 1,          // 1 = device
       id: deviceId,
-      params: { switch: state }
+      params
     };
     const bodyStr = JSON.stringify(bodyObj);
 
@@ -331,7 +335,7 @@ app.post("/api/toggle", async (req, res) => {
   }
 });
 
-// ================== /api/toggle-multi — SCENARI MULTI-CANALE ==================
+// ================== /api/toggle-multi — SCENARI / TUTTI ON-OFF ==================
 
 app.post("/api/toggle-multi", async (req, res) => {
   const { deviceId, outlets, state } = req.body;
@@ -358,46 +362,55 @@ app.post("/api/toggle-multi", async (req, res) => {
     });
   }
 
-  const switches = outlets.map((o) => ({
-    outlet: o,
-    switch: state
-  }));
-
   try {
-    // SPEC UFFICIALE anche per multi-canale:
-    // type + id + params.switches nel BODY
-    const bodyObj = {
-      type: 1, // 1 = device (non gruppo)
-      id: deviceId,
-      params: { switches }
-    };
-    const bodyStr = JSON.stringify(bodyObj);
+    const errors = [];
 
-    console.log("toggle-multi request body:", bodyObj);
+    // invece di usare "switches", mando un comando per ogni outlet
+    for (const o of outlets) {
+      const bodyObj = {
+        type: 1,
+        id: deviceId,
+        params: {
+          switch: state,
+          outlet: o
+        }
+      };
+      const bodyStr = JSON.stringify(bodyObj);
 
-    const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + accessToken,
-        "X-CK-Appid": APPID
-      },
-      body: bodyStr
-    });
+      console.log("toggle-multi single request:", bodyObj);
 
-    const data = await resp.json();
-    console.log("toggle-multi response:", data);
+      const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + accessToken,
+          "X-CK-Appid": APPID
+        },
+        body: bodyStr
+      });
 
-    if (data.error !== 0) {
+      const data = await resp.json();
+      console.log("toggle-multi single response:", data);
+
+      if (data.error !== 0) {
+        errors.push({
+          outlet: o,
+          error: data.error,
+          msg: data.msg || "Errore nel comando"
+        });
+      }
+    }
+
+    if (errors.length > 0) {
       return res.json({
         ok: false,
-        error: data.error,
-        msg: data.msg || "Errore nel comando",
-        raw: data
+        error: 400,
+        msg: errors[0].msg,
+        details: errors
       });
     }
 
-    return res.json({ ok: true, result: data });
+    return res.json({ ok: true });
   } catch (e) {
     console.error("Eccezione /api/toggle-multi:", e);
     return res.json({
@@ -406,11 +419,4 @@ app.post("/api/toggle-multi", async (req, res) => {
       msg: e.message
     });
   }
-});
-
-// ================== AVVIO SERVER ==================
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Server avviato sulla porta", PORT);
 });
