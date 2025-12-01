@@ -327,35 +327,30 @@ app.post("/api/toggle", async (req, res) => {
   try {
     console.log("TOGGLE richiesto per deviceId:", deviceId, "state:", state);
 
-    const isGate = deviceId === "1000ac81a0";   // Cancello
-    const isG2   = deviceId === "1000965dd3";   // Luci esterne (G2)
+   const isGate = deviceId === "1000ac81a0";   // Cancello
+const isG2   = deviceId === "1000965dd3";   // G2 luci esterne
 
-    let type;
-    let params;
+let type;
+let params;
 
-    if (isGate) {
-      // **CANCELLO** PSF-B04-GL
-      // → l’API vuole type=1 e params.switches con outlet 0
-      type = 1;
-      params = {
-        switches: [
-          { outlet: 0, switch: "on" }   // impulso sul CH0
-        ]
-      };
-    } else if (isG2) {
-      // G2 luci esterne: singolo interruttore
-      type = 1;
-      params = {
-        switch: state
-      };
-    } else {
-      // MINIR4 del portico e altri interruttori semplici
-      type = 1;
-      params = {
-        switch: state
-      };
-    }
-
+if (isGate) {
+  // *** CANCELLO COME PRIMA ***
+  // usa type=2 e switches[ { outlet:0, switch:"on" } ]
+  type = 2;
+  params = {
+    switches: [
+      { outlet: 0, switch: "on" } // impulso cancell0
+    ]
+  };
+} else if (isG2) {
+  // G2: lasciamo type=1 per evitare l'errore "type must be one of [1,2]"
+  type = 1;
+  params = { switch: state };
+} else {
+  // Minir4 portico ecc.
+  type = 1;
+  params = { switch: state };
+}
     const bodyObj = {
       type,
       id: deviceId,
