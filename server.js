@@ -303,7 +303,6 @@ if (g2) {
 });
 
 // ================== /api/toggle — SINGOLO CANALE (MINIR4, CANCELLO, G2) ==================
-// ================== /api/toggle — SINGOLO CANALE (MINIR4, CANCELLO, G2) ==================
 app.post("/api/toggle", async (req, res) => {
   const { deviceId, state } = req.body;
   const accessToken = req.cookies.ewelink_access;
@@ -327,30 +326,35 @@ app.post("/api/toggle", async (req, res) => {
   try {
     console.log("TOGGLE richiesto per deviceId:", deviceId, "state:", state);
 
-   const isGate = deviceId === "1000ac81a0";   // Cancello
-const isG2   = deviceId === "1000965dd3";   // G2 luci esterne
+    const isGate = deviceId === "1000ac81a0";  // cancello
+    const isG2   = deviceId === G2_ID;         // luci esterne (G2)
 
-let type;
-let params;
+    let type;
+    let params;
 
-if (isGate) {
-  // *** CANCELLO COME PRIMA ***
-  // usa type=2 e switches[ { outlet:0, switch:"on" } ]
-  type = 2;
-  params = {
-    switches: [
-      { outlet: 0, switch: "on" } // impulso cancell0
-    ]
-  };
-} else if (isG2) {
-  // G2: lasciamo type=1 per evitare l'errore "type must be one of [1,2]"
-  type = 1;
-  params = { switch: state };
-} else {
-  // Minir4 portico ecc.
-  type = 1;
-  params = { switch: state };
-}
+    if (isGate) {
+      // CANCELLO: group (type 2) con impulso sul CH0
+      type = 2;
+      params = {
+        switches: [
+          { outlet: 0, switch: "on" }   // impulso, gestito dal pulse del device
+        ]
+      };
+    } else if (isG2) {
+      // G2: funziona con type=1 (device normale)
+      // Per ora ON/OFF globale (tutti i canali insieme)
+      type = 1;
+      params = {
+        switch: state
+      };
+    } else {
+      // MINIR4 del portico + altri interruttori classici
+      type = 1;
+      params = {
+        switch: state
+      };
+    }
+
     const bodyObj = {
       type,
       id: deviceId,
