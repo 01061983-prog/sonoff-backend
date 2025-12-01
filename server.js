@@ -2,6 +2,7 @@
 
 const express = require("express");
 const cors = require("cors");
+const crypto = require("crypto"); // per HMAC-SHA256
 
 const app = express();
 app.use(express.json());
@@ -11,20 +12,21 @@ app.use(express.json());
 const APPID = process.env.EWELINK_APP_ID;
 const APPSECRET = process.env.EWELINK_APP_SECRET;
 
-// Se vuoi, puoi mettere questa anche in env come EWELINK_REDIRECT_URL
 const REDIRECT_URL =
   process.env.EWELINK_REDIRECT_URL ||
   "https://sonoff-backend-k8sh.onrender.com/oauth/callback";
 
-// Host API EU (puoi sovrascrivere con env EWELINK_API_BASE se serve)
+// Host API EU
 const API_BASE =
   process.env.EWELINK_API_BASE || "https://eu-apia.coolkit.cc";
 
 if (!APPID || !APPSECRET) {
-  console.error("ERRORE: EWELINK_APP_ID o EWELINK_APP_SECRET non impostati!");
+  console.error(
+    "ERRORE: EWELINK_APP_ID o EWELINK_APP_SECRET non impostati!"
+  );
 }
 
-// Token in memoria (per uso base va bene così)
+// Token in memoria
 let oauth = {
   accessToken: null,
   refreshToken: null,
@@ -42,26 +44,49 @@ app.use(
   })
 );
 
-// ================== HELPER TOKEN ==================
+// ================== HMAC SIGN ==================
+
+// Firma generica: HMAC-SHA256(message) con APPSECRET, in base64
+function createSign(message) {
+  return crypto
+    .createHmac("sha256", APPSECRET)
+    .update(message, "utf8")
+    .digest("base64");
+}
+
+/**
+ * Utility: costruisce una stringa "canonica" con i parametri ordinati
+ * es: {a:1, c:3, b:2} -> "a=1&b=2&c=3"
+ */
+function buildCanonicalString(params) {
+  return Object.keys(params)
+    .sort()
+    .map((k) => `${k}=${params[k]}`)
+    .join("&");
+}
+
+// ================== HELPER TOKEN (refresh) ==================
 
 async function ensureToken() {
-  // Se non ho token, non posso fare nulla
   if (!oauth.accessToken) return;
-
-  // Se non è in scadenza, esco
   if (Date.now() < oauth.expiresAt - 5000) return;
 
-  // Refresh token
   try {
+    const bodyObj = {
+      grantType: "refresh_token",
+      refreshToken: oauth.refreshToken,
+    };
+    const bodyStr = JSON.stringify(bodyObj);
+    const sign = createSign(bodyStr);
+
     const resp = await fetch(`${API_BASE}/v2/user/refresh`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        clientId: APPID,
-        clientSecret: APPSECRET,
-        grantType: "refresh_token",
-        refreshToken: oauth.refreshToken,
-      }),
+      headers: {
+        "Content-Type": "application/json",
+        "X-CK-Appid": APPID,
+        Authorization: `Sign ${sign}`,
+      },
+      body: bodyStr,
     });
 
     const data = await resp.json();
@@ -104,8 +129,45 @@ app.get("/", (_req, res) => {
 //   &grantType=authorization_code
 //   &showQRCode=false
 //
+app.get("/login", (req, res) => {
+  const state = "xyz123";
+  const seq = Date.now().toString();
+  const nonce = "abc12345";
+
+  // Costruisco i parametri dell'URL (QUELLI CHE VEDRÀ LA PAGINA OAUTH)
+  const queryParams = {
+    clientId: APPID,
+    grantType: "authorization_code",
+    nonce,
+    redirectUrl: REDIRECT_URL,
+    seq,
+    state,
+    showQRCode: "false",
+  };
+
+  // Stringa canonica da firmare (best guess, coerente con molti schemi HMAC)
+  const canonical = buildCanonicalString(queryParams);
+  const sign = createSign(canonical);
+
+  const url =
+    "https://c2ccdn.coolkit.cc/oauth/index.html" +
+    "?state=" + encodeURIComponent(state) +
+    "&clientId=" + encodeURIComponent(APPID) +
+    "&authorization=" + encodeURIComponent(sign) +
+    "&seq=" + encodeURIComponent(seq) +
+    "&redirectUrl=" + encodeURIComponent(REDIRECT_URL) +
+    "&nonce=" + encodeURIComponent(nonce) +
+    "&grantType=authorization_code" +
+    "&showQRCode=false";
+
+  console.log("OAuth URL:", url);
+  res.redirect(url);
+});
+
+// ================== /oauth/callback — CODE -> TOKEN ==================
+
 app.get("/oauth/callback", async (req, res) => {
-  const { code, state, error } = req.query;
+  const { code, error } = req.query;
 
   if (error) {
     console.error("Errore riportato da OAuth callback:", error);
@@ -118,39 +180,47 @@ app.get("/oauth/callback", async (req, res) => {
     console.error("Manca il code in callback, query:", req.query);
     return res
       .status(400)
-      .send("Missing 'code' in OAuth callback, query=" + JSON.stringify(req.query));
+      .send(
+        "Missing 'code' in OAuth callback, query=" +
+          JSON.stringify(req.query)
+      );
   }
 
   try {
-    const body = {
-      clientId: APPID,
-      clientSecret: APPSECRET,
-      grantType: "authorization_code",
+    // body secondo esempio base: code + redirectUrl + grantType
+    const bodyObj = {
       code,
       redirectUrl: REDIRECT_URL,
-      // parametri aggiuntivi richiesti dalla doc / come nei log che ti hanno citato
-      authorization: "Sign",
-      seq: "1",
-      nonce: "abc12345",
-      state: state || "xyz123",
+      grantType: "authorization_code",
     };
+    const bodyStr = JSON.stringify(bodyObj);
 
-    console.log("Richiesta /v2/user/oauth/token body:", body);
+    // firma body
+    const sign = createSign(bodyStr);
+
+    console.log("POST /v2/user/oauth/token body:", bodyObj);
+    console.log("Authorization Sign:", sign);
 
     const resp = await fetch(`${API_BASE}/v2/user/oauth/token`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      headers: {
+        "Content-Type": "application/json",
+        "X-CK-Appid": APPID,
+        Authorization: `Sign ${sign}`,
+      },
+      body: bodyStr,
     });
 
     const data = await resp.json();
     console.log("oauth token response:", data);
 
     if (data.error !== 0 || !data.data) {
-      // invece di 500 generico, ti faccio vedere il JSON esatto
       return res
         .status(400)
-        .send("Errore nello scambio code/token: " + JSON.stringify(data));
+        .send(
+          "Errore nello scambio code/token: " +
+            JSON.stringify(data)
+        );
     }
 
     oauth.accessToken = data.data.accessToken;
@@ -166,4 +236,162 @@ app.get("/oauth/callback", async (req, res) => {
       .status(500)
       .send("Eccezione nello scambio token: " + e.message);
   }
+});
+
+// ================== /api/devices — LISTA DISPOSITIVI ==================
+
+app.get("/api/devices", async (req, res) => {
+  if (!oauth.accessToken) {
+    return res.json({
+      ok: false,
+      error: "not_authenticated",
+      msg: "Non autenticato su eWeLink. Vai prima su /login.",
+    });
+  }
+
+  await ensureToken();
+
+  try {
+    // 1) family
+    const famResp = await fetch(`${API_BASE}/v2/family`, {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + oauth.accessToken,
+        "X-CK-Appid": APPID,
+      },
+    });
+    const famData = await famResp.json();
+    console.log("family response:", famData);
+
+    if (famData.error !== 0 || !famData.data) {
+      return res.json({
+        ok: false,
+        error: famData.error,
+        msg: famData.msg || "Errore lettura family",
+      });
+    }
+
+    const list = famData.data.familyList || [];
+    if (!list.length) {
+      return res.json({
+        ok: true,
+        devices: [],
+        msg: "Nessuna family associata all'account",
+      });
+    }
+
+    const familyId = list[0].id;
+
+    // 2) device list
+    const devResp = await fetch(
+      `${API_BASE}/v2/device/thing?num=0&familyid=${encodeURIComponent(
+        familyId
+      )}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: "Bearer " + oauth.accessToken,
+          "X-CK-Appid": APPID,
+        },
+      }
+    );
+    const devData = await devResp.json();
+    console.log("device thing response:", devData);
+
+    if (devData.error !== 0 || !devData.data) {
+      return res.json({
+        ok: false,
+        error: devData.error,
+        msg: devData.msg || "Errore lettura dispositivi",
+      });
+    }
+
+    const devices =
+      (devData.data.thingList || [])
+        .filter((i) => i.itemType === 1 || i.itemType === 2)
+        .map((i) => i.itemData) || [];
+
+    return res.json({ ok: true, devices });
+  } catch (e) {
+    console.error("Eccezione /api/devices:", e);
+    return res.json({
+      ok: false,
+      error: "internal_error",
+      msg: e.message,
+    });
+  }
+});
+
+// ================== /api/toggle — ON/OFF DISPOSITIVO ==================
+
+app.post("/api/toggle", async (req, res) => {
+  const { deviceId, state } = req.body;
+
+  if (!oauth.accessToken) {
+    return res.json({
+      ok: false,
+      error: "not_authenticated",
+      msg: "Non autenticato su eWeLink. Vai prima su /login.",
+    });
+  }
+
+  if (!deviceId || (state !== "on" && state !== "off")) {
+    return res.json({
+      ok: false,
+      error: "invalid_params",
+      msg: "deviceId o state non validi",
+    });
+  }
+
+  await ensureToken();
+
+  try {
+    const bodyObj = {
+      itemType: 1,
+      id: deviceId,
+      params: { switch: state },
+    };
+    const bodyStr = JSON.stringify(bodyObj);
+    const sign = createSign(bodyStr);
+
+    const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + oauth.accessToken,
+        "X-CK-Appid": APPID,
+        "X-CK-Nonce": "abc12345",
+        "X-CK-Seq": Date.now().toString(),
+        // se servisse firmare anche qui: "Authorization-Sign": `Sign ${sign}`
+      },
+      body: bodyStr,
+    });
+
+    const data = await resp.json();
+    console.log("toggle response:", data);
+
+    if (data.error !== 0) {
+      return res.json({
+        ok: false,
+        error: data.error,
+        msg: data.msg || "Errore nel comando",
+      });
+    }
+
+    return res.json({ ok: true, result: data });
+  } catch (e) {
+    console.error("Eccezione /api/toggle:", e);
+    return res.json({
+      ok: false,
+      error: "internal_error",
+      msg: e.message,
+    });
+  }
+});
+
+// ================== AVVIO SERVER ==================
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("Server avviato sulla porta", PORT);
 });
