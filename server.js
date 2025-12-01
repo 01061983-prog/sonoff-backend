@@ -1,4 +1,4 @@
-// server.js — Backend Sonoff / eWeLink OAuth2.0 (versione con cookie)
+// server.js — Backend Sonoff / eWeLink OAuth2.0 (redirect + cookie + scenari)
 
 const express = require("express");
 const cors = require("cors");
@@ -35,7 +35,7 @@ function hmacSign(message) {
 }
 
 // ================== CORS ==================
-// Abilitiamo invio cookie dal tuo dominio (Altervista)
+// NB: credentials: true perché usiamo cookie
 
 app.use(
   cors({
@@ -55,21 +55,26 @@ app.get("/", (_req, res) => {
 
 // ================== /login — REDIRECT A PAGINA OAUTH ==================
 //
-// URL ufficiale:
-// https://c2ccdn.coolkit.cc/oauth/index.html?state=XXX&clientId=XXX&authorization=XXX&seq=123&redirectUrl=...&nonce=...&grantType=authorization_code&showQRCode=false
-//
+// returnUrl: dove tornare dopo il login (di default il pannello su Altervista)
+
 app.get("/login", (req, res) => {
-  const state = "xyz123";
+  const returnUrl =
+    req.query.returnUrl ||
+    "https://oratoriosluigi.altervista.org/sonoff.html.html";
+
+  // lo mettiamo nello state, già codificato una volta
+  const state = encodeURIComponent(returnUrl);
+
   const seq = Date.now().toString();
   const nonce = "abc12345";
 
-  // Regola: sign = HMAC(APP_SECRET, clientId + "_" + seq)
+  // sign = HMAC(APP_SECRET, clientId + "_" + seq)
   const message = `${APPID}_${seq}`;
   const sign = hmacSign(message);
 
   const url =
     "https://c2ccdn.coolkit.cc/oauth/index.html" +
-    `?state=${encodeURIComponent(state)}` +
+    `?state=${state}` +
     `&clientId=${encodeURIComponent(APPID)}` +
     `&authorization=${encodeURIComponent(sign)}` +
     `&seq=${encodeURIComponent(seq)}` +
@@ -82,10 +87,10 @@ app.get("/login", (req, res) => {
   res.redirect(url);
 });
 
-// ================== /oauth/callback — SCAMBIO CODE -> TOKEN ==================
+// ================== /oauth/callback — SCAMBIO CODE -> TOKEN + REDIRECT ==================
 
 app.get("/oauth/callback", async (req, res) => {
-  const { code, error } = req.query;
+  const { code, error, state } = req.query;
 
   if (error) {
     console.error("Errore riportato da OAuth callback:", error);
@@ -99,8 +104,17 @@ app.get("/oauth/callback", async (req, res) => {
       .send("Missing 'code' in OAuth callback, query=" + JSON.stringify(req.query));
   }
 
+  // URL dove tornare dopo il login
+  let returnUrl = "https://oratoriosluigi.altervista.org/sonoff.html.html";
+  if (state) {
+    try {
+      returnUrl = decodeURIComponent(state);
+    } catch (e) {
+      console.warn("Impossibile decodificare state, uso default:", e);
+    }
+  }
+
   try {
-    // Body ufficiale per /v2/user/oauth/token
     const bodyObj = {
       code,
       redirectUrl: REDIRECT_URL,
@@ -108,7 +122,7 @@ app.get("/oauth/callback", async (req, res) => {
     };
     const bodyStr = JSON.stringify(bodyObj);
 
-    // Firma: HMAC(APP_SECRET, JSON.stringify(body))
+    // sign = HMAC(APP_SECRET, JSON.stringify(body))
     const sign = hmacSign(bodyStr);
 
     console.log("POST /v2/user/oauth/token body:", bodyObj);
@@ -133,7 +147,7 @@ app.get("/oauth/callback", async (req, res) => {
         .send("Errore nello scambio code/token: " + JSON.stringify(data));
     }
 
-    // Salviamo token in cookie HTTP-only, così QUALSIASI istanza Render lo vede
+    // cookie con i token
     res.cookie("ewelink_access", data.data.accessToken, {
       httpOnly: true,
       secure: true,
@@ -145,9 +159,8 @@ app.get("/oauth/callback", async (req, res) => {
       sameSite: "None"
     });
 
-    return res.send(
-      "Autorizzazione completata. Puoi chiudere questa pagina e tornare al pannello Sonoff."
-    );
+    // QUI il redirect al pannello, NIENTE testo
+    return res.redirect(returnUrl);
   } catch (e) {
     console.error("Eccezione /oauth/callback:", e);
     return res
@@ -170,7 +183,6 @@ app.get("/api/devices", async (req, res) => {
   }
 
   try {
-    // 1) family
     const famResp = await fetch(`${API_BASE}/v2/family`, {
       method: "GET",
       headers: {
@@ -200,7 +212,6 @@ app.get("/api/devices", async (req, res) => {
 
     const familyId = list[0].id;
 
-    // 2) devices
     const devResp = await fetch(
       `${API_BASE}/v2/device/thing?num=0&familyid=${encodeURIComponent(
         familyId
@@ -241,7 +252,7 @@ app.get("/api/devices", async (req, res) => {
   }
 });
 
-// ================== /api/toggle — ON/OFF DISPOSITIVO ==================
+// ================== /api/toggle — ON/OFF 1 CANALE ==================
 
 app.post("/api/toggle", async (req, res) => {
   const { deviceId, state } = req.body;
@@ -295,6 +306,75 @@ app.post("/api/toggle", async (req, res) => {
     return res.json({ ok: true, result: data });
   } catch (e) {
     console.error("Eccezione /api/toggle:", e);
+    return res.json({
+      ok: false,
+      error: "internal_error",
+      msg: e.message
+    });
+  }
+});
+
+// ================== /api/toggle-multi — SCENARI MULTI-CANALE ==================
+// body: { deviceId, outlets: [0,1,2], state: "on" | "off" }
+
+app.post("/api/toggle-multi", async (req, res) => {
+  const { deviceId, outlets, state } = req.body;
+  const accessToken = req.cookies.ewelink_access;
+
+  if (!accessToken) {
+    return res.json({
+      ok: false,
+      error: "not_authenticated",
+      msg: "Non autenticato su eWeLink. Vai prima su /login."
+    });
+  }
+
+  if (!deviceId || !Array.isArray(outlets) || outlets.length === 0 ||
+      (state !== "on" && state !== "off")) {
+    return res.json({
+      ok: false,
+      error: "invalid_params",
+      msg: "deviceId, outlets o state non validi"
+    });
+  }
+
+  const switches = outlets.map((o) => ({
+    outlet: o,
+    switch: state
+  }));
+
+  try {
+    const bodyObj = {
+      itemType: 1,
+      id: deviceId,
+      params: { switches }
+    };
+    const bodyStr = JSON.stringify(bodyObj);
+
+    const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + accessToken,
+        "X-CK-Appid": APPID
+      },
+      body: bodyStr
+    });
+
+    const data = await resp.json();
+    console.log("toggle-multi response:", data);
+
+    if (data.error !== 0) {
+      return res.json({
+        ok: false,
+        error: data.error,
+        msg: data.msg || "Errore nel comando"
+      });
+    }
+
+    return res.json({ ok: true, result: data });
+  } catch (e) {
+    console.error("Eccezione /api/toggle-multi:", e);
     return res.json({
       ok: false,
       error: "internal_error",
