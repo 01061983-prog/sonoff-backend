@@ -273,24 +273,24 @@ app.get("/api/devices", async (req, res) => {
     }
 
     // === GESTIONE SPECIALE G2: se non esiste lo aggiungo, altrimenti imposto lo stato virtuale ===
-    let g2 = allDevices.find(d => d.deviceid === G2_ID);
+let g2 = allDevices.find(d => d.deviceid === G2_ID);
 
-    if (g2) {
-      // Se esiste già, forzo lo stato in base al virtualStates
-      if (!g2.params) g2.params = {};
-      g2.params.switch = virtualStates[G2_ID] || "off";
-    } else {
-      // Se le API non lo restituiscono, lo aggiungo manualmente
-      allDevices.push({
-        deviceid: G2_ID,
-        name: "Luci esterne (G2)",
-        online: true, // non sappiamo lo stato reale, ma lo segniamo online
-        params: { switch: virtualStates[G2_ID] || "off" },
-        familyId: familyList[0]?.id || null,
-        deviceType: 1,
-        itemType: 1
-      });
-    }
+if (g2) {
+  // Se esiste già, forzo lo stato in base al virtualStates
+  if (!g2.params) g2.params = {};
+  g2.params.switch = virtualStates[G2_ID] || "off";
+} else {
+  // Se le API non lo restituiscono, lo aggiungo manualmente
+  allDevices.push({
+    deviceid: G2_ID,
+    name: "Luci esterne (G2)",
+    online: true, // non sappiamo lo stato reale, ma lo segniamo online
+    params: { switch: virtualStates[G2_ID] || "off" },
+    familyId: familyList[0]?.id || null,
+    deviceType: 3,   // <<< QUI: tipo GPRS/G2
+    itemType: 3      // idem
+  });
+}
 
     return res.json({ ok: true, devices: allDevices });
   } catch (e) {
@@ -306,85 +306,88 @@ app.get("/api/devices", async (req, res) => {
 // ================== /api/toggle — DEBUG COMPLETO (singolo canale) ==================
 
 app.post("/api/toggle", async (req, res) => {
-  const { deviceId, state, deviceType } = req.body;
-  const accessToken = req.cookies.ewelink_access;
-
-  if (!accessToken) {
-    return res.json({
-      ok: false,
-      error: "not_authenticated",
-      msg: "Non autenticato su eWeLink. Vai prima su /login."
-    });
-  }
-
-  if (!deviceId || (state !== "on" && state !== "off")) {
-    return res.json({
-      ok: false,
-      error: "invalid_params",
-      msg: "deviceId o state non validi"
-    });
-  }
-
-  try {
-    const isGate = deviceId === "1000ac81a0";
-
-    let params;
-    if (isGate) {
-      // Cancello: impulso sul canale 0
-      params = {
-        switches: [
-          { outlet: 0, switch: "on" }
-        ]
+    const { deviceId, state, deviceType } = req.body;
+    const accessToken = req.cookies.ewelink_access;
+  
+    if (!accessToken) {
+      return res.json({
+        ok: false,
+        error: "not_authenticated",
+        msg: "Non autenticato su eWeLink. Vai prima su /login."
+      });
+    }
+  
+    if (!deviceId || (state !== "on" && state !== "off")) {
+      return res.json({
+        ok: false,
+        error: "invalid_params",
+        msg: "deviceId o state non validi"
+      });
+    }
+  
+    try {
+      const isGate = deviceId === "1000ac81a0";
+      const isG2   = deviceId === G2_ID;
+  
+      let params;
+  
+      if (isGate) {
+        // Cancello: impulso sul canale 0
+        params = {
+          switches: [
+            { outlet: 0, switch: "on" }
+          ]
+        };
+      } else {
+        // Tutti gli altri (incluso il G2) come interruttore singolo
+        params = { switch: state };
+      }
+  
+      const bodyObj = {
+        // Per il G2 forziamo type=3 (GPRS), altrimenti 1 (WiFi)
+        type: isG2 ? 3 : (deviceType || 1),
+        id: deviceId,
+        params
       };
-    } else {
-      // Tutti gli altri (incluso il G2) come interruttore singolo
-      params = { switch: state };
+  
+      console.log("=== TOGGLE REQUEST ===");
+      console.log(JSON.stringify(bodyObj, null, 2));
+  
+      const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + accessToken,
+          "X-CK-Appid": APPID
+        },
+        body: JSON.stringify(bodyObj)
+      });
+  
+      const data = await resp.json();
+  
+      console.log("=== TOGGLE RESPONSE ===");
+      console.log(JSON.stringify(data, null, 2));
+  
+      // Se il comando è andato a buon fine, aggiorno lo stato virtuale del G2
+      if (data.error === 0 && isG2) {
+        virtualStates[G2_ID] = state;
+        console.log("Virtual state G2 aggiornato a:", state);
+      }
+  
+      return res.json({
+        ok: data.error === 0,
+        sent: bodyObj,
+        raw: data
+      });
+    } catch (e) {
+      console.error("Eccezione /api/toggle:", e);
+      return res.json({
+        ok: false,
+        error: "internal_error",
+        msg: e.message
+      });
     }
-
-    const bodyObj = {
-      type: deviceType || 1,
-      id: deviceId,
-      params
-    };
-
-    console.log("=== TOGGLE REQUEST ===");
-    console.log(JSON.stringify(bodyObj, null, 2));
-
-    const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + accessToken,
-        "X-CK-Appid": APPID
-      },
-      body: JSON.stringify(bodyObj)
-    });
-
-    const data = await resp.json();
-
-    console.log("=== TOGGLE RESPONSE ===");
-    console.log(JSON.stringify(data, null, 2));
-
-    // Se il comando è andato a buon fine, aggiorno lo stato virtuale del G2
-    if (data.error === 0 && deviceId === G2_ID) {
-      virtualStates[G2_ID] = state;
-      console.log("Virtual state G2 aggiornato a:", state);
-    }
-
-    return res.json({
-      ok: data.error === 0,
-      sent: bodyObj,
-      raw: data
-    });
-  } catch (e) {
-    console.error("Eccezione /api/toggle:", e);
-    return res.json({
-      ok: false,
-      error: "internal_error",
-      msg: e.message
-    });
-  }
-});
+  });  
 
 
 // ================== /api/toggle-multi — SCENARI / TUTTI ON-OFF ==================
