@@ -59,7 +59,7 @@ app.get("/login", (req, res) => {
     req.query.returnUrl ||
     "https://oratoriosluigi.altervista.org/sonoff.html.html";
 
-  const state = returnUrl; // URL “pulito”
+  const state = returnUrl;
   const encodedState = encodeURIComponent(state);
 
   const seq = Date.now().toString();
@@ -178,7 +178,7 @@ app.post("/logout", (req, res) => {
   return res.json({ ok: true });
 });
 
-// ================== /api/devices — LISTA DISPOSITIVI ==================
+// ================== /api/devices — LISTA DISPOSITIVI (TUTTE LE FAMILY) ==================
 
 app.get("/api/devices", async (req, res) => {
   const accessToken = req.cookies.ewelink_access;
@@ -192,7 +192,7 @@ app.get("/api/devices", async (req, res) => {
   }
 
   try {
-    // 1) FAMILY LIST
+    // 1) elenco family
     const famResp = await fetch(`${API_BASE}/v2/family`, {
       method: "GET",
       headers: {
@@ -211,8 +211,8 @@ app.get("/api/devices", async (req, res) => {
       });
     }
 
-    const list = famData.data.familyList || [];
-    if (!list.length) {
+    const familyList = famData.data.familyList || [];
+    if (!familyList.length) {
       return res.json({
         ok: true,
         devices: [],
@@ -220,43 +220,50 @@ app.get("/api/devices", async (req, res) => {
       });
     }
 
-    const familyId = list[0].id;
+    const allDevices = [];
 
-    // 2) DEVICE LIST
-    const devResp = await fetch(
-      `${API_BASE}/v2/device/thing?num=0&familyid=${encodeURIComponent(
-        familyId
-      )}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: "Bearer " + accessToken,
-          "X-CK-Appid": APPID
+    // 2) per ogni family prendo i device
+    for (const fam of familyList) {
+      const familyId = fam.id;
+
+      const devResp = await fetch(
+        `${API_BASE}/v2/device/thing?num=0&familyid=${encodeURIComponent(
+          familyId
+        )}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: "Bearer " + accessToken,
+            "X-CK-Appid": APPID
+          }
         }
+      );
+
+      const devData = await devResp.json();
+      console.log(
+        `device thing response for family ${familyId}:`,
+        JSON.stringify(devData, null, 2)
+      );
+
+      if (devData.error !== 0 || !devData.data) {
+        continue;
       }
-    );
 
-    const devData = await devResp.json();
-    console.log("device thing raw response:", JSON.stringify(devData, null, 2));
+      const list = devData.data.thingList || [];
 
-    if (devData.error !== 0 || !devData.data) {
-      return res.json({
-        ok: false,
-        error: devData.error,
-        msg: devData.msg || "Errore lettura dispositivi"
+      list.forEach((i) => {
+        if (!i.itemData || !i.itemData.deviceid) return;
+
+        allDevices.push({
+          ...i.itemData,
+          deviceType: i.itemType, // tipo interno eWeLink
+          itemType: i.itemType,
+          familyId
+        });
       });
     }
 
-    // NON FILTRO PIÙ PER itemType 1 o 2:
-    // rimando tutto, aggiungendo deviceType=itemType per sapere che tipo è
-    const devices =
-      (devData.data.thingList || []).map((i) => ({
-        ...i.itemData,
-        deviceType: i.itemType,   // tipo (device, gruppo, scena, ecc.)
-        itemType: i.itemType      // lo teniamo anche con il nome originale
-      })) || [];
-
-    return res.json({ ok: true, devices });
+    return res.json({ ok: true, devices: allDevices });
   } catch (e) {
     console.error("Eccezione /api/devices:", e);
     return res.json({
@@ -290,12 +297,18 @@ app.post("/api/toggle", async (req, res) => {
   }
 
   try {
-    const type = deviceType || 1; // default 1, ma per il cancello useremo il suo valore reale
+    let type = deviceType || 1;
+
+    // Workaround specifico per il cancello (ID 1000ac81a0):
+    // qualunque sia lo stato che arriva, mando SEMPRE "on" come impulso.
+    const isGate = deviceId === "1000ac81a0";
+
+    const effectiveState = isGate ? "on" : state;
 
     const params =
       typeof outlet !== "undefined"
-        ? { switch: state, outlet: outlet }
-        : { switch: state };
+        ? { switch: effectiveState, outlet: outlet }
+        : { switch: effectiveState };
 
     const bodyObj = {
       type,
@@ -339,7 +352,7 @@ app.post("/api/toggle", async (req, res) => {
   }
 });
 
-// ================== /api/toggle-multi — SCENARI MULTI-CANALE ==================
+// ================== /api/toggle-multi — SCENARI / TUTTI ON-OFF ==================
 
 app.post("/api/toggle-multi", async (req, res) => {
   const { deviceId, outlets, state, deviceType } = req.body;
@@ -367,11 +380,9 @@ app.post("/api/toggle-multi", async (req, res) => {
   }
 
   try {
-    const type = deviceType || 1; // prendo il tipo corretto (es. cancello)
-
+    const type = deviceType || 1;
     const errors = [];
 
-    // mando un comando per ogni outlet
     for (const o of outlets) {
       const bodyObj = {
         type,
