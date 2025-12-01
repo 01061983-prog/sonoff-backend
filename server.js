@@ -25,6 +25,15 @@ if (!APPID || !APPSECRET) {
   console.error("ERRORE: EWELINK_APP_ID o EWELINK_APP_SECRET non impostati!");
 }
 
+// ID del G2 "Luci esterne"
+const G2_ID = "1000965dd3";
+
+// Stato virtuale dei dispositivi che le API non restituiscono con stato reale
+// (usato per il G2, così nel frontend lo vedi ON/OFF come ultimo comando inviato)
+const virtualStates = {
+  [G2_ID]: "off"
+};
+
 // ================== UTILITY FIRMA ==================
 
 function hmacSign(message) {
@@ -263,16 +272,20 @@ app.get("/api/devices", async (req, res) => {
       });
     }
 
-    // === WORKAROUND: aggiungo manualmente il G2 "Luci esterne" se non presente ===
-    const G2_ID = "1000965dd3";
+    // === GESTIONE SPECIALE G2: se non esiste lo aggiungo, altrimenti imposto lo stato virtuale ===
+    let g2 = allDevices.find(d => d.deviceid === G2_ID);
 
-    const hasG2 = allDevices.some(d => d.deviceid === G2_ID);
-    if (!hasG2) {
+    if (g2) {
+      // Se esiste già, forzo lo stato in base al virtualStates
+      if (!g2.params) g2.params = {};
+      g2.params.switch = virtualStates[G2_ID] || "off";
+    } else {
+      // Se le API non lo restituiscono, lo aggiungo manualmente
       allDevices.push({
         deviceid: G2_ID,
         name: "Luci esterne (G2)",
-        online: true,               // non lo sappiamo, ma lo segniamo online
-        params: { switch: "off" },  // così il frontend lo tratta come interruttore singolo
+        online: true, // non sappiamo lo stato reale, ma lo segniamo online
+        params: { switch: virtualStates[G2_ID] || "off" },
         familyId: familyList[0]?.id || null,
         deviceType: 1,
         itemType: 1
@@ -317,13 +330,14 @@ app.post("/api/toggle", async (req, res) => {
 
     let params;
     if (isGate) {
-      // per il cancello usi sempre un impulso sul canale 0
+      // Cancello: impulso sul canale 0
       params = {
         switches: [
           { outlet: 0, switch: "on" }
         ]
       };
     } else {
+      // Tutti gli altri (incluso il G2) come interruttore singolo
       params = { switch: state };
     }
 
@@ -350,6 +364,12 @@ app.post("/api/toggle", async (req, res) => {
 
     console.log("=== TOGGLE RESPONSE ===");
     console.log(JSON.stringify(data, null, 2));
+
+    // Se il comando è andato a buon fine, aggiorno lo stato virtuale del G2
+    if (data.error === 0 && deviceId === G2_ID) {
+      virtualStates[G2_ID] = state;
+      console.log("Virtual state G2 aggiornato a:", state);
+    }
 
     return res.json({
       ok: data.error === 0,
