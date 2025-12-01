@@ -1,4 +1,4 @@
-// server.js — Backend Sonoff / eWeLink OAuth2.0 (redirect + cookie + scenari)
+// server.js — Backend Sonoff / eWeLink OAuth2.0 (redirect + cookie + scenari + logout)
 
 const express = require("express");
 const cors = require("cors");
@@ -35,7 +35,6 @@ function hmacSign(message) {
 }
 
 // ================== CORS ==================
-// NB: credentials: true perché usiamo cookie
 
 app.use(
   cors({
@@ -54,22 +53,18 @@ app.get("/", (_req, res) => {
 });
 
 // ================== /login — REDIRECT A PAGINA OAUTH ==================
-//
-// returnUrl: dove tornare dopo il login (di default il pannello su Altervista)
 
 app.get("/login", (req, res) => {
   const returnUrl =
     req.query.returnUrl ||
     "https://oratoriosluigi.altervista.org/sonoff.html.html";
 
-  // nello state mettiamo l'URL normale
-  const state = returnUrl;
+  const state = returnUrl; // URL “pulito”
   const encodedState = encodeURIComponent(state);
 
   const seq = Date.now().toString();
   const nonce = "abc12345";
 
-  // sign = HMAC(APP_SECRET, clientId + "_" + seq)
   const message = `${APPID}_${seq}`;
   const sign = hmacSign(message);
 
@@ -88,7 +83,7 @@ app.get("/login", (req, res) => {
   res.redirect(url);
 });
 
-// ================== /oauth/callback — SCAMBIO CODE -> TOKEN + REDIRECT ==================
+// ================== /oauth/callback — CODE -> TOKEN + REDIRECT ==================
 
 app.get("/oauth/callback", async (req, res) => {
   const { code, error, state } = req.query;
@@ -105,11 +100,9 @@ app.get("/oauth/callback", async (req, res) => {
       .send("Missing 'code' in OAuth callback, query=" + JSON.stringify(req.query));
   }
 
-  // URL dove tornare dopo il login
   let returnUrl = "https://oratoriosluigi.altervista.org/sonoff.html.html";
   if (state) {
     try {
-      // una sola decodifica, perché in /login l'avevamo codificato una sola volta
       returnUrl = decodeURIComponent(state);
     } catch (e) {
       console.warn("Impossibile decodificare state, uso default:", e);
@@ -124,7 +117,6 @@ app.get("/oauth/callback", async (req, res) => {
     };
     const bodyStr = JSON.stringify(bodyObj);
 
-    // sign = HMAC(APP_SECRET, JSON.stringify(body))
     const sign = hmacSign(bodyStr);
 
     console.log("POST /v2/user/oauth/token body:", bodyObj);
@@ -149,7 +141,6 @@ app.get("/oauth/callback", async (req, res) => {
         .send("Errore nello scambio code/token: " + JSON.stringify(data));
     }
 
-    // cookie con i token
     res.cookie("ewelink_access", data.data.accessToken, {
       httpOnly: true,
       secure: true,
@@ -161,7 +152,6 @@ app.get("/oauth/callback", async (req, res) => {
       sameSite: "None"
     });
 
-    // redirect al pannello HTML
     return res.redirect(returnUrl);
   } catch (e) {
     console.error("Eccezione /oauth/callback:", e);
@@ -169,6 +159,23 @@ app.get("/oauth/callback", async (req, res) => {
       .status(500)
       .send("Eccezione nello scambio token: " + e.message);
   }
+});
+
+// ================== /logout — CANCELLA COOKIE ==================
+
+app.post("/logout", (req, res) => {
+  res.clearCookie("ewelink_access", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "None"
+  });
+  res.clearCookie("ewelink_refresh", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "None"
+  });
+
+  return res.json({ ok: true });
 });
 
 // ================== /api/devices — LISTA DISPOSITIVI ==================
@@ -278,7 +285,7 @@ app.post("/api/toggle", async (req, res) => {
 
   try {
     const bodyObj = {
-      itemType: 1,
+      type: 1, // FIX qui (era itemType)
       id: deviceId,
       params: { switch: state }
     };
@@ -317,7 +324,6 @@ app.post("/api/toggle", async (req, res) => {
 });
 
 // ================== /api/toggle-multi — SCENARI MULTI-CANALE ==================
-// body: { deviceId, outlets: [0,1,2], state: "on" | "off" }
 
 app.post("/api/toggle-multi", async (req, res) => {
   const { deviceId, outlets, state } = req.body;
@@ -347,7 +353,7 @@ app.post("/api/toggle-multi", async (req, res) => {
 
   try {
     const bodyObj = {
-      itemType: 1,
+      type: 1, // FIX qui (era itemType)
       id: deviceId,
       params: { switches }
     };
