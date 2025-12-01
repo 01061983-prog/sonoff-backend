@@ -333,13 +333,14 @@ app.post("/api/toggle", async (req, res) => {
     let params;
 
     if (isGate) {
-      // CANCELLO: dispositivo tipo 2, usa "switches" con CH0 a impulso
-      type = 2;
-      params = {
-        switches: [
-          { outlet: 0, switch: "on" }   // impulso, il pulse lo gestisce il device
-        ]
-      };
+  // CANCELLO: TRATTALO COME DEVICE (type 1) ma con switches
+  type = 1;   // <<< QUESTA È LA PARTE IMPORTANTE
+  params = {
+    switches: [
+      { outlet: 0, switch: "on" }  // impulso, pulse gestito dal Sonoff
+    ]
+  };
+}
     } else if (isG2) {
       // G2 luci esterne: lo trattiamo come interruttore singolo
       // l'endpoint accetta type 1 qui, NON group
