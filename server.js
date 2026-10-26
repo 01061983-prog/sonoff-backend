@@ -1,48 +1,43 @@
-// server.js — Backend Sonoff / eWeLink OAuth2.0 (redirect + cookie + scenari + logout)
+// server.js — Sonoff / eWeLink OAuth e comandi dispositivi
 
 const express = require("express");
 const cors = require("cors");
 const crypto = require("crypto");
 const cookieParser = require("cookie-parser");
 
-const app = express();
-app.use(express.json());
-app.use(cookieParser());
+const fetch = (...args) =>
+  import("node-fetch").then(m => m.default(...args));
 
-// ================== CONFIG ==================
+const app = express();
 
 const APPID = process.env.EWELINK_APP_ID;
 const APPSECRET = process.env.EWELINK_APP_SECRET;
+
+const API_BASE =
+  process.env.EWELINK_API_BASE ||
+  "https://eu-apia.coolkit.cc";
 
 const REDIRECT_URL =
   process.env.EWELINK_REDIRECT_URL ||
   "https://sonoff-backend-k8sh.onrender.com/oauth/callback";
 
-const API_BASE =
-  process.env.EWELINK_API_BASE || "https://eu-apia.coolkit.cc";
+const HOME =
+  "https://oratoriosluigi.altervista.org/ewelink/index.html";
 
-if (!APPID || !APPSECRET) {
-  console.error("ERRORE: EWELINK_APP_ID o EWELINK_APP_SECRET non impostati!");
-}
+const GATE_ID = "1000ac81a0";
 
-// ID del G2 "Luci esterne"
-const G2_ID = "1000965dd3";
-
-// (usato per il G2, così nel frontend lo vedi ON/OFF come ultimo comando inviato)
-const virtualStates = {
-  [G2_ID]: "off"
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: true,
+  sameSite: "None",
+  path: "/"
 };
 
-// ================== UTILITY FIRMA ==================
-
-function hmacSign(message) {
-  return crypto
-    .createHmac("sha256", APPSECRET)
-    .update(message, "utf8")
-    .digest("base64");
+if (!APPID || !APPSECRET) {
+  throw new Error(
+    "Impostare EWELINK_APP_ID ed EWELINK_APP_SECRET su Render."
+  );
 }
-
-// ================== CORS ==================
 
 app.use(
   cors({
@@ -54,512 +49,579 @@ app.use(
   })
 );
 
-// ================== ROUTE BASE ==================
+app.use(express.json());
+app.use(cookieParser());
 
-app.get("/", (_req, res) => {
-  res.json({ ok: true, message: "Backend Sonoff OAuth attivo" });
+app.use((_req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
 });
 
-// ================== /login — REDIRECT A PAGINA OAUTH ==================
+// ================== UTILITÀ ==================
 
-app.get("/login", (req, res) => {
-  const returnUrl =
-    req.query.returnUrl ||
-    "https://oratoriosluigi.altervista.org/sonoff.html.html";
+function sign(text) {
+  return crypto
+    .createHmac("sha256", APPSECRET)
+    .update(text)
+    .digest("base64");
+}
 
-  const state = returnUrl;
-  const encodedState = encodeURIComponent(state);
-
-  const seq = Date.now().toString();
-  const nonce = "abc12345";
-
-  const message = `${APPID}_${seq}`;
-  const sign = hmacSign(message);
-
-  const url =
-    "https://c2ccdn.coolkit.cc/oauth/index.html" +
-    `?state=${encodedState}` +
-    `&clientId=${encodeURIComponent(APPID)}` +
-    `&authorization=${encodeURIComponent(sign)}` +
-    `&seq=${encodeURIComponent(seq)}` +
-    `&redirectUrl=${encodeURIComponent(REDIRECT_URL)}` +
-    `&nonce=${encodeURIComponent(nonce)}` +
-    `&grantType=authorization_code` +
-    `&showQRCode=false`;
-
-  console.log("OAuth URL:", url);
-  res.redirect(url);
-});
-
-// ================== /oauth/callback — CODE -> TOKEN + REDIRECT ==================
-
-app.get("/oauth/callback", async (req, res) => {
-  const { code, error, state } = req.query;
-
-  if (error) {
-    console.error("Errore riportato da OAuth callback:", error);
-    return res.status(400).send("OAuth error from provider: " + error);
-  }
-
-  if (!code) {
-    console.error("Manca il code in callback, query:", req.query);
-    return res
-      .status(400)
-      .send("Missing 'code' in OAuth callback, query=" + JSON.stringify(req.query));
-  }
-
-  let returnUrl = "https://oratoriosluigi.altervista.org/sonoff.html.html";
-  if (state) {
-    try {
-      returnUrl = decodeURIComponent(state);
-    } catch (e) {
-      console.warn("Impossibile decodificare state, uso default:", e);
-    }
-  }
-
+function returnUrl(value) {
   try {
-    const bodyObj = {
-      code,
-      redirectUrl: REDIRECT_URL,
-      grantType: "authorization_code"
-    };
-    const bodyStr = JSON.stringify(bodyObj);
+    const url = new URL(value);
 
-    const sign = hmacSign(bodyStr);
-
-    console.log("POST /v2/user/oauth/token body:", bodyObj);
-    console.log("Authorization Sign:", sign);
-
-    const resp = await fetch(`${API_BASE}/v2/user/oauth/token`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CK-Appid": APPID,
-        Authorization: `Sign ${sign}`
-      },
-      body: bodyStr
-    });
-
-    const data = await resp.json();
-    console.log("oauth token response:", data);
-
-    if (data.error !== 0 || !data.data) {
-      return res
-        .status(400)
-        .send("Errore nello scambio code/token: " + JSON.stringify(data));
+    if (url.origin === new URL(HOME).origin) {
+      return url.href;
     }
+  } catch {}
 
-    res.cookie("ewelink_access", data.data.accessToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "None"
-    });
-    res.cookie("ewelink_refresh", data.data.refreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "None"
-    });
+  return HOME;
+}
 
-    return res.redirect(returnUrl);
-  } catch (e) {
-    console.error("Eccezione /oauth/callback:", e);
-    return res
-      .status(500)
-      .send("Eccezione nello scambio token: " + e.message);
-  }
-});
-
-// ================== /logout — CANCELLA COOKIE ==================
-
-app.post("/logout", (req, res) => {
-  res.clearCookie("ewelink_access", {
-    httpOnly: true,
-    secure: true,
-    sameSite: "None"
-  });
-  res.clearCookie("ewelink_refresh", {
-    httpOnly: true,
-    secure: true,
-    sameSite: "None"
-  });
-
-  return res.json({ ok: true });
-});
-
-// ================== /api/scenes — ELENCO SCENE EWeLink PER LA FAMILY ==================
-
-app.get("/api/scenes", async (req, res) => {
-  const accessToken = req.cookies.ewelink_access;
-
-  if (!accessToken) {
-    return res.json({
+function requireLogin(req, res, next) {
+  if (!req.cookies.ewelink_access) {
+    return res.status(401).json({
       ok: false,
       error: "not_authenticated",
-      msg: "Non autenticato su eWeLink. Vai prima su /login."
+      msg: "Accedi tramite /login."
     });
   }
 
-  try {
-    const famResp = await fetch(`${API_BASE}/v2/family`, {
-      method: "GET",
-      headers: {
-        Authorization: "Bearer " + accessToken,
-        "X-CK-Appid": APPID
-      }
-    });
+  return next();
+}
 
-    const famData = await famResp.json();
-    console.log("family response (scenes):", JSON.stringify(famData, null, 2));
-
-    if (famData.error !== 0 || !famData.data) {
-      return res.json({
-        ok: false,
-        error: famData.error,
-        msg: famData.msg || "Errore lettura family"
-      });
-    }
-
-    const familyList = famData.data.familyList || [];
-    if (!familyList.length) {
-      return res.json({
-        ok: true,
-        scenes: [],
-        msg: "Nessuna family associata all'account"
-      });
-    }
-
-    const familyId = familyList[0].id;
-
-    const sceneResp = await fetch(
-      `${API_BASE}/v2/scene?familyid=${encodeURIComponent(familyId)}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: "Bearer " + accessToken,
-          "X-CK-Appid": APPID
-        }
-      }
-    );
-
-    const sceneData = await sceneResp.json();
-    console.log("scene response:", JSON.stringify(sceneData, null, 2));
-
-    if (sceneData.error !== 0 || !sceneData.data) {
-      return res.json({
-        ok: false,
-        error: sceneData.error,
-        msg: sceneData.msg || "Errore lettura scene"
-      });
-    }
-
-    const sceneList = sceneData.data.sceneList || [];
-
-    return res.json({
-      ok: true,
-      scenes: sceneList
-    });
-  } catch (e) {
-    console.error("Eccezione /api/scenes:", e);
-    return res.json({
-      ok: false,
-      error: "internal_error",
-      msg: e.message
-    });
-  }
-});
-
-// ================== /api/scenes — ELENCO SCENE EWeLink PER LA FAMILY ==================
-
-app.get("/api/scenes", async (req, res) => {
-  const accessToken = req.cookies.ewelink_access;
-
-  if (!accessToken) {
-    return res.json({
-      ok: false,
-      error: "not_authenticated",
-      msg: "Non autenticato su eWeLink. Vai prima su /login."
-    });
-  }
-
-  try {
-    // 1) elenco family (come in /api/devices)
-    const famResp = await fetch(`${API_BASE}/v2/family`, {
-      method: "GET",
-      headers: {
-        Authorization: "Bearer " + accessToken,
-        "X-CK-Appid": APPID
-      }
-    });
-
-    const famData = await famResp.json();
-    console.log("family response (scenes):", JSON.stringify(famData, null, 2));
-
-    if (famData.error !== 0 || !famData.data) {
-      return res.json({
-        ok: false,
-        error: famData.error,
-        msg: famData.msg || "Errore lettura family"
-      });
-    }
-
-    const familyList = famData.data.familyList || [];
-    if (!familyList.length) {
-      return res.json({
-        ok: true,
-        scenes: [],
-        msg: "Nessuna family associata all'account"
-      });
-    }
-
-    // per semplicità uso la prima family (come fai per i device)
-    const familyId = familyList[0].id;
-
-    // 2) elenco scene di quella family
-    const sceneResp = await fetch(
-      `${API_BASE}/v2/scene?familyid=${encodeURIComponent(familyId)}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: "Bearer " + accessToken,
-          "X-CK-Appid": APPID
-        }
-      }
-    );
-
-    const sceneData = await sceneResp.json();
-    console.log("scene response:", JSON.stringify(sceneData, null, 2));
-
-    if (sceneData.error !== 0 || !sceneData.data) {
-      return res.json({
-        ok: false,
-        error: sceneData.error,
-        msg: sceneData.msg || "Errore lettura scene"
-      });
-    }
-
-    const sceneList = sceneData.data.sceneList || [];
-
-    return res.json({
-      ok: true,
-      scenes: sceneList
-    });
-  } catch (e) {
-    console.error("Eccezione /api/scenes:", e);
-    return res.json({
-      ok: false,
-      error: "internal_error",
-      msg: e.message
-    });
-  }
-});
-
-
-
-    // === GESTIONE SPECIALE G2: se non esiste lo aggiungo, altrimenti imposto lo stato virtuale ===
-let g2 = allDevices.find(d => d.deviceid === G2_ID);
-
-if (g2) {
-  // Se esiste già, forzo lo stato in base al virtualStates
-  if (!g2.params) g2.params = {};
-  g2.params.switch = virtualStates[G2_ID] || "off";
-} else {
-  // Se le API non lo restituiscono, lo aggiungo manualmente
-  allDevices.push({
-    deviceid: G2_ID,
-    name: "Luci esterne (G2)",
-    online: true, // non sappiamo lo stato reale, ma lo segniamo online
-    params: { switch: virtualStates[G2_ID] || "off" },
-    familyId: familyList[0]?.id || null,
-    deviceType: 3,   // <<< QUI: tipo GPRS/G2
-    itemType: 3      // idem
+function failure(res, error) {
+  return res.status(error.status || 502).json({
+    ok: false,
+    error: error.code || "upstream_error",
+    msg: error.message
   });
 }
 
-    return res.json({ ok: true, devices: allDevices });
-  } catch (e) {
-    console.error("Eccezione /api/devices:", e);
-    return res.json({
-      ok: false,
-      error: "internal_error",
-      msg: e.message
-    });
-  }
-});
+const route = fn => (req, res) =>
+  Promise.resolve()
+    .then(() => fn(req, res))
+    .catch(error => failure(res, error));
 
-// ================== /api/toggle — SINGOLO CANALE (MINIR4, CANCELLO, G2) ==================
-app.post("/api/toggle", async (req, res) => {
-  const { deviceId, state } = req.body;
-  const accessToken = req.cookies.ewelink_access;
+// Spazia le richieste verso eWeLink.
+// Nessun reinvio automatico dei comandi.
 
-  if (!accessToken) {
-    return res.json({
-      ok: false,
-      error: "not_authenticated",
-      msg: "Non autenticato su eWeLink. Vai prima su /login."
-    });
-  }
+let queue = Promise.resolve();
+let lastRequest = 0;
 
-  if (!deviceId || (state !== "on" && state !== "off")) {
-    return res.json({
-      ok: false,
-      error: "invalid_params",
-      msg: "deviceId o state non validi"
-    });
-  }
+async function api(path, token, body, authorization) {
+  const slot = queue.then(async () => {
+    const delay = Math.max(
+      0,
+      550 - (Date.now() - lastRequest)
+    );
 
-  try {
-    console.log("TOGGLE richiesto per deviceId:", deviceId, "state:", state);
-
-    const isGate = deviceId === "1000ac81a0";  // cancello
-    const isG2   = deviceId === G2_ID;         // luci esterne (G2)
-
-    let type;
-    let params;
-
-    if (isGate) {
-      // CANCELLO: group (type 2) con impulso sul CH0
-      type = 2;
-      params = {
-        switches: [
-          { outlet: 0, switch: "on" }   // impulso, gestito dal pulse del device
-        ]
-      };
-    } else if (isG2) {
-      // G2: funziona con type=1 (device normale)
-      // Per ora ON/OFF globale (tutti i canali insieme)
-      type = 1;
-      params = {
-        switch: state
-      };
-    } else {
-      // MINIR4 del portico + altri interruttori classici
-      type = 1;
-      params = {
-        switch: state
-      };
+    if (delay) {
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
 
-    const bodyObj = {
-      type,
+    lastRequest = Date.now();
+  });
+
+  queue = slot.catch(() => {});
+  await slot;
+
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(),
+    60000
+  );
+
+  try {
+    const response = await fetch(API_BASE + path, {
+      method: body === undefined ? "GET" : "POST",
+
+      headers: {
+        "Content-Type": "application/json",
+        "X-CK-Appid": APPID,
+        Authorization:
+          authorization || "Bearer " + token
+      },
+
+      ...(body === undefined
+        ? {}
+        : { body: JSON.stringify(body) }),
+
+      signal: controller.signal
+    });
+
+    let data;
+
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error(
+        "Risposta non JSON da eWeLink (HTTP " +
+          response.status +
+          ")."
+      );
+    }
+
+    if (!response.ok || data?.error !== 0) {
+      const error = new Error(
+        data?.msg ||
+          "Errore eWeLink HTTP " + response.status
+      );
+
+      error.code =
+        response.status === 401
+          ? "not_authenticated"
+          : data?.error || "upstream_error";
+
+      error.status =
+        response.status === 401 ? 401 : 502;
+
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error(
+        "Tempo scaduto: esito non confermato. " +
+          "Verifica lo stato prima di riprovare."
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ================== ROUTE BASE ==================
+
+app.get("/", (_req, res) => {
+  res.json({
+    ok: true,
+    message: "Backend Sonoff OAuth attivo"
+  });
+});
+
+// ================== LOGIN OAUTH ==================
+
+app.get("/login", (req, res) => {
+  const seq = Date.now().toString();
+
+  const nonce = crypto
+    .randomBytes(16)
+    .toString("hex");
+
+  const state = crypto
+    .randomBytes(24)
+    .toString("hex");
+
+  res.cookie(
+    "ewelink_oauth",
+    JSON.stringify({
+      state,
+      returnUrl: returnUrl(req.query.returnUrl)
+    }),
+    {
+      httpOnly: true,
+      secure: true,
+      sameSite: "Lax",
+      signed: false,
+      maxAge: 600000,
+      path: "/oauth/callback"
+    }
+  );
+
+  const query = new URLSearchParams({
+    state,
+    clientId: APPID,
+    authorization: sign(`${APPID}_${seq}`),
+    seq,
+    redirectUrl: REDIRECT_URL,
+    nonce,
+    grantType: "authorization_code",
+    showQRCode: "false"
+  });
+
+  res.redirect(
+    "https://c2ccdn.coolkit.cc/oauth/index.html?" +
+      query.toString()
+  );
+});
+
+// ================== CALLBACK OAUTH ==================
+
+app.get(
+  "/oauth/callback",
+  route(async (req, res) => {
+    let pending;
+
+    try {
+      pending = JSON.parse(
+        req.cookies.ewelink_oauth || "null"
+      );
+    } catch {}
+
+    res.clearCookie("ewelink_oauth", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "Lax",
+      path: "/oauth/callback"
+    });
+
+    if (
+      !pending ||
+      typeof req.query.state !== "string" ||
+      req.query.state !== pending.state
+    ) {
+      return res.status(400).send(
+        "Accesso scaduto o non valido. " +
+          "Riapri la plancia e riprova."
+      );
+    }
+
+    if (
+      req.query.error ||
+      typeof req.query.code !== "string" ||
+      !req.query.code
+    ) {
+      return res.status(400).send(
+        "Accesso eWeLink non completato. " +
+          "Riprova dalla plancia."
+      );
+    }
+
+    const body = {
+      code: req.query.code,
+      redirectUrl: REDIRECT_URL,
+      grantType: "authorization_code"
+    };
+
+    const data = await api(
+      "/v2/user/oauth/token",
+      null,
+      body,
+      "Sign " + sign(JSON.stringify(body))
+    );
+
+    if (
+      !data.data?.accessToken ||
+      !data.data?.refreshToken
+    ) {
+      throw new Error(
+        "Token mancanti nella risposta eWeLink."
+      );
+    }
+
+    res.cookie(
+      "ewelink_access",
+      data.data.accessToken,
+      COOKIE_OPTIONS
+    );
+
+    res.cookie(
+      "ewelink_refresh",
+      data.data.refreshToken,
+      COOKIE_OPTIONS
+    );
+
+    res.redirect(returnUrl(pending.returnUrl));
+  })
+);
+
+// ================== LOGOUT ==================
+
+app.post("/logout", (_req, res) => {
+  res.clearCookie(
+    "ewelink_access",
+    COOKIE_OPTIONS
+  );
+
+  res.clearCookie(
+    "ewelink_refresh",
+    COOKIE_OPTIONS
+  );
+
+  res.json({ ok: true });
+});
+
+// ================== FAMILY ==================
+
+async function families(token) {
+  const response = await api(
+    "/v2/family",
+    token
+  );
+
+  if (!Array.isArray(response.data?.familyList)) {
+    throw new Error("Elenco family non valido.");
+  }
+
+  return response.data.familyList;
+}
+
+// ================== DISPOSITIVI ==================
+
+app.get(
+  "/api/devices",
+  requireLogin,
+  route(async (req, res) => {
+    const token = req.cookies.ewelink_access;
+    const homes = await families(token);
+    const devices = new Map();
+
+    for (const home of homes) {
+      let beginIndex = -9999999;
+      const seen = new Set();
+
+      while (true) {
+        const query = new URLSearchParams({
+          familyid: home.id,
+          num: "30",
+          beginIndex: String(beginIndex)
+        });
+
+        const response = await api(
+          "/v2/device/thing?" + query.toString(),
+          token
+        );
+
+        const things = response.data?.thingList;
+
+        if (!Array.isArray(things)) {
+          throw new Error(
+            "Elenco dispositivi non valido."
+          );
+        }
+
+        for (const thing of things) {
+          if (
+            ![1, 2].includes(thing.itemType) ||
+            !thing.itemData?.deviceid
+          ) {
+            continue;
+          }
+
+          const d = thing.itemData;
+
+          devices.set(d.deviceid, {
+            deviceid: d.deviceid,
+            name: d.name,
+            online: d.online === true,
+            params: d.params || {},
+            familyId: home.id,
+            itemType: thing.itemType
+          });
+        }
+
+        if (things.length < 30) {
+          break;
+        }
+
+        const next =
+          things[things.length - 1].index;
+
+        if (
+          !Number.isFinite(next) ||
+          next === beginIndex ||
+          seen.has(next)
+        ) {
+          throw new Error(
+            "Paginazione dispositivi non valida."
+          );
+        }
+
+        seen.add(next);
+        beginIndex = next;
+      }
+    }
+
+    // Solo dispositivi restituiti realmente da eWeLink.
+    // Nessuno stato ON/OFF o online viene inventato.
+
+    res.json({
+      ok: true,
+      devices: [...devices.values()]
+    });
+  })
+);
+
+// ================== SCENE EWeLink ==================
+
+app.get(
+  "/api/scenes",
+  requireLogin,
+  route(async (req, res) => {
+    const token = req.cookies.ewelink_access;
+    const homes = await families(token);
+
+    if (!homes.length) {
+      return res.json({
+        ok: true,
+        scenes: []
+      });
+    }
+
+    const response = await api(
+      "/v2/scene?familyid=" +
+        encodeURIComponent(homes[0].id),
+      token
+    );
+
+    if (!Array.isArray(response.data?.sceneList)) {
+      throw new Error("Elenco scene non valido.");
+    }
+
+    res.json({
+      ok: true,
+      scenes: response.data.sceneList
+    });
+  })
+);
+
+// ================== VALIDAZIONE COMANDI ==================
+
+function validCommand(body) {
+  return (
+    body &&
+    typeof body.deviceId === "string" &&
+    /^[a-zA-Z0-9_-]+$/.test(body.deviceId) &&
+    ["on", "off"].includes(body.state)
+  );
+}
+
+// ================== SINGOLO DISPOSITIVO / CANCELLO ==================
+
+app.post(
+  "/api/toggle",
+  requireLogin,
+  route(async (req, res) => {
+    if (!validCommand(req.body)) {
+      return res.status(400).json({
+        ok: false,
+        error: "invalid_params",
+        msg: "deviceId o state non validi."
+      });
+    }
+
+    const { deviceId, state } = req.body;
+
+    const params =
+      deviceId === GATE_ID
+        ? {
+            switches: [
+              {
+                outlet: 0,
+                switch: state
+              }
+            ]
+          }
+        : {
+            switch: state
+          };
+
+    // CORREZIONE CANCELLO:
+    // type 1 = dispositivo.
+    // type 2 = gruppo.
+    //
+    // L'eventuale modalità impulso resta
+    // configurata sul Sonoff.
+
+    const sent = {
+      type: 1,
       id: deviceId,
       params
     };
 
-    console.log("=== TOGGLE REQUEST SENT TO EWELINK ===");
-    console.log(JSON.stringify(bodyObj, null, 2));
+    const raw = await api(
+      "/v2/device/thing/status",
+      req.cookies.ewelink_access,
+      sent
+    );
 
-    const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + accessToken,
-        "X-CK-Appid": APPID
-      },
-      body: JSON.stringify(bodyObj)
+    res.json({
+      ok: true,
+      sent,
+      raw
     });
+  })
+);
 
-    const data = await resp.json();
+// ================== MULTICANALE ==================
 
-    console.log("=== TOGGLE RESPONSE FROM EWELINK ===");
-    console.log(JSON.stringify(data, null, 2));
+app.post(
+  "/api/toggle-multi",
+  requireLogin,
+  route(async (req, res) => {
+    const body = req.body;
 
-    const ok = data.error === 0;
-
-    return res.json({
-      ok,
-      sent: bodyObj,
-      raw: data
-    });
-  } catch (e) {
-    console.error("Eccezione /api/toggle:", e);
-    return res.json({
-      ok: false,
-      error: "internal_error",
-      msg: e.message
-    });
-  }
-});
-  
-// ================== /api/toggle-multi — SCENARI / TUTTI ON-OFF ==================
-
-app.post("/api/toggle-multi", async (req, res) => {
-  const { deviceId, outlets, state } = req.body;
-  const accessToken = req.cookies.ewelink_access;
-
-  if (!accessToken) {
-    return res.json({
-      ok: false,
-      error: "not_authenticated",
-      msg: "Non autenticato su eWeLink. Vai prima su /login."
-    });
-  }
-
-  if (
-    !deviceId ||
-    !Array.isArray(outlets) ||
-    outlets.length === 0 ||
-    (state !== "on" && state !== "off")
-  ) {
-    return res.json({
-      ok: false,
-      error: "invalid_params",
-      msg: "deviceId, outlets o state non validi"
-    });
-  }
-
-  try {
-    const switches = outlets.map((o) => ({
-      outlet: o,
-      switch: state
-    }));
-
-    const bodyObj = {
-      type: 1, // fisso: funziona con i 4CH del portico
-      id: deviceId,
-      params: { switches }
-    };
-
-    console.log("=== TOGGLE-MULTI REQUEST ===");
-    console.log(JSON.stringify(bodyObj, null, 2));
-
-    const resp = await fetch(`${API_BASE}/v2/device/thing/status`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + accessToken,
-        "X-CK-Appid": APPID
-      },
-      body: JSON.stringify(bodyObj)
-    });
-
-    const data = await resp.json();
-
-    console.log("=== TOGGLE-MULTI RESPONSE ===");
-    console.log(JSON.stringify(data, null, 2));
-
-    if (data.error !== 0) {
-      return res.json({
+    if (
+      !validCommand(body) ||
+      !Array.isArray(body.outlets) ||
+      !body.outlets.length ||
+      !body.outlets.every(
+        n => Number.isInteger(n) && n >= 0
+      )
+    ) {
+      return res.status(400).json({
         ok: false,
-        error: data.error,
-        msg: data.msg || "Errore nel comando",
-        raw: data
+        error: "invalid_params",
+        msg: "deviceId, outlets o state non validi."
       });
     }
 
-    return res.json({ ok: true, raw: data, sent: bodyObj });
-  } catch (e) {
-    console.error("Eccezione /api/toggle-multi:", e);
-    return res.json({
-      ok: false,
-      error: "internal_error",
-      msg: e.message
+    const switches = [
+      ...new Set(body.outlets)
+    ].map(outlet => ({
+      outlet,
+      switch: body.state
+    }));
+
+    const sent = {
+      type: 1,
+      id: body.deviceId,
+      params: {
+        switches
+      }
+    };
+
+    const raw = await api(
+      "/v2/device/thing/status",
+      req.cookies.ewelink_access,
+      sent
+    );
+
+    res.json({
+      ok: true,
+      sent,
+      raw
     });
-  }
+  })
+);
+
+// ================== ERRORI RICHIESTE ==================
+
+app.use((error, _req, res, _next) => {
+  res
+    .status(
+      error.type === "entity.parse.failed"
+        ? 400
+        : 500
+    )
+    .json({
+      ok: false,
+      error: "invalid_request",
+      msg: "Richiesta non valida."
+    });
 });
 
-// ================== AVVIO SERVER ==================
+// ================== AVVIO ==================
 
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-  console.log("Server avviato sulla porta", PORT);
+  console.log(
+    "Server avviato sulla porta",
+    PORT
+  );
 });
