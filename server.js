@@ -1,4 +1,5 @@
-// server.js — Sonoff / eWeLink OAuth e comandi dispositivi
+// server.js — Sonoff / eWeLink
+// OAuth, accesso persistente, rinnovo token e comandi dispositivi
 
 const express = require("express");
 const cors = require("cors");
@@ -9,6 +10,8 @@ const fetch = (...args) =>
   import("node-fetch").then(m => m.default(...args));
 
 const app = express();
+
+// ================== CONFIGURAZIONE ==================
 
 const APPID = process.env.EWELINK_APP_ID;
 const APPSECRET = process.env.EWELINK_APP_SECRET;
@@ -25,6 +28,8 @@ const HOME =
   "https://oratoriosluigi.altervista.org/ewelink/index.html";
 
 const GATE_ID = "1000ac81a0";
+
+const DAY = 24 * 60 * 60 * 1000;
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -78,19 +83,189 @@ function returnUrl(value) {
   return HOME;
 }
 
-function requireLogin(req, res, next) {
-  if (!req.cookies.ewelink_access) {
-    return res.status(401).json({
-      ok: false,
-      error: "not_authenticated",
-      msg: "Accedi tramite /login."
-    });
+function clearSession(res) {
+  for (const name of [
+    "ewelink_access",
+    "ewelink_refresh",
+    "ewelink_expires"
+  ]) {
+    res.clearCookie(name, COOKIE_OPTIONS);
+  }
+}
+
+// ================== COOKIE PERSISTENTI ==================
+
+function saveSession(req, res, data) {
+  const access = data.accessToken || data.at;
+  const refresh = data.refreshToken || data.rt;
+
+  if (!access || !refresh) {
+    throw new Error(
+      "Token mancanti nella risposta eWeLink."
+    );
   }
 
-  return next();
+  const now = Date.now();
+
+  const accessExpiry =
+    Number(data.atExpiredTime) ||
+    now + 30 * DAY;
+
+  const refreshExpiry =
+    Number(data.rtExpiredTime) ||
+    now + 60 * DAY;
+
+  if (
+    accessExpiry <= now ||
+    refreshExpiry <= now
+  ) {
+    throw new Error("Token eWeLink già scaduti.");
+  }
+
+  res.cookie("ewelink_access", access, {
+    ...COOKIE_OPTIONS,
+    maxAge: accessExpiry - now
+  });
+
+  res.cookie("ewelink_refresh", refresh, {
+    ...COOKIE_OPTIONS,
+    maxAge: refreshExpiry - now
+  });
+
+  res.cookie(
+    "ewelink_expires",
+    String(accessExpiry),
+    {
+      ...COOKIE_OPTIONS,
+      maxAge: accessExpiry - now
+    }
+  );
+
+  // Rende disponibili i nuovi token anche alla richiesta attuale.
+  req.cookies.ewelink_access = access;
+  req.cookies.ewelink_refresh = refresh;
+  req.cookies.ewelink_expires = String(accessExpiry);
+}
+
+// ================== RINNOVO AUTOMATICO ==================
+
+const refreshJobs = new Map();
+
+async function renewSession(req, res) {
+  const refresh = req.cookies.ewelink_refresh;
+
+  if (!refresh) {
+    const error = new Error(
+      "Accedi tramite /login."
+    );
+
+    error.code = "not_authenticated";
+    error.status = 401;
+
+    throw error;
+  }
+
+  // Evita rinnovi duplicati tra richieste concorrenti.
+  const now = Date.now();
+
+  for (const [key, job] of refreshJobs) {
+    if (job.until < now) {
+      refreshJobs.delete(key);
+    }
+  }
+
+  const key = crypto
+    .createHash("sha256")
+    .update(refresh)
+    .digest("hex");
+
+  let job = refreshJobs.get(key);
+
+  if (!job) {
+    const body = {
+      rt: refresh
+    };
+
+    job = {
+      until: Infinity,
+
+      promise: api(
+        "/v2/user/refresh",
+        null,
+        body,
+        "Sign " + sign(JSON.stringify(body))
+      ).then(response => {
+        const data = response.data;
+
+        if (!data?.at || !data?.rt) {
+          throw new Error(
+            "Risposta di rinnovo eWeLink non valida."
+          );
+        }
+
+        return {
+          ...data,
+
+          atExpiredTime:
+            Number(data.atExpiredTime) ||
+            Date.now() + 30 * DAY,
+
+          rtExpiredTime:
+            Number(data.rtExpiredTime) ||
+            Date.now() + 60 * DAY
+        };
+      })
+    };
+
+    refreshJobs.set(key, job);
+
+    job.promise.then(
+      () => {
+        job.until = Date.now() + 10000;
+      },
+      () => {
+        refreshJobs.delete(key);
+      }
+    );
+  }
+
+  saveSession(req, res, await job.promise);
+}
+
+// ================== AUTENTICAZIONE ==================
+
+function requireLogin(req, res, next) {
+  const expiry = Number(
+    req.cookies.ewelink_expires
+  );
+
+  if (
+    req.cookies.ewelink_access &&
+    (!expiry || expiry > Date.now() + 60000)
+  ) {
+    return next();
+  }
+
+  return renewSession(req, res)
+    .then(() => next())
+    .catch(error => failure(res, error));
 }
 
 function failure(res, error) {
+  if (error.code === "not_authenticated") {
+    // Conserva il refresh token per tentare il rinnovo
+    // durante il successivo passaggio su /login.
+    res.clearCookie(
+      "ewelink_access",
+      COOKIE_OPTIONS
+    );
+
+    res.clearCookie(
+      "ewelink_expires",
+      COOKIE_OPTIONS
+    );
+  }
+
   return res.status(error.status || 502).json({
     ok: false,
     error: error.code || "upstream_error",
@@ -103,8 +278,10 @@ const route = fn => (req, res) =>
     .then(() => fn(req, res))
     .catch(error => failure(res, error));
 
+// ================== RICHIESTE EWeLink ==================
+
 // Spazia le richieste verso eWeLink.
-// Nessun reinvio automatico dei comandi.
+// Non reinvia automaticamente i comandi ai dispositivi.
 
 let queue = Promise.resolve();
 let lastRequest = 0;
@@ -171,13 +348,15 @@ async function api(path, token, body, authorization) {
           "Errore eWeLink HTTP " + response.status
       );
 
-      error.code =
-        response.status === 401
-          ? "not_authenticated"
-          : data?.error || "upstream_error";
+      const authError =
+        response.status === 401 ||
+        [401, 402].includes(data?.error);
 
-      error.status =
-        response.status === 401 ? 401 : 502;
+      error.code = authError
+        ? "not_authenticated"
+        : data?.error || "upstream_error";
+
+      error.status = authError ? 401 : 502;
 
       throw error;
     }
@@ -206,52 +385,76 @@ app.get("/", (_req, res) => {
   });
 });
 
-// ================== LOGIN OAUTH ==================
+// ================== LOGIN ==================
 
-app.get("/login", (req, res) => {
-  const seq = Date.now().toString();
+app.get(
+  "/login",
+  route(async (req, res) => {
+    // Prima prova a ripristinare l'accesso
+    // senza chiedere nuovamente le credenziali.
+    if (req.cookies.ewelink_refresh) {
+      try {
+        await renewSession(req, res);
 
-  // Quattro byte in esadecimale producono 8 caratteri.
-  const nonce = crypto
-    .randomBytes(4)
-    .toString("hex");
+        return res.redirect(
+          returnUrl(req.query.returnUrl)
+        );
+      } catch (error) {
+        if (
+          error.code !== "not_authenticated" &&
+          error.code !== 405
+        ) {
+          throw error;
+        }
 
-  const state = crypto
-    .randomBytes(24)
-    .toString("hex");
-
-  res.cookie(
-    "ewelink_oauth",
-    JSON.stringify({
-      state,
-      returnUrl: returnUrl(req.query.returnUrl)
-    }),
-    {
-      httpOnly: true,
-      secure: true,
-      sameSite: "Lax",
-      signed: false,
-      maxAge: 600000,
-      path: "/oauth/callback"
+        clearSession(res);
+      }
     }
-  );
 
-  const query = new URLSearchParams({
-    state,
-    clientId: APPID,
-    authorization: sign(`${APPID}_${seq}`),
-    seq,
-    redirectUrl: REDIRECT_URL,
-    nonce,
-    grantType: "authorization_code",
-    showQRCode: "false"
-  });
+    const seq = Date.now().toString();
 
-  res.redirect(
-    "https://c2ccdn.coolkit.cc/oauth/index.html?" +
-      query.toString()
-  );
-});
+    // 4 byte in esadecimale = 8 caratteri.
+    const nonce = crypto
+      .randomBytes(4)
+      .toString("hex");
+
+    const state = crypto
+      .randomBytes(24)
+      .toString("hex");
+
+    res.cookie(
+      "ewelink_oauth",
+      JSON.stringify({
+        state,
+        returnUrl: returnUrl(req.query.returnUrl)
+      }),
+      {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+        signed: false,
+        maxAge: 600000,
+        path: "/oauth/callback"
+      }
+    );
+
+    const query = new URLSearchParams({
+      state,
+      clientId: APPID,
+      authorization: sign(`${APPID}_${seq}`),
+      seq,
+      redirectUrl: REDIRECT_URL,
+      nonce,
+      grantType: "authorization_code",
+      showQRCode: "false"
+    });
+
+    res.redirect(
+      "https://c2ccdn.coolkit.cc/oauth/index.html?" +
+        query.toString()
+    );
+  })
+);
 
 // ================== CALLBACK OAUTH ==================
 
@@ -308,45 +511,22 @@ app.get(
       "Sign " + sign(JSON.stringify(body))
     );
 
-    if (
-      !data.data?.accessToken ||
-      !data.data?.refreshToken
-    ) {
-      throw new Error(
-        "Token mancanti nella risposta eWeLink."
-      );
-    }
+    saveSession(req, res, data.data || {});
 
-    res.cookie(
-      "ewelink_access",
-      data.data.accessToken,
-      COOKIE_OPTIONS
+    res.redirect(
+      returnUrl(pending.returnUrl)
     );
-
-    res.cookie(
-      "ewelink_refresh",
-      data.data.refreshToken,
-      COOKIE_OPTIONS
-    );
-
-    res.redirect(returnUrl(pending.returnUrl));
   })
 );
 
 // ================== LOGOUT ==================
 
 app.post("/logout", (_req, res) => {
-  res.clearCookie(
-    "ewelink_access",
-    COOKIE_OPTIONS
-  );
+  clearSession(res);
 
-  res.clearCookie(
-    "ewelink_refresh",
-    COOKIE_OPTIONS
-  );
-
-  res.json({ ok: true });
+  res.json({
+    ok: true
+  });
 });
 
 // ================== FAMILY ==================
@@ -358,7 +538,9 @@ async function families(token) {
   );
 
   if (!Array.isArray(response.data?.familyList)) {
-    throw new Error("Elenco family non valido.");
+    throw new Error(
+      "Elenco family non valido."
+    );
   }
 
   return response.data.familyList;
@@ -440,9 +622,7 @@ app.get(
       }
     }
 
-    // Solo dispositivi restituiti da eWeLink.
-    // Nessuno stato viene inventato.
-
+    // Solo dispositivi restituiti realmente da eWeLink.
     res.json({
       ok: true,
       devices: [...devices.values()]
@@ -485,7 +665,7 @@ app.get(
   })
 );
 
-// ================== VALIDAZIONE ==================
+// ================== VALIDAZIONE COMANDI ==================
 
 function validCommand(body) {
   return (
@@ -602,7 +782,7 @@ app.post(
   })
 );
 
-// ================== ERRORI ==================
+// ================== ERRORI RICHIESTE ==================
 
 app.use((error, _req, res, _next) => {
   res
