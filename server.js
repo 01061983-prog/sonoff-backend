@@ -117,7 +117,9 @@ async function api(path, token, body, authorization) {
     );
 
     if (delay) {
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise(resolve =>
+        setTimeout(resolve, delay)
+      );
     }
 
     lastRequest = Date.now();
@@ -127,6 +129,7 @@ async function api(path, token, body, authorization) {
   await slot;
 
   const controller = new AbortController();
+
   const timer = setTimeout(
     () => controller.abort(),
     60000
@@ -208,8 +211,9 @@ app.get("/", (_req, res) => {
 app.get("/login", (req, res) => {
   const seq = Date.now().toString();
 
+  // Quattro byte in esadecimale producono 8 caratteri.
   const nonce = crypto
-    .randomBytes(16)
+    .randomBytes(4)
     .toString("hex");
 
   const state = crypto
@@ -436,8 +440,8 @@ app.get(
       }
     }
 
-    // Solo dispositivi restituiti realmente da eWeLink.
-    // Nessuno stato ON/OFF o online viene inventato.
+    // Solo dispositivi restituiti da eWeLink.
+    // Nessuno stato viene inventato.
 
     res.json({
       ok: true,
@@ -469,7 +473,9 @@ app.get(
     );
 
     if (!Array.isArray(response.data?.sceneList)) {
-      throw new Error("Elenco scene non valido.");
+      throw new Error(
+        "Elenco scene non valido."
+      );
     }
 
     res.json({
@@ -479,7 +485,7 @@ app.get(
   })
 );
 
-// ================== VALIDAZIONE COMANDI ==================
+// ================== VALIDAZIONE ==================
 
 function validCommand(body) {
   return (
@@ -520,12 +526,9 @@ app.post(
             switch: state
           };
 
-    // CORREZIONE CANCELLO:
-    // type 1 = dispositivo.
-    // type 2 = gruppo.
-    //
-    // L'eventuale modalità impulso resta
-    // configurata sul Sonoff.
+    // Il cancello è un dispositivo:
+    // type 1 = dispositivo, type 2 = gruppo.
+    // La modalità impulso resta configurata sul Sonoff.
 
     const sent = {
       type: 1,
@@ -599,7 +602,7 @@ app.post(
   })
 );
 
-// ================== ERRORI RICHIESTE ==================
+// ================== ERRORI ==================
 
 app.use((error, _req, res, _next) => {
   res
@@ -615,7 +618,7 @@ app.use((error, _req, res, _next) => {
     });
 });
 
-// ================== AVVIO ==================
+// ================== AVVIO SERVER ==================
 
 const PORT = process.env.PORT || 3000;
 
