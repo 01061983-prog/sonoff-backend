@@ -83,22 +83,13 @@
     const DEFAULT_SCENES = [
         {
             id: "default-portico-on",
-            name: "Portico – tutte accese",
+            name: "Portico",
+            mode: "toggle",
             type: "manuale",
             actions: [
                 { deviceId: "100266a6f9", kind: "multi", outlets: [0], state: "on" },
                 { deviceId: "10024aef5a", kind: "multi", outlets: [0], state: "on" },
                 { deviceId: "10024af722", kind: "multi", outlets: [0], state: "on" }
-            ]
-        },
-        {
-            id: "default-portico-off",
-            name: "Portico – tutte spente",
-            type: "manuale",
-            actions: [
-                { deviceId: "100266a6f9", kind: "multi", outlets: [0], state: "off" },
-                { deviceId: "10024aef5a", kind: "multi", outlets: [0], state: "off" },
-                { deviceId: "10024af722", kind: "multi", outlets: [0], state: "off" }
             ]
         }
     ];
@@ -365,6 +356,13 @@
     // SCENARI PERSONALIZZATI (LOCALSTORAGE)
     const SCENES_STORAGE_KEY = "ewelink_user_scenes_v2";
 
+    function unifiedLocalScenes(scenes) {
+        const on=scenes.find(scene=>scene.id==="default-portico-on"),off=scenes.find(scene=>scene.id==="default-portico-off");
+        const signature=scene=>JSON.stringify(scene.actions.map(action=>[action.deviceId,action.kind,[...(action.outlets||[])].sort((a,b)=>a-b)]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))));
+        if (!on || !off || on.actions.some(a=>a.state!=="on" || a.pulse || a.kind==="gate") || off.actions.some(a=>a.state!=="off" || a.pulse || a.kind==="gate") || signature(on)!==signature(off)) return scenes;
+        return scenes.filter(scene=>scene.id!==off.id).map(scene=>scene.id===on.id ? {...scene,name:/^Portico\s*[–-]\s*tutte accese$/i.test(scene.name)?"Portico":scene.name,mode:"toggle"} : scene);
+    }
+
     function loadUserScenes() {
         if (Array.isArray(cloudScenes)) return cloudScenes;
         try {
@@ -374,7 +372,7 @@
             if (!Array.isArray(parsed) || !parsed.every(scene => scene && typeof scene.id === "string" && typeof scene.name === "string" && Array.isArray(scene.actions) && scene.actions.every(action => action && typeof action.deviceId === "string" && ["gate", "single", "multi"].includes(action.kind)))) {
                 throw new Error("Formato scenari non valido.");
             }
-            return parsed;
+            return unifiedLocalScenes(parsed);
         } catch {
             setMessage("Impossibile leggere gli scenari salvati. I dati non sono stati sovrascritti.", "error");
             return [];
@@ -515,6 +513,7 @@
 
         sceneEditorSnapshot = scene ? {
             actions: JSON.parse(JSON.stringify(scene.actions)),
+            mode: scene.mode,
             selection: JSON.stringify(sceneEditorSelection())
         } : null;
 
@@ -596,7 +595,9 @@
 
         sceneSaveBusy = true;
         const id = editingSceneId || crypto.randomUUID();
-        const scene = {id,name,type,actions};
+        const canToggle = actions.every(action=>action.kind!=="gate" && !action.pulse) && new Set(actions.map(action=>action.state)).size === 1;
+        const mode = canToggle && (!editingSceneId || sceneEditorSnapshot?.mode === "toggle") ? "toggle" : "command";
+        const scene = {id,name,type,actions,...(mode==="toggle"?{mode}: {})};
         try {
             if (cloudScenes) await cloudSceneChange({op:"upsert",scene,expectedVersion:editingSceneId ? sceneEditVersion : 0});
             else {
@@ -637,7 +638,15 @@
         let completed = 0;
         let failure = null;
         try {
-            for (const action of scene.actions) {
+            if (scene.mode === "toggle" && !await loadDevices()) throw new Error("Impossibile verificare lo stato delle luci.");
+            if (scene.mode === "toggle") for (const action of scene.actions) {
+                const device=currentDevices.find(device=>device.deviceid===action.deviceId);
+                const values=action.kind==="multi" ? action.outlets.map(outlet=>device?.params.switches?.find(channel=>channel.outlet===outlet)?.switch) : [device?.params.switch];
+                if (!device?.online || values.some(value=>!["on","off"].includes(value))) throw new Error("Stato delle luci non verificabile. Nessun comando inviato.");
+            }
+            const target = sceneState(scene) === true ? "off" : "on";
+            const actions = scene.mode === "toggle" ? scene.actions.map(action=>({...action,state:target})) : scene.actions;
+            for (const action of actions) {
                 if (completed) await new Promise(resolve => setTimeout(resolve, 550));
                 const sceneDevice = currentDevices.find(dev => dev.deviceid === action.deviceId);
                 if (!sceneDevice || !sceneDevice.online) throw new Error("Dispositivo non disponibile: " + (sceneDevice?.name || action.deviceId));
@@ -698,14 +707,14 @@
     function localSceneList() {
         try {
             const parsed = JSON.parse(localStorage.getItem(SCENES_STORAGE_KEY) || "[]");
-            return validImportedScenes(parsed) ? parsed : [];
+            return validImportedScenes(parsed) ? unifiedLocalScenes(parsed) : [];
         } catch { return []; }
     }
     function migrationScenes() {
         if (!sceneWorkspace) return [];
         try { if (localStorage.getItem("ewelink_cloud_migrated_" + sceneWorkspace.id)) return []; } catch {}
         const ids = new Set((cloudScenes || []).map(scene => scene.id));
-        return localSceneList().filter(scene => !ids.has(scene.id));
+        return localSceneList().filter(scene => !ids.has(scene.id) && !(scene.id==="default-portico-off" && cloudScenes?.some(shared=>shared.id==="default-portico-on" && shared.mode==="toggle")));
     }
     function updateSyncLabel(message) {
         const el = document.getElementById("sceneSyncText");
@@ -812,7 +821,7 @@
         const running = runningScene(scene.id);
         const run = cloudExecutions[scene.id];
         const expired = run?.status === "unknown" || (run?.status === "running" && run.expiresAt <= Date.now());
-        const turnsOff = scene.actions.every(action => action.state === "off");
+        const turnsOff = scene.mode === "toggle" ? state === true : scene.actions.every(action => action.state === "off");
         const status = running ? "running" : expired ? "unknown" : state === true ? "on" : state === false ? "off" : "unknown";
         const label = running ? "Comando in esecuzione…" : expired ? "Esito da verificare" : pulse
             ? state === false ? "Relè a riposo" : state === true ? "Relè attivo" : "Impulso · stato non rilevato"

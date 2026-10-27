@@ -230,9 +230,8 @@ async function families(token) {
   return response.data.familyList;
 }
 
-app.get("/api/devices", requireLogin, route(async (req, res) => {
-  const token = req.cookies.ewelink_access;
-  const homes = await families(token);
+async function listDevices(token, homes) {
+  homes = homes || await families(token);
   const devices = new Map();
   for (const home of homes) {
     let beginIndex = -9999999;
@@ -258,7 +257,10 @@ app.get("/api/devices", requireLogin, route(async (req, res) => {
     }
   }
   // Restituisce solo dispositivi reali: non inventa stati o dispositivi online.
-  res.json({ ok: true, devices: [...devices.values()] });
+  return [...devices.values()];
+}
+app.get("/api/devices", requireLogin, route(async (req, res) => {
+  res.json({ ok: true, devices: await listDevices(req.cookies.ewelink_access) });
 }));
 
 app.get("/api/scenes", requireLogin, route(async (req, res) => {
@@ -331,7 +333,16 @@ function cleanScene(scene) {
     }
     return result;
   });
-  return { id: scene.id, name: scene.name.trim(), type: "manuale", actions };
+  if (scene.mode !== undefined && !["toggle", "command"].includes(scene.mode)) throw cloudError(400, "invalid_scene", "Modalità scenario non valida.");
+  if (scene.mode === "toggle" && actions.some(action => action.pulse)) throw cloudError(400, "invalid_scene", "Un comando a impulso non può diventare accendi/spegni.");
+  return { id: scene.id, name: scene.name.trim(), type: "manuale", actions, ...(scene.mode === "toggle" ? {mode:"toggle"} : {}) };
+}
+function unifyPorticoScenes(scenes) {
+  const on = scenes.find(scene => scene.id === "default-portico-on");
+  const off = scenes.find(scene => scene.id === "default-portico-off");
+  const signature = scene => JSON.stringify(scene.actions.map(action => [action.deviceId, action.kind, [...(action.outlets || [])].sort((a,b)=>a-b)]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))));
+  if (!on || !off || on.actions.some(a=>a.state!=="on" || a.pulse || a.kind==="gate") || off.actions.some(a=>a.state!=="off" || a.pulse || a.kind==="gate") || signature(on)!==signature(off)) return {scenes, archived:[]};
+  return {scenes:scenes.filter(scene=>scene.id!==off.id).map(scene=>scene.id===on.id ? {...scene,name:/^Portico\s*[–-]\s*tutte accese$/i.test(scene.name)?"Portico":scene.name,mode:"toggle",version:(scene.version||1)+1,updatedAt:Date.now()} : scene),archived:[off]};
 }
 function workspaceData(snapshot) {
   return snapshot.exists ? snapshot.data() : { revision: 0, scenes: [], executions: {} };
@@ -347,6 +358,13 @@ function currentExecution(data) {
 
 app.get("/api/user-scenes", requireLogin, route(async (req, res) => {
   const context = await sceneContext(req);
+  const initial = await context.ref.get();
+  if (unifyPorticoScenes(workspaceData(initial).scenes || []).archived.length) await getSceneDatabase().runTransaction(async transaction => {
+    const snapshot = await transaction.get(context.ref), data = workspaceData(snapshot);
+    if (currentExecution(data)) return;
+    const unified = unifyPorticoScenes(data.scenes || []);
+    if (unified.archived.length) transaction.set(context.ref,{...data,scenes:unified.scenes,archivedScenes:[...(data.archivedScenes||[]),...unified.archived],revision:(data.revision||0)+1,updatedAt:Date.now()});
+  });
   res.json(scenePayload(context, await context.ref.get()));
 }));
 
@@ -384,8 +402,9 @@ app.post("/api/user-scenes", requireLogin, route(async (req, res) => {
       else if (index < 0) scenes.push({ ...incoming, version: 1, updatedAt: now });
       else scenes[index] = { ...incoming, version: actualVersion + 1, updatedAt: now };
     }
+    const unified = unifyPorticoScenes(scenes); scenes = unified.scenes;
     if (scenes.length > 200 || Buffer.byteLength(JSON.stringify(scenes)) > 650000) throw cloudError(400, "scene_limit", "Limite scenari raggiunto.");
-    transaction.set(context.ref, { ...data, scenes, revision: (data.revision || 0) + 1, updatedAt: now });
+    transaction.set(context.ref, { ...data, scenes, ...(unified.archived.length ? {archivedScenes:[...(data.archivedScenes||[]),...unified.archived]} : {}), revision: (data.revision || 0) + 1, updatedAt: now });
   });
   res.json(scenePayload(context, await context.ref.get()));
 }));
@@ -409,6 +428,18 @@ app.get("/api/user-scenes/events", requireLogin, route(async (req, res) => {
 async function runCloudScene(context, run, scene, accessToken) {
   let completed = 0, failure = null;
   try {
+    if (scene.mode === "toggle") {
+      const devices = await listDevices(accessToken, [context.workspace]);
+      const states = scene.actions.flatMap(action => {
+        const device = devices.find(device => device.deviceid === action.deviceId);
+        if (!device?.online) throw new Error("Dispositivo non disponibile. Nessun comando inviato.");
+        const values = action.kind === "multi" ? action.outlets.map(outlet => device.params.switches?.find(channel=>channel.outlet===outlet)?.switch) : [device.params.switch];
+        if (values.some(value=>!["on","off"].includes(value))) throw new Error("Stato delle luci non verificabile. Nessun comando inviato.");
+        return values;
+      });
+      const target = states.every(state=>state==="on") ? "off" : "on";
+      scene = {...scene,actions:scene.actions.map(action=>({...action,state:target}))};
+    }
     for (const action of scene.actions) {
       const params = action.kind === "multi"
         ? { switches: action.outlets.map(outlet => ({ outlet, switch: action.state })) }
