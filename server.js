@@ -154,6 +154,26 @@ async function api(path, token, body, authorization) {
 // Pagina e API sullo stesso sito: i cookie non dipendono da accessi cross-site.
 app.use("/app", express.static(path.join(__dirname, "public"), { index: "index.html", maxAge: 0 }));
 
+// Compatibilità con i file caricati accanto a server.js su GitHub.
+// Sono esposti soltanto gli asset elencati, mai il codice del backend.
+const WEBAPP_ASSETS = [
+  "index.html", "sonoff.html.html", "app.css", "manifest.webmanifest", "sw.js",
+  "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png",
+  "icons/icon-maskable.png", "icons/apple-touch-icon.png"
+];
+for (const asset of WEBAPP_ASSETS) {
+  app.get("/app/" + asset, (_req, res) => {
+    res.sendFile(path.join(__dirname, asset), { dotfiles: "deny" }, error => {
+      if (error && !res.headersSent) {
+        res.status(error.statusCode || error.status || 404).send("File webapp mancante: " + asset);
+      }
+    });
+  });
+}
+app.get("/app", (_req, res) => res.redirect(HOME));
+app.get("/app/", (_req, res) => res.redirect(HOME));
+
+
 app.get("/", (_req, res) => res.json({ ok: true, message: "Backend Sonoff OAuth attivo" }));
 
 app.get("/login", route(async (req, res) => {
