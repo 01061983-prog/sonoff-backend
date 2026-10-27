@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#147d5a">
+  <meta name="description" content="La plancia dell’Oratorio San Luigi: luci, cancello e scenari in un unico posto.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>San Luigi · La tua plancia</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+<a class="skip-link" href="#mainContent">Vai al contenuto</a>
+<aside class="sidebar" aria-label="Navigazione principale">
+  <a class="brand" href="./index.html" aria-label="San Luigi, panoramica"><span class="brand-mark" data-icon="building"></span><span class="brand-copy">San Luigi<small>IL TUO ORATORIO</small></span></a>
+  <div class="nav-caption">IL TUO SPAZIO</div>
+  <nav class="nav-list">
+    <button class="nav-item active" data-view="home" aria-label="Panoramica" aria-current="page"><span data-icon="grid"></span><span>Panoramica</span></button>
+    <button class="nav-item" data-view="devices" aria-label="Dispositivi"><span data-icon="bulb"></span><span>Dispositivi</span><span class="nav-count" id="navDeviceCount">—</span></button>
+    <button class="nav-item" data-view="scenes" aria-label="Scenari"><span data-icon="layers"></span><span>Scenari</span></button>
+    <button class="nav-item" data-view="install" aria-label="La tua webapp"><span data-icon="download"></span><span>La tua webapp</span></button>
+  </nav>
+  <div class="sidebar-bottom"><div class="sidebar-note"><span data-icon="sparkles"></span><p>Un gesto, tutto pronto.<small>I tuoi spazi, a portata di mano.</small></p></div><button id="logoutBtn" class="logout-button" aria-label="Esci dall’account"><span data-icon="logout"></span><span>Esci dall’account</span></button><div class="workspace"><span class="workspace-avatar">SL</span><div>Oratorio San Luigi<small>Plancia di controllo</small></div><span class="workspace-dot" aria-hidden="true"></span></div></div>
+</aside>
+<main id="mainContent" class="main-content">
+  <header class="topbar"><div class="breadcrumb"><span>Il tuo spazio</span><span aria-hidden="true">/</span><strong id="pageLabel">Panoramica</strong></div><div class="topbar-actions"><div id="statusText" class="status" role="status"><span class="info">Connessione…</span></div><button id="reloadBtn" class="icon-button" aria-label="Aggiorna lo stato dei dispositivi" title="Aggiorna dispositivi"><span data-icon="refresh"></span></button><span class="topbar-avatar" aria-hidden="true">SL</span></div></header>
+  <section id="authPanel" class="auth-panel" hidden aria-labelledby="authHeading"><span class="auth-icon" data-icon="shield"></span><div><h2 id="authHeading">Collega il tuo account</h2><p id="authMessage">Accedi per leggere gli stati e comandare i dispositivi.</p></div><button id="loginBtn" class="primary-button">Accedi a eWeLink</button></section>
+  <div id="offlineBanner" class="offline-banner" role="status" hidden><span data-icon="wifi-off"></span>Sei offline. Connettiti a Internet per aggiornare gli stati e inviare comandi.</div>
+  <div id="message" class="msg notification" role="status" aria-live="polite" aria-atomic="true"></div>
+  <section id="homeView" class="view">
+    <div class="page-heading"><div><p class="eyebrow">BENVENUTO NEL TUO SPAZIO</p><h1>Tutto sotto controllo<span class="green-dot">.</span></h1><p class="heading-sub">Luci, accessi e piccoli gesti che fanno vivere l’oratorio.</p></div><div class="date-pill"><span data-icon="calendar"></span><span id="todayLabel"></span></div></div>
+    <div class="hero-panel"><div class="hero-copy"><span class="hero-tag"><i></i> LA PLANCIA DELL’ORATORIO</span><h2>Accendi gli spazi.<br>Fai posto alle persone.</h2><p>Prepara gli ambienti con i tuoi scenari,<br class="desktop-break"> oppure controlla ogni dispositivo.</p><button class="primary-button" onclick="setView('devices')">Vai ai dispositivi <span data-icon="arrow-right"></span></button></div><div class="hero-art" aria-hidden="true"><div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div><svg viewBox="0 0 360 240" fill="none"><path d="M36 201h294" stroke="#b9dacb" stroke-width="1.5"/><path d="M96 201v-98l71-42 71 42v98" fill="#fff" stroke="#5a9b7b" stroke-width="2"/><path d="m79 108 88-53 88 53" stroke="#147d5a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M148 201v-57a19 19 0 0 1 38 0v57" fill="#d7eddf" stroke="#5a9b7b" stroke-width="2"/><path d="M113 123h17v27h-17zM205 123h17v27h-17z" fill="#f2d58d" stroke="#8eaf94" stroke-width="1.5"/><path d="M258 201V83h38v118" fill="#f8fcf9" stroke="#5a9b7b" stroke-width="2"/><path d="m253 83 24-31 24 31z" fill="#c7e3d2" stroke="#147d5a" stroke-width="2"/><path d="M277 52V30m-7 8h14" stroke="#147d5a" stroke-width="2.5" stroke-linecap="round"/><path d="M270 111h14v22h-14z" fill="#f2d58d" stroke="#8eaf94" stroke-width="1.5"/><circle cx="58" cy="164" r="22" fill="#b9d9bf"/><path d="M58 162v39" stroke="#52886a" stroke-width="3"/><circle cx="321" cy="175" r="17" fill="#d0e5c8"/><path d="M321 177v24" stroke="#52886a" stroke-width="3"/></svg><span class="art-float float-bulb" data-icon="bulb"></span><span class="art-float float-sparkle" data-icon="sparkles"></span></div></div>
+    <div class="stats-grid" aria-label="Riepilogo dispositivi"><article class="stat-card"><span class="stat-icon" data-icon="plug"></span><div><span class="stat-value" id="statTotal">—</span><p>Dispositivi</p></div><span class="stat-hint">collegati all’account</span></article><article class="stat-card"><span class="stat-icon" data-icon="wifi"></span><div><span class="stat-value" id="statOnline">—</span><p>Online</p></div><span class="stat-hint">raggiungibili</span></article><article class="stat-card"><span class="stat-icon amber" data-icon="bulb"></span><div><span class="stat-value" id="statOn">—</span><p>Accesi</p></div><span class="stat-hint">almeno un canale ON</span></article><article class="stat-card"><span class="stat-icon lavender" data-icon="layers"></span><div><span class="stat-value" id="statScenes">—</span><p>Scenari</p></div><span class="stat-hint">pronti con un tocco</span></article></div>
+    <section class="dashboard-section"><div class="section-heading"><div><h2>I tuoi scenari <span class="small-count" id="homeSceneCount">0</span></h2><p>Un solo tocco per preparare i tuoi spazi.</p></div><button id="settingsBtn" class="text-button">Gestisci scenari <span data-icon="arrow-right"></span></button></div><div id="homeScenesGrid" class="scenes-grid-home"></div><div id="homeEmpty" class="empty-state" style="display:none"><span data-icon="layers"></span><h3>Ogni spazio ha la sua scena.</h3><p>Crea il primo scenario e ritrovalo qui.</p><button class="primary-button" onclick="startSceneEdit(null)">Crea uno scenario</button></div></section>
+    <section class="dashboard-section"><div class="section-heading"><div><h2>I tuoi dispositivi</h2><p>Le cose importanti, sempre a portata di mano.</p></div><button class="text-button" onclick="setView('devices')">Vedi tutti <span data-icon="arrow-right"></span></button></div><div id="homeDevicesGrid" class="devices-grid"></div></section>
+    <div class="sync-footer"><span data-icon="shield"></span><span>Collegamento al tuo account eWeLink</span><span id="lastSync">In attesa del primo aggiornamento</span></div>
+  </section>
+  <section id="devicesView" class="view" style="display:none" aria-labelledby="devicesHeading"><div class="page-heading"><div><p class="eyebrow">LUCI E ACCESSI</p><h1 id="devicesHeading">I tuoi dispositivi<span class="green-dot">.</span></h1><p class="heading-sub">Controlla gli ambienti, uno alla volta.</p></div></div><div class="device-toolbar"><label class="search-box"><span data-icon="search"></span><input type="search" id="deviceSearch" placeholder="Cerca un dispositivo…" aria-label="Cerca un dispositivo"></label><div class="filter-tabs" aria-label="Filtra dispositivi"><button data-filter="all" class="selected" aria-pressed="true">Tutti</button><button data-filter="online" aria-pressed="false">Online</button><button data-filter="offline" aria-pressed="false">Offline</button></div></div><div id="allDevicesGrid" class="devices-grid"></div><details class="technical-details"><summary>Dettagli tecnici dei dispositivi</summary><div class="table-wrap"><table id="devicesTable"><thead><tr><th>Dispositivo</th><th>ID</th><th>Connessione</th><th>Stato</th><th>Comando</th></tr></thead><tbody><tr><td colspan="5">Caricamento…</td></tr></tbody></table></div></details><p class="page-note">Gli stati si aggiornano all’apertura della pagina e dopo ogni comando. Usa il pulsante Aggiorna per una nuova lettura.</p></section>
+  <section id="settingsView" class="view" style="display:none" aria-labelledby="scenesHeading"><div class="page-heading"><div><p class="eyebrow">PICCOLI GESTI, GRANDI COMODITÀ</p><h1 id="scenesHeading">I tuoi scenari<span class="green-dot">.</span></h1><p class="heading-sub">Combina più azioni in un unico pulsante.</p></div><button id="newSceneBtn" class="primary-button"><span data-icon="plus"></span>Nuovo scenario</button></div><div class="info-strip"><span data-icon="info"></span><span>Gli scenari sono salvati in questo browser. Non si sincronizzano automaticamente con gli altri dispositivi.</span></div><div id="scenesList" class="scenes-grid-settings"></div><div id="sceneEditor" class="scene-editor" style="display:none"><div class="editor-heading"><div><p class="eyebrow">PERSONALIZZA</p><h2 id="editorTitle">Crea uno scenario</h2></div><button class="icon-button" onclick="cancelSceneEdit()" aria-label="Chiudi editor"><span data-icon="close"></span></button></div><div class="form-grid"><div class="form-row"><label for="sceneName">Nome scenario</label><input id="sceneName" type="text" maxlength="100" placeholder="Es. Serata in oratorio"></div><div class="form-row"><label for="sceneType">Esecuzione</label><select id="sceneType"><option value="manuale">Manuale · con un tocco</option><option value="crepuscolare" disabled>Crepuscolare · non disponibile</option></select></div></div><h3 class="editor-subtitle">Scegli dispositivi e azioni</h3><div id="sceneDevicesList" class="devices-list"></div><div class="editor-footer"><button class="secondary-button" onclick="cancelSceneEdit()">Annulla</button><button class="primary-button" onclick="saveScene()"><span data-icon="check"></span>Salva scenario</button></div></div></section>
+  <section id="installView" class="view" style="display:none" aria-labelledby="installHeading"><div class="page-heading"><div><p class="eyebrow">SEMPRE A PORTATA DI MANO</p><h1 id="installHeading">La tua webapp<span class="green-dot">.</span></h1><p class="heading-sub">Lo stesso spazio, sul telefono, sul tablet e sul computer.</p></div></div><article class="install-hero"><span class="install-app-icon" data-icon="building"></span><div><h2>San Luigi, sulla tua schermata.</h2><p>Apri la plancia dalla sua icona, in una finestra dedicata.</p><button id="installBtn" class="primary-button" hidden><span data-icon="download"></span>Installa la webapp</button><p id="installedLabel" class="success-label" hidden>La plancia è aperta come app.</p></div></article><div class="install-guides"><article class="guide-card"><span data-icon="smartphone"></span><h3>iPhone e iPad</h3><p>Apri il sito in Safari, tocca <strong>Condividi</strong> e scegli <strong>Aggiungi alla schermata Home</strong>.</p></article><article class="guide-card"><span data-icon="tablet"></span><h3>Tablet e telefoni Android</h3><p>Apri il sito in Chrome. Nel menu scegli <strong>Installa app</strong> o <strong>Aggiungi a schermata Home</strong>, se disponibile.</p></article><article class="guide-card"><span data-icon="monitor"></span><h3>Computer</h3><p>In Chrome o Edge usa l’opzione di installazione nel menu del browser. Su Safari per Mac usa <strong>File → Aggiungi al Dock</strong>, se disponibile.</p></article></div><div class="info-strip"><span data-icon="wifi"></span><span>Serve Internet per leggere gli stati e comandare i dispositivi. Ogni browser e dispositivo ha il proprio accesso e i propri scenari.</span></div><article class="account-card migration-card"><div><h3>Trasferisci i tuoi scenari</h3><p>Esportali da questo browser e importali sul nuovo sito o su un altro dispositivo.</p></div><div class="scene-actions"><button class="secondary-button" onclick="exportScenes()">Esporta scenari</button><button class="secondary-button" onclick="document.getElementById('sceneImport').click()">Importa scenari</button><input id="sceneImport" type="file" accept="application/json,.json" hidden aria-label="File degli scenari da importare"></div></article><article class="account-card"><div><h3>Il tuo account</h3><p>Esci se vuoi disconnettere questo browser da eWeLink.</p></div><button class="secondary-button" onclick="logout()">Esci dall’account</button></article></section>
+  <footer class="app-footer"><span>San Luigi <span class="footer-separator">/</span> Uno spazio da vivere.</span><span>Plancia luci e accessi</span></footer>
+</main>
+<noscript><p>Attiva JavaScript nel browser per usare la plancia.</p></noscript>
+<script>
+
+    const BACKEND_URL = "https://sonoff-backend-k8sh.onrender.com";
+
+    const statusText   = document.getElementById("statusText");
+    const reloadBtn    = document.getElementById("reloadBtn");
+    const settingsBtn  = document.getElementById("settingsBtn");
+    const logoutBtn    = document.getElementById("logoutBtn");
+    const tbody        = document.querySelector("#devicesTable tbody");
+    const messageDiv   = document.getElementById("message");
+
+    const homeView       = document.getElementById("homeView");
+    const settingsView   = document.getElementById("settingsView");
+    const homeScenesGrid = document.getElementById("homeScenesGrid");
+    const homeEmpty      = document.getElementById("homeEmpty");
+
+    const scenesListEl    = document.getElementById("scenesList");
+    const sceneEditorEl   = document.getElementById("sceneEditor");
+    const sceneNameInput  = document.getElementById("sceneName");
+    const sceneTypeSelect = document.getElementById("sceneType");
+    const sceneDevicesListEl = document.getElementById("sceneDevicesList");
+    const newSceneBtn     = document.getElementById("newSceneBtn");
+
+    let currentDevices = [];
+    let editingSceneId = null;
+
+    // Stati confermati dall’ultima lettura del backend.
+    let authRequired = false;
+    let commandBusy = false;
+    let devicesLoading = false;
+    let devicesFresh = false;
+
+    // SCENARI DEFAULT PORTICO
+    const DEFAULT_SCENES = [
+        {
+            id: "default-portico-on",
+            name: "Portico – tutte accese",
+            type: "manuale",
+            actions: [
+                { deviceId: "100266a6f9", kind: "multi", outlets: [0], state: "on" },
+                { deviceId: "10024aef5a", kind: "multi", outlets: [0], state: "on" },
+                { deviceId: "10024af722", kind: "multi", outlets: [0], state: "on" }
+            ]
+        },
+        {
+            id: "default-portico-off",
+            name: "Portico – tutte spente",
+            type: "manuale",
+            actions: [
+                { deviceId: "100266a6f9", kind: "multi", outlets: [0], state: "off" },
+                { deviceId: "10024aef5a", kind: "multi", outlets: [0], state: "off" },
+                { deviceId: "10024af722", kind: "multi", outlets: [0], state: "off" }
+            ]
+        }
+    ];
+
+    function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, c => ({
+            "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+        }[c]));
+    }
+
+    function jsArg(value) { return escapeHtml(JSON.stringify(String(value))); }
+
+    async function apiRequest(path, body) {
+        if (navigator.onLine === false) throw new Error("Sei offline. Riconnettiti prima di inviare comandi.");
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 60000);
+        try {
+            const response = await fetch(BACKEND_URL + path, {
+                method: body === undefined ? "GET" : "POST",
+                credentials: "include",
+                cache: "no-store",
+                signal: controller.signal,
+                ...(body === undefined ? {} : {
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                })
+            });
+            let data;
+            try { data = await response.json(); }
+            catch { throw new Error("Risposta non JSON dal server (HTTP " + response.status + ")."); }
+            if (response.status === 401 || data?.error === "not_authenticated") {
+                const error = new Error("Sessione scaduta. Accedi nuovamente.");
+                error.auth = true;
+                showLoginRequired(data?.providerError === 401
+                    ? "eWeLink non riconosce più questa sessione. Ricollega l’account solo quando vuoi riprendere il controllo."
+                    : "Accedi per collegare questo browser. La pagina resta qui, senza riavviare automaticamente il login.");
+                throw error;
+            }
+            if (!response.ok || data?.ok !== true) {
+                throw new Error(data?.raw?.msg || data?.msg || data?.error || "Errore HTTP " + response.status);
+            }
+            return data;
+        } catch (error) {
+            if (error.name === "AbortError") {
+                throw new Error("Tempo scaduto: esito del comando non confermato. Ricarica i dispositivi prima di riprovare.");
+            }
+            throw error;
+        } finally { clearTimeout(timeout); }
+    }
+
+    function updateControlLocks() {
+        document.querySelectorAll("#devicesTable input, #devicesTable button, .scene-tile, .scene-run, [data-device-command]").forEach(el => {
+            el.disabled = commandBusy || devicesLoading || !devicesFresh || navigator.onLine === false || el.dataset.offline === "true";
+        });
+        reloadBtn.disabled = commandBusy || devicesLoading;
+    }
+
+    function sceneState(scene) {
+        if (!devicesFresh || !scene.actions?.length) return null;
+        const states = scene.actions.map(action => {
+            const dev = currentDevices.find(d => d.deviceid === action.deviceId);
+            if (!dev?.online || action.kind === "gate") return null;
+            if (action.kind === "single") return dev.params?.switch ?? null;
+            if (action.kind === "multi" && action.outlets?.length) {
+                const values = action.outlets.map(outlet => dev.params?.switches?.find(s => s.outlet === outlet)?.switch);
+                if (values.every(v => v === "on")) return "on";
+                if (values.every(v => v === "off")) return "off";
+            }
+            return null;
+        });
+        return states.every(v => v === "on") ? true : states.every(v => v === "off") ? false : null;
+    }
+
+    async function performCommand(path, body) {
+        if (commandBusy || devicesLoading || !devicesFresh) return;
+        commandBusy = true;
+        updateControlLocks();
+        let error = null;
+        try { await apiRequest(path, body); }
+        catch (err) { error = err; }
+        const refreshed = await loadDevices();
+        setMessage(error ? "Comando non confermato: " + error.message : refreshed
+            ? "Comando accettato. Stato aggiornato dal server."
+            : "Comando accettato, ma stato non verificato: ricarica i dispositivi.", error || !refreshed ? "error" : "");
+        commandBusy = false;
+        updateControlLocks();
+    }
+
+    // === UTIL ===
+    function setStatus(text, type) {
+        const spanClass = type === "ok" ? "ok"
+                        : type === "err" ? "err"
+                        : "info";
+        statusText.innerHTML = 'Stato: <span class="' + spanClass + '">' + escapeHtml(text) + "</span>";
+    }
+
+    function setMessage(text, type) {
+        messageDiv.textContent = text || "";
+        messageDiv.className = "msg " + (type || "");
+    }
+
+    reloadBtn.addEventListener("click", () => {
+        loadDevices();
+    });
+
+    settingsBtn.addEventListener("click", () => setView("scenes"));
+
+    logoutBtn.addEventListener("click", logout);
+    newSceneBtn.addEventListener("click", () => startSceneEdit(null));
+
+    // LOGOUT
+    async function logout() {
+        try {
+            const response = await fetch(BACKEND_URL + "/logout", {
+                method: "POST",
+                credentials: "include"
+            });
+            if (!response.ok) throw new Error("Logout rifiutato dal server.");
+        } catch (e) {
+            console.error(e);
+            setMessage("Logout non confermato dal server. Riprova.", "error");
+            return;
+        }
+
+        currentDevices = [];
+        devicesFresh = false;
+        showLoginRequired("Hai disconnesso questo browser. Premi Accedi solo quando vuoi collegarlo di nuovo.");
+        setStatus("Account disconnesso", "info");
+        renderScenes();
+        renderDashboard();
+    }
+
+    // CARICAMENTO DISPOSITIVI
+    async function loadDevices() {
+        if (devicesLoading) return false;
+        devicesLoading = true;
+        devicesFresh = false;
+        updateControlLocks();
+        renderDashboard();
+        setStatus("Caricamento dispositivi…", "info");
+        setMessage("", "");
+        tbody.innerHTML = '<tr><td colspan="5" class="msg">Caricamento in corso…</td></tr>';
+
+        try {
+            let data;
+            try { data = await apiRequest("/api/devices"); }
+            catch (error) {
+                throw error;
+            }
+            if (!Array.isArray(data.devices)) throw new Error("Elenco dispositivi non valido dal server.");
+            devicesFresh = true;
+            authRequired = false;
+            document.getElementById("authPanel").hidden = true;
+            const devices = Array.isArray(data.devices) ? data.devices : [];
+            currentDevices = devices;
+
+            if (!devices.length) {
+                setStatus("Nessun dispositivo trovato", "ok");
+                tbody.innerHTML = '<tr><td colspan="5" class="msg">Nessun dispositivo associato all’account.</td></tr>';
+                if (editingSceneId === null && sceneEditorEl.style.display !== "block") buildSceneDevicesList();
+                renderScenes();
+                return true;
+            }
+
+            setStatus("Dispositivi caricati", "ok");
+            tbody.innerHTML = "";
+
+            devices.forEach(d => {
+                const tr = document.createElement("tr");
+
+                const online = d.online
+                    ? '<span class="pill pill-online">Online</span>'
+                    : '<span class="pill pill-offline">Offline</span>';
+
+                let stateHtml = "—";
+                let controlHtml = "—";
+
+                if (d.deviceid === "1000ac81a0") {
+                    stateHtml = "Posizione non rilevata";
+                    controlHtml = `<button data-device-command data-offline="${!d.online}" onclick="toggleDevice(${jsArg(d.deviceid)}, true)">Apri cancello</button>`;
+                } else if (d.params && typeof d.params.switch !== "undefined") {
+                    const isOn = d.params.switch === "on";
+                    stateHtml = isOn
+                        ? '<span class="text-on">ON</span>'
+                        : '<span class="text-off">OFF</span>';
+
+                    controlHtml = `
+                        <label class="switch">
+                            <input type="checkbox" data-device-command data-offline="${!d.online}" aria-label="${escapeHtml(d.name || "Dispositivo")}" ${isOn ? "checked" : ""} 
+                                   onchange="toggleDevice(${jsArg(d.deviceid)}, this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    `;
+                } else if (d.params && Array.isArray(d.params.switches)) {
+                    stateHtml = d.params.switches
+                        .map((s, i) => `CH${Number(s.outlet) + 1}: ${s.switch === "on" ? "ON" : "OFF"}`)
+                        .join(" · ");
+
+                    const outlets = d.params.switches.map(channel => channel.outlet);
+
+                    controlHtml = `
+                        <button class="scene-btn" data-device-command data-offline="${!d.online}"
+                            onclick="toggleMulti(${jsArg(d.deviceid)}, ${escapeHtml(JSON.stringify(outlets))}, true)">
+                            Tutti ON
+                        </button>
+                        <button class="scene-btn" data-device-command data-offline="${!d.online}"
+                            onclick="toggleMulti(${jsArg(d.deviceid)}, ${escapeHtml(JSON.stringify(outlets))}, false)">
+                            Tutti OFF
+                        </button>
+                    `;
+                }
+
+                tr.innerHTML = `
+                    <td data-label="Dispositivo">${escapeHtml(d.name || "Senza nome")}</td>
+                    <td data-label="ID"><span class="device-id">${escapeHtml(d.deviceid)}</span></td>
+                    <td data-label="Connessione">${online}</td>
+                    <td data-label="Stato">${stateHtml}</td>
+                    <td data-label="Comando">${controlHtml}</td>
+                `;
+
+                tbody.appendChild(tr);
+            });
+
+            if (sceneEditorEl.style.display !== "block") buildSceneDevicesList();
+            renderScenes();
+            return true;
+        } catch (err) {
+            console.error(err);
+            setStatus("Errore nel caricamento", "err");
+            tbody.innerHTML = '<tr><td colspan="5" class="msg error">Errore nel caricamento dispositivi.</td></tr>';
+            setMessage(err.message, "error");
+            currentDevices = [];
+            devicesFresh = false;
+            renderScenes();
+            return false;
+        } finally {
+            devicesLoading = false;
+            if (devicesFresh) lastSyncTime = new Date();
+            renderDashboard();
+            updateControlLocks();
+        }
+    }
+
+    async function toggleDevice(deviceId, checked) {
+        return performCommand("/api/toggle", {deviceId, state: checked ? "on" : "off"});
+    }
+
+    async function toggleMulti(deviceId, outlets, turnOn) {
+        return performCommand("/api/toggle-multi", {deviceId, outlets, state: turnOn ? "on" : "off"});
+    }
+
+    // SCENARI PERSONALIZZATI (LOCALSTORAGE)
+    const SCENES_STORAGE_KEY = "ewelink_user_scenes_v2";
+
+    function loadUserScenes() {
+        try {
+            const raw = localStorage.getItem(SCENES_STORAGE_KEY);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed) || !parsed.every(scene => scene && typeof scene.id === "string" && typeof scene.name === "string" && Array.isArray(scene.actions) && scene.actions.every(action => action && typeof action.deviceId === "string" && ["gate", "single", "multi"].includes(action.kind)))) {
+                throw new Error("Formato scenari non valido.");
+            }
+            return parsed;
+        } catch {
+            setMessage("Impossibile leggere gli scenari salvati. I dati non sono stati sovrascritti.", "error");
+            return [];
+        }
+    }
+
+    function saveUserScenes(scenes) {
+        try {
+            localStorage.setItem(SCENES_STORAGE_KEY, JSON.stringify(scenes));
+            return true;
+        } catch (e) {
+            setMessage("Impossibile salvare gli scenari nel browser: " + e.message, "error");
+            return false;
+        }
+    }
+
+    function ensureDefaultScenes() {
+        try {
+            if (localStorage.getItem(SCENES_STORAGE_KEY) === null) saveUserScenes(DEFAULT_SCENES);
+        } catch { setMessage("Archivio scenari non accessibile nel browser.", "error"); }
+    }
+
+    function renderScenes() {
+        ensureDefaultScenes();
+        const scenes = loadUserScenes();
+        document.getElementById("statScenes").textContent = scenes.length;
+        document.getElementById("homeSceneCount").textContent = scenes.length;
+
+        // HOME
+        homeScenesGrid.innerHTML = "";
+        if (!scenes.length) {
+            homeEmpty.style.display = "block";
+        } else {
+            homeEmpty.style.display = "none";
+            scenes.forEach(scene => {
+                const tile = document.createElement("button");
+                tile.type = "button";
+                tile.className = "scene-tile";
+
+                const tipoLabel = scene.type === "crepuscolare" ? "Crepuscolare" : "Manuale";
+                const state = sceneState(scene);
+
+                if (state === true) {
+                    tile.classList.add("state-on");
+                } else if (state === false) {
+                    tile.classList.add("state-off");
+                }
+
+                const stateText = state === true ? "Dispositivi accesi" : state === false ? "Dispositivi spenti" : "Stato misto o da verificare";
+                const gateScene = scene.actions.some(action => action.kind === "gate");
+                const turnsOff = scene.actions.length > 0 && scene.actions.every(action => action.state === "off");
+                const sceneIcon = gateScene ? "gate" : turnsOff ? "moon" : "sun";
+
+                tile.innerHTML = `
+                    <div class="scene-tile-top"><span class="scene-icon ${turnsOff ? "night" : ""}">${icon(sceneIcon)}</span><span class="scene-execute">${icon("arrow-up-right")}</span></div>
+                    <div class="scene-tile-name">${escapeHtml(scene.name)}</div>
+                    <div class="scene-tile-meta">${scene.actions.length} ${scene.actions.length === 1 ? "azione" : "azioni"} · ${tipoLabel}</div>
+                    <div class="scene-tile-state-label"><i></i>${stateText}</div>`;
+                tile.setAttribute("aria-label", "Esegui scenario " + scene.name);
+                tile.onclick = () => runUserScene(scene.id);
+                homeScenesGrid.appendChild(tile);
+            });
+        }
+
+        // LISTA IN IMPOSTAZIONI
+        scenesListEl.innerHTML = "";
+        if (!scenes.length) {
+            scenesListEl.innerHTML =
+                '<div class="msg">Nessuno scenario. Crea il primo con “Nuovo scenario”.</div>';
+            return;
+        }
+
+        scenes.forEach(scene => {
+            const div = document.createElement("div");
+            div.className = "scene-card";
+            const tipoLabel = scene.type === "crepuscolare" ? "Crepuscolare" : "Manuale";
+
+            div.innerHTML = `
+                <div class="scene-name">${escapeHtml(scene.name)}</div>
+                <div class="scene-meta">
+                    Tipo: ${tipoLabel} · Azioni: ${(scene.actions || []).length}
+                </div>
+                <div class="scene-actions">
+                    <button type="button" class="btn-primary btn-small scene-run"
+                        onclick="runUserScene(${jsArg(scene.id)})">
+                        Esegui
+                    </button>
+                    <button type="button" class="btn-small"
+                        onclick="startSceneEdit(${jsArg(scene.id)})">
+                        Modifica
+                    </button>
+                    <button type="button" class="btn-ghost-danger btn-small"
+                        onclick="deleteScene(${jsArg(scene.id)})">
+                        Elimina
+                    </button>
+                </div>
+            `;
+            scenesListEl.appendChild(div);
+        });
+        updateControlLocks();
+    }
+
+    function buildSceneDevicesList() {
+        sceneDevicesListEl.innerHTML = "";
+
+        if (!currentDevices.length) {
+            sceneDevicesListEl.innerHTML =
+                '<div style="padding:8px;font-size:0.8rem;color:var(--text-soft);">Carica i dispositivi per configurare uno scenario.</div>';
+            return;
+        }
+
+        currentDevices.forEach(dev => {
+            const isGate  = dev.deviceid === "1000ac81a0";
+            const isMulti = dev.params && Array.isArray(dev.params.switches);
+
+            const row = document.createElement("div");
+            row.className = "device-row";
+            row.dataset.deviceid = dev.deviceid;
+
+            row.innerHTML = `
+                <label class="device-main">
+                    <input type="checkbox" class="scene-device-check">
+                    <div>
+                        <div class="device-name">${escapeHtml(dev.name || "Senza nome")}</div>
+                        <div class="device-id">${escapeHtml(dev.deviceid)}</div>
+                    </div>
+                </label>
+                <div>
+                    <select class="scene-device-action" aria-label="Azione per ${escapeHtml(dev.name || 'dispositivo')}">
+                        <option value="none">Nessuna azione</option>
+                        ${
+                            isGate
+                                ? '<option value="gate">Comando cancello ON</option>'
+                                : isMulti
+                                    ? '<option value="multi_on">Tutti ON</option><option value="multi_off">Tutti OFF</option>'
+                                    : '<option value="on">ON</option><option value="off">OFF</option>'
+                        }
+                    </select>
+                </div>
+            `;
+            sceneDevicesListEl.appendChild(row);
+        });
+    }
+
+    function startSceneEdit(sceneId) {
+        setView("scenes");
+        document.getElementById("editorTitle").textContent = sceneId ? "Modifica scenario" : "Crea uno scenario";
+        editingSceneId = sceneId;
+        sceneEditorEl.style.display = "block";
+
+        const scenes = loadUserScenes();
+        const scene = scenes.find(s => s.id === sceneId);
+
+        buildSceneDevicesList();
+
+        if (scene) {
+            sceneNameInput.value = scene.name || "";
+            sceneTypeSelect.value = scene.type || "manuale";
+
+            const rows = sceneDevicesListEl.querySelectorAll(".device-row");
+            rows.forEach(row => {
+                const devId    = row.dataset.deviceid;
+                const checkbox = row.querySelector(".scene-device-check");
+                const select   = row.querySelector(".scene-device-action");
+
+                const action = (scene.actions || []).find(a => a.deviceId === devId);
+                if (!action) return;
+
+                checkbox.checked = true;
+
+                if (action.kind === "gate") {
+                    select.value = "gate";
+                } else if (action.kind === "multi") {
+                    select.value = action.state === "on" ? "multi_on" : "multi_off";
+                } else if (action.kind === "single") {
+                    select.value = action.state === "on" ? "on" : "off";
+                }
+            });
+        } else {
+            sceneNameInput.value = "";
+            sceneTypeSelect.value = "manuale";
+        }
+
+        setMessage("Configura le azioni e premi Salva scenario.", "");
+        sceneEditorEl.scrollIntoView({ behavior: "smooth", block: "start" });
+        sceneNameInput.focus({ preventScroll: true });
+    }
+
+    function cancelSceneEdit() {
+        editingSceneId = null;
+        sceneEditorEl.style.display = "none";
+    }
+
+    function saveScene() {
+        const name = sceneNameInput.value.trim();
+        const type = sceneTypeSelect.value;
+        if (type !== "manuale") {
+            setMessage("Automazione crepuscolare non disponibile. Seleziona Manuale.", "error");
+            return;
+        }
+
+        if (!name) {
+            setMessage("Inserisci un nome per lo scenario.", "error");
+            return;
+        }
+
+        const actions = [];
+        const rows = sceneDevicesListEl.querySelectorAll(".device-row");
+
+        rows.forEach(row => {
+            const devId    = row.dataset.deviceid;
+            const checkbox = row.querySelector(".scene-device-check");
+            const select   = row.querySelector(".scene-device-action");
+            const val      = select.value;
+
+            if (!checkbox.checked || val === "none") return;
+
+            const dev = currentDevices.find(d => d.deviceid === devId);
+            if (!dev) return;
+
+            if (val === "gate") {
+                actions.push({
+                    deviceId: devId,
+                    kind: "gate",
+                    state: "on"
+                });
+            } else if (val === "multi_on" || val === "multi_off") {
+                const outlets = dev.params.switches.map(channel => channel.outlet);
+
+                actions.push({
+                    deviceId: devId,
+                    kind: "multi",
+                    outlets,
+                    state: val === "multi_on" ? "on" : "off"
+                });
+            } else if (val === "on" || val === "off") {
+                actions.push({
+                    deviceId: devId,
+                    kind: "single",
+                    state: val
+                });
+            }
+        });
+
+        if (!actions.length) {
+            setMessage("Seleziona almeno un dispositivo con un’azione.", "error");
+            return;
+        }
+
+        let scenes = loadUserScenes();
+        if (editingSceneId) {
+            scenes = scenes.map(s =>
+                s.id === editingSceneId ? { ...s, name, type, actions } : s
+            );
+        } else {
+            const id = String(Date.now());
+            scenes.push({ id, name, type, actions });
+        }
+
+        if (!saveUserScenes(scenes)) return;
+        renderScenes();
+        sceneEditorEl.style.display = "none";
+        editingSceneId = null;
+        setMessage("Scenario salvato.", "");
+    }
+
+    async function runUserScene(sceneId) {
+        if (commandBusy || devicesLoading || !devicesFresh) return;
+        const scene = loadUserScenes().find(s => s.id === sceneId);
+        if (!scene?.actions?.length) return;
+        commandBusy = true;
+        updateControlLocks();
+        setMessage("Esecuzione scenario: " + scene.name + "…", "");
+        let completed = 0;
+        let failure = null;
+        try {
+            for (const action of scene.actions) {
+                if (completed) await new Promise(resolve => setTimeout(resolve, 550));
+                const sceneDevice = currentDevices.find(dev => dev.deviceid === action.deviceId);
+                if (!sceneDevice || !sceneDevice.online) throw new Error("Dispositivo non disponibile: " + (sceneDevice?.name || action.deviceId));
+                if (!["gate", "single", "multi"].includes(action.kind)) throw new Error("Tipo di azione non supportato.");
+                if (action.kind !== "gate" && !["on", "off"].includes(action.state)) throw new Error("Stato non valido.");
+                if (action.kind === "multi" && (!Array.isArray(action.outlets) || !action.outlets.length || !action.outlets.every(n => Number.isInteger(n) && n >= 0))) throw new Error("Canali non validi.");
+                await apiRequest(action.kind === "multi" ? "/api/toggle-multi" : "/api/toggle", {
+                    deviceId: action.deviceId,
+                    state: action.kind === "gate" ? "on" : action.state,
+                    ...(action.kind === "multi" ? {outlets: action.outlets} : {})
+                });
+                completed++;
+            }
+        } catch (error) { failure = error; }
+        const refreshed = await loadDevices();
+        setMessage(failure
+            ? "Scenario interrotto: " + completed + "/" + scene.actions.length + " comandi accettati. " + failure.message
+            : "Scenario: " + scene.name + ". Comandi accettati: " + completed + ". " + (refreshed ? "Stato aggiornato dal server." : "Stato non verificato: ricarica i dispositivi."),
+            failure || !refreshed ? "error" : "");
+        commandBusy = false;
+        updateControlLocks();
+    }
+
+    function deleteScene(sceneId) {
+        let scenes = loadUserScenes();
+        scenes = scenes.filter(s => s.id !== sceneId);
+        if (!saveUserScenes(scenes)) return;
+        renderScenes();
+    }
+
+    const ICONS = {
+        building: '<path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-7h6v7M9 10h.01M15 10h.01M12 4V1m-2 2h4"/>',
+        grid: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
+        bulb: '<path d="M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0c-1 1-1 2-1 2H9s0-1-1-2Z"/>',
+        layers: '<path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5m-18 5 9 5 9-5"/>',
+        download: '<path d="M12 3v12m-4-4 4 4 4-4M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/>',
+        sparkles: '<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3ZM20 2v4m-2-2h4"/>',
+        logout: '<path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4m7-4 4-4-4-4m4 4H9"/>',
+        refresh: '<path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/>',
+        calendar: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4m10-4v4M3 11h18"/>',
+        'arrow-right': '<path d="M4 12h16m-6-6 6 6-6 6"/>',
+        'arrow-up-right': '<path d="M6 18 18 6M6 6h12v12"/>',
+        plug: '<path d="M8 3v5m8-5v5M6 8h12v4a6 6 0 0 1-12 0V8Zm6 10v4"/>',
+        wifi: '<path d="M3 8a15 15 0 0 1 18 0M6 12a10 10 0 0 1 12 0m-9 4a5 5 0 0 1 6 0m-3 4h.01"/>',
+        'wifi-off': '<path d="m3 3 18 18M3 8a15 15 0 0 1 4-2m4-1a15 15 0 0 1 10 3M6 12a10 10 0 0 1 5-2m5 1 2 1m-9 4a5 5 0 0 1 6 0m-3 4h.01"/>',
+        shield: '<path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Zm-4 9 3 3 5-6"/>',
+        search: '<circle cx="10.5" cy="10.5" r="7"/><path d="m16 16 5 5"/>',
+        plus: '<path d="M12 5v14M5 12h14"/>',
+        info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/>',
+        close: '<path d="m6 6 12 12M6 18 18 6"/>',
+        check: '<path d="m5 12 4 4L19 6"/>',
+        smartphone: '<rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/>',
+        tablet: '<rect x="3" y="2" width="18" height="20" rx="3"/><path d="M11 18h2"/>',
+        monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>',
+        gate: '<path d="M3 21V7l9-4 9 4v14M7 21V9m5 12V7m5 14V9M3 15h18"/>',
+        sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>',
+        moon: '<path d="M20.5 13A9 9 0 0 1 11 3.5a9 9 0 1 0 9.5 9.5Z"/>',
+        power: '<path d="M12 2v10M6 5a9 9 0 1 0 12 0"/>'
+    };
+    function icon(name) {
+        return `<svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ICONS.plug}</svg>`;
+    }
+    let lastSyncTime = null;
+    let activeDeviceFilter = "all";
+    let installPrompt = null;
+    const VIEW_NAMES = { home: "Panoramica", devices: "Dispositivi", scenes: "Scenari", install: "La tua webapp" };
+
+    function hydrateIcons() {
+        document.querySelectorAll("[data-icon]").forEach(el => { el.innerHTML = icon(el.dataset.icon); });
+    }
+    function setView(name) {
+        if (!VIEW_NAMES[name]) return;
+        const views = { home: "homeView", devices: "devicesView", scenes: "settingsView", install: "installView" };
+        for (const [key, id] of Object.entries(views)) document.getElementById(id).style.display = key === name ? "block" : "none";
+        document.querySelectorAll("[data-view]").forEach(button => {
+            button.classList.toggle("active", button.dataset.view === name);
+            if (button.dataset.view === name) button.setAttribute("aria-current", "page");
+            else button.removeAttribute("aria-current");
+        });
+        document.getElementById("pageLabel").textContent = VIEW_NAMES[name];
+        document.title = VIEW_NAMES[name] + " · San Luigi";
+        window.scrollTo({top: 0, behavior: "instant"});
+    }
+    function deviceOn(dev) {
+        if (dev.deviceid === "1000ac81a0") return false;
+        return dev.params?.switch === "on" || dev.params?.switches?.some(channel => channel.switch === "on");
+    }
+    function deviceCard(dev) {
+        const gate = dev.deviceid === "1000ac81a0";
+        const multi = Array.isArray(dev.params?.switches);
+        const on = deviceOn(dev);
+        const known = devicesFresh && dev.online;
+        let controls = '<p class="unsupported">Comando non disponibile per questo modello.</p>';
+        const attributes = `data-device-command data-offline="${!dev.online}"`;
+        if (gate) {
+            controls = `<button class="gate-button" ${attributes} onclick="toggleDevice(${jsArg(dev.deviceid)}, true)">${icon("gate")} Apri cancello ${icon("arrow-right")}</button>`;
+        } else if (dev.params?.switch !== undefined) {
+            controls = `<div class="device-control"><span>${known ? on ? "Acceso" : "Spento" : "Stato non verificato"}</span><button class="toggle-button ${known && on ? "is-on" : ""}" role="switch" aria-checked="${known && on}" aria-label="${escapeHtml(dev.name || "Dispositivo")}" ${attributes} onclick="toggleDevice(${jsArg(dev.deviceid)}, ${!on})"><span></span></button></div>`;
+        } else if (multi) {
+            const channels = dev.params.switches.filter(channel => Number.isInteger(channel.outlet) && channel.outlet >= 0);
+            controls = `<div class="channel-controls">${channels.map(channel => `<button class="channel-button ${known && channel.switch === "on" ? "is-on" : ""}" ${attributes} aria-pressed="${known && channel.switch === "on"}" aria-label="${escapeHtml(dev.name || "Dispositivo")}, canale ${channel.outlet + 1}" onclick="toggleMulti(${jsArg(dev.deviceid)}, [${channel.outlet}], ${channel.switch !== "on"})"><span>CH ${channel.outlet + 1}</span>${icon("power")}</button>`).join("")}</div>`;
+        }
+        return `<article class="device-card ${known && on ? "device-on" : ""}"><div class="device-card-top"><span class="device-icon ${gate ? "gate-icon" : ""}">${icon(gate ? "gate" : "bulb")}</span><span class="connection-chip ${known ? "online" : "offline"}"><i></i>${!devicesFresh ? "Da aggiornare" : dev.online ? "Online" : "Offline"}</span></div><h3>${escapeHtml(dev.name || "Senza nome")}</h3><p class="device-kind">${gate ? "Accesso · posizione non rilevata" : multi ? "Interruttore multicanale" : "Interruttore"}</p><div class="device-card-controls">${controls}</div></article>`;
+    }
+    function renderDeviceCards() {
+        const search = document.getElementById("deviceSearch").value.trim().toLocaleLowerCase("it");
+        const filtered = currentDevices.filter(dev => (!search || String(dev.name || "").toLocaleLowerCase("it").includes(search)) && (activeDeviceFilter === "all" || (activeDeviceFilter === "online" ? dev.online : !dev.online)));
+        const empty = `<div class="empty-state device-empty">${icon(devicesLoading ? "refresh" : "plug")}<h3>${devicesLoading ? "Un momento, ci colleghiamo…" : "Nessun dispositivo da mostrare"}</h3><p>${devicesFresh ? "Prova un altro filtro o aggiorna l’elenco." : "Aggiorna i dispositivi per leggere il loro stato."}</p></div>`;
+        document.getElementById("allDevicesGrid").innerHTML = filtered.length ? filtered.map(deviceCard).join("") : empty;
+        const homeDevices = [...currentDevices].sort((a,b) => Number(b.deviceid === "1000ac81a0") - Number(a.deviceid === "1000ac81a0")).slice(0,4);
+        document.getElementById("homeDevicesGrid").innerHTML = homeDevices.length ? homeDevices.map(deviceCard).join("") : empty;
+        updateControlLocks();
+    }
+    function renderDashboard() {
+        const fresh = devicesFresh;
+        document.getElementById("statTotal").textContent = fresh ? currentDevices.length : "—";
+        document.getElementById("statOnline").textContent = fresh ? currentDevices.filter(d => d.online).length : "—";
+        document.getElementById("statOn").textContent = fresh ? currentDevices.filter(d => d.online && deviceOn(d)).length : "—";
+        document.getElementById("navDeviceCount").textContent = fresh ? currentDevices.length : "—";
+        document.getElementById("lastSync").textContent = lastSyncTime ? "Ultima lettura · " + lastSyncTime.toLocaleTimeString("it-IT", {hour:"2-digit",minute:"2-digit"}) + (fresh ? "" : " · da aggiornare") : "In attesa del primo aggiornamento";
+        document.getElementById("offlineBanner").hidden = navigator.onLine !== false;
+        renderDeviceCards();
+    }
+    async function installApp() {
+        if (!installPrompt) return;
+        const prompt = installPrompt;
+        installPrompt = null;
+        document.getElementById("installBtn").hidden = true;
+        await prompt.prompt();
+        await prompt.userChoice;
+    }
+    function showLoginRequired(message) {
+        authRequired = true;
+        devicesFresh = false;
+        document.getElementById("authPanel").hidden = false;
+        const crossSite = window.location.origin !== BACKEND_URL;
+        document.getElementById("authMessage").textContent = crossSite
+            ? "Per usare Safari senza dipendere dai cookie tra siti, apri la plancia ospitata insieme al backend su Render."
+            : message;
+        document.getElementById("loginBtn").textContent = crossSite ? "Apri plancia su Render" : "Accedi a eWeLink";
+        updateControlLocks();
+    }
+    function beginLogin() {
+        if (commandBusy || devicesLoading) return;
+        window.location.href = window.location.origin !== BACKEND_URL
+            ? BACKEND_URL + "/app/index.html"
+            : BACKEND_URL + "/login?returnUrl=" + encodeURIComponent(BACKEND_URL + "/app/index.html");
+    }
+    function exportScenes() {
+        const data = JSON.stringify({version: 1, scenes: loadUserScenes()}, null, 2);
+        const url = URL.createObjectURL(new Blob([data], {type: "application/json"}));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "san-luigi-scenari.json";
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    function validImportedScenes(scenes) {
+        return Array.isArray(scenes) && scenes.every(scene => scene && typeof scene.id === "string" && scene.id.length > 0 && typeof scene.name === "string" && Array.isArray(scene.actions) && scene.actions.every(action => action && typeof action.deviceId === "string" && /^[a-zA-Z0-9_-]+$/.test(action.deviceId) && ["gate", "single", "multi"].includes(action.kind) && (action.kind === "gate" || ["on", "off"].includes(action.state)) && (action.kind !== "multi" || (Array.isArray(action.outlets) && action.outlets.length > 0 && action.outlets.every(n => Number.isInteger(n) && n >= 0)))));
+    }
+    async function importScenes(event) {
+        if (commandBusy) return;
+        const file = event.target.files[0];
+        if (!file) return;
+        try {
+            if (file.size > 2 * 1024 * 1024) throw new Error("File troppo grande.");
+            const parsed = JSON.parse(await file.text());
+            const scenes = Array.isArray(parsed) ? parsed : parsed.scenes;
+            if (!validImportedScenes(scenes)) throw new Error("Il file non contiene scenari validi.");
+            const previous = loadUserScenes();
+            // Mantiene gli scenari esistenti e aggiunge solo identificativi nuovi.
+            const ids = new Set(previous.map(scene => scene.id));
+            const merged = previous.slice();
+            for (const scene of scenes) if (!ids.has(scene.id)) {
+                merged.push(scene);
+                ids.add(scene.id);
+            }
+            if (!saveUserScenes(merged)) return;
+            renderScenes();
+            setMessage("Importazione completata: " + (merged.length - previous.length) + " nuovi scenari. Gli scenari esistenti sono stati mantenuti.", "");
+        } catch (error) { setMessage("Importazione non riuscita: " + error.message, "error"); }
+        finally { event.target.value = ""; }
+    }
+
+    function initApp() {
+        hydrateIcons();
+        document.getElementById("loginBtn").addEventListener("click", beginLogin);
+        document.getElementById("sceneImport").addEventListener("change", importScenes);
+        document.getElementById("todayLabel").textContent = new Date().toLocaleDateString("it-IT", {day:"numeric",month:"long",year:"numeric"});
+        document.querySelectorAll("[data-view]").forEach(button => button.addEventListener("click", () => setView(button.dataset.view)));
+        document.querySelectorAll("[data-filter]").forEach(button => button.addEventListener("click", () => {
+            activeDeviceFilter = button.dataset.filter;
+            document.querySelectorAll("[data-filter]").forEach(tab => {
+                tab.classList.toggle("selected", tab === button);
+                tab.setAttribute("aria-pressed", String(tab === button));
+            });
+            renderDeviceCards();
+        }));
+        document.getElementById("deviceSearch").addEventListener("input", renderDeviceCards);
+        document.getElementById("installBtn").addEventListener("click", installApp);
+        window.addEventListener("beforeinstallprompt", event => {
+            event.preventDefault();
+            installPrompt = event;
+            document.getElementById("installBtn").hidden = false;
+        });
+        window.addEventListener("appinstalled", () => {
+            installPrompt = null;
+            document.getElementById("installBtn").hidden = true;
+            document.getElementById("installedLabel").hidden = false;
+        });
+        if (window.matchMedia("(display-mode: standalone)").matches || navigator.standalone) document.getElementById("installedLabel").hidden = false;
+        window.addEventListener("offline", () => {
+            devicesFresh = false;
+            setStatus("Sei offline", "err");
+            renderScenes();
+            renderDashboard();
+        });
+        window.addEventListener("online", () => { if (!authRequired && !commandBusy && !devicesLoading) loadDevices(); });
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible" && !authRequired && !commandBusy && !devicesLoading && sceneEditorEl.style.display !== "block" && navigator.onLine !== false) loadDevices();
+        });
+        if ("serviceWorker" in navigator && window.location.protocol !== "file:") {
+            navigator.serviceWorker.register("./sw.js").catch(() => {
+                document.getElementById("installedLabel").textContent = "Installazione offline non disponibile; la plancia funziona nel browser.";
+                document.getElementById("installedLabel").hidden = false;
+            });
+        }
+        renderDashboard();
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        initApp();
+        ensureDefaultScenes();
+        renderScenes();
+        loadDevices();
+    });
+
+</script>
+</body>
+</html>
