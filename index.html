@@ -6,8 +6,9 @@
   <meta name="theme-color" content="#147d5a">
   <meta name="description" content="La plancia dell’Oratorio San Luigi: luci, cancello e scenari in un unico posto.">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <title>San Luigi · La tua plancia</title>
+  <title>eWeLink Oratorio</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -16,7 +17,7 @@
 <body>
 <a class="skip-link" href="#mainContent">Vai al contenuto</a>
 <aside class="sidebar" aria-label="Navigazione principale">
-  <a class="brand" href="./index.html" aria-label="San Luigi, panoramica"><span class="brand-mark" data-icon="building"></span><span class="brand-copy">San Luigi<small>IL TUO ORATORIO</small></span></a>
+  <a class="brand" href="./index.html" aria-label="eWeLink Oratorio, panoramica"><span class="brand-mark" data-icon="building"></span><span class="brand-copy">eWeLink<small>ORATORIO</small></span></a>
   <div class="nav-caption">IL TUO SPAZIO</div>
   <nav class="nav-list">
     <button class="nav-item active" data-view="home" aria-label="Panoramica" aria-current="page"><span data-icon="grid"></span><span>Panoramica</span></button>
@@ -40,9 +41,9 @@
     <div class="sync-footer"><span data-icon="shield"></span><span>Collegamento al tuo account eWeLink</span><span id="lastSync">In attesa del primo aggiornamento</span></div>
   </section>
   <section id="devicesView" class="view" style="display:none" aria-labelledby="devicesHeading"><div class="page-heading"><div><p class="eyebrow">LUCI E ACCESSI</p><h1 id="devicesHeading">I tuoi dispositivi<span class="green-dot">.</span></h1><p class="heading-sub">Controlla gli ambienti, uno alla volta.</p></div></div><div class="device-toolbar"><label class="search-box"><span data-icon="search"></span><input type="search" id="deviceSearch" placeholder="Cerca un dispositivo…" aria-label="Cerca un dispositivo"></label><div class="filter-tabs" aria-label="Filtra dispositivi"><button data-filter="all" class="selected" aria-pressed="true">Tutti</button><button data-filter="online" aria-pressed="false">Online</button><button data-filter="offline" aria-pressed="false">Offline</button></div></div><div id="allDevicesGrid" class="devices-grid"></div><details class="technical-details"><summary>Dettagli tecnici dei dispositivi</summary><div class="table-wrap"><table id="devicesTable"><thead><tr><th>Dispositivo</th><th>ID</th><th>Connessione</th><th>Stato</th><th>Comando</th></tr></thead><tbody><tr><td colspan="5">Caricamento…</td></tr></tbody></table></div></details><p class="page-note">Gli stati si aggiornano all’apertura della pagina e dopo ogni comando. Usa il pulsante Aggiorna per una nuova lettura.</p></section>
-  <section id="settingsView" class="view" style="display:none" aria-labelledby="scenesHeading"><div class="page-heading"><div><p class="eyebrow">PICCOLI GESTI, GRANDI COMODITÀ</p><h1 id="scenesHeading">I tuoi scenari<span class="green-dot">.</span></h1><p class="heading-sub">Combina più azioni in un unico pulsante.</p></div><button id="newSceneBtn" class="primary-button"><span data-icon="plus"></span>Nuovo scenario</button></div><div class="info-strip"><span data-icon="info"></span><span>Gli scenari sono salvati in questo browser. Non si sincronizzano automaticamente con gli altri dispositivi.</span></div><div id="scenesList" class="scenes-grid-settings"></div><div id="sceneEditor" class="scene-editor" style="display:none"><div class="editor-heading"><div><p class="eyebrow">PERSONALIZZA</p><h2 id="editorTitle">Crea uno scenario</h2></div><button class="icon-button" onclick="cancelSceneEdit()" aria-label="Chiudi editor"><span data-icon="close"></span></button></div><div class="form-grid"><div class="form-row"><label for="sceneName">Nome scenario</label><input id="sceneName" type="text" maxlength="100" placeholder="Es. Serata in oratorio"></div><div class="form-row"><label for="sceneType">Esecuzione</label><select id="sceneType"><option value="manuale">Manuale · con un tocco</option><option value="crepuscolare" disabled>Crepuscolare · non disponibile</option></select></div></div><h3 class="editor-subtitle">Scegli dispositivi e azioni</h3><div id="sceneDevicesList" class="devices-list"></div><div class="editor-footer"><button class="secondary-button" onclick="cancelSceneEdit()">Annulla</button><button class="primary-button" onclick="saveScene()"><span data-icon="check"></span>Salva scenario</button></div></div></section>
-  <section id="installView" class="view" style="display:none" aria-labelledby="installHeading"><div class="page-heading"><div><p class="eyebrow">SEMPRE A PORTATA DI MANO</p><h1 id="installHeading">La tua webapp<span class="green-dot">.</span></h1><p class="heading-sub">Lo stesso spazio, sul telefono, sul tablet e sul computer.</p></div></div><article class="install-hero"><span class="install-app-icon" data-icon="building"></span><div><h2>San Luigi, sulla tua schermata.</h2><p>Apri la plancia dalla sua icona, in una finestra dedicata.</p><button id="installBtn" class="primary-button" hidden><span data-icon="download"></span>Installa la webapp</button><p id="installedLabel" class="success-label" hidden>La plancia è aperta come app.</p></div></article><div class="install-guides"><article class="guide-card"><span data-icon="smartphone"></span><h3>iPhone e iPad</h3><p>Apri il sito in Safari, tocca <strong>Condividi</strong> e scegli <strong>Aggiungi alla schermata Home</strong>.</p></article><article class="guide-card"><span data-icon="tablet"></span><h3>Tablet e telefoni Android</h3><p>Apri il sito in Chrome. Nel menu scegli <strong>Installa app</strong> o <strong>Aggiungi a schermata Home</strong>, se disponibile.</p></article><article class="guide-card"><span data-icon="monitor"></span><h3>Computer</h3><p>In Chrome o Edge usa l’opzione di installazione nel menu del browser. Su Safari per Mac usa <strong>File → Aggiungi al Dock</strong>, se disponibile.</p></article></div><div class="info-strip"><span data-icon="wifi"></span><span>Serve Internet per leggere gli stati e comandare i dispositivi. Ogni browser e dispositivo ha il proprio accesso e i propri scenari.</span></div><article class="account-card migration-card"><div><h3>Trasferisci i tuoi scenari</h3><p>Esportali da questo browser e importali sul nuovo sito o su un altro dispositivo.</p></div><div class="scene-actions"><button class="secondary-button" onclick="exportScenes()">Esporta scenari</button><button class="secondary-button" onclick="document.getElementById('sceneImport').click()">Importa scenari</button><input id="sceneImport" type="file" accept="application/json,.json" hidden aria-label="File degli scenari da importare"></div></article><article class="account-card"><div><h3>Il tuo account</h3><p>Esci se vuoi disconnettere questo browser da eWeLink.</p></div><button class="secondary-button" onclick="logout()">Esci dall’account</button></article></section>
-  <footer class="app-footer"><span>San Luigi <span class="footer-separator">/</span> Uno spazio da vivere.</span><span>Plancia luci e accessi</span></footer>
+  <section id="settingsView" class="view" style="display:none" aria-labelledby="scenesHeading"><div class="page-heading"><div><p class="eyebrow">PICCOLI GESTI, GRANDI COMODITÀ</p><h1 id="scenesHeading">Scenari<span class="green-dot">.</span></h1><p class="heading-sub">Combina più azioni in un unico pulsante.</p></div><div class="scene-page-actions"><button id="sceneManageBtn" class="secondary-button" onclick="setSceneManageMode()">Gestisci</button><button id="newSceneBtn" class="primary-button"><span data-icon="plus"></span>Nuovo scenario</button></div></div><div class="info-strip scene-sync-strip"><span data-icon="wifi"></span><span id="sceneSyncText">Collegamento agli scenari condivisi…</span><button id="sceneMigrationBtn" class="secondary-button" hidden onclick="migrateLocalScenes()">Condividi scenari locali</button></div><div id="scenesList" class="scenes-grid-settings"></div><div id="sceneEditor" class="scene-editor" style="display:none"><div class="editor-heading"><div><p class="eyebrow">PERSONALIZZA</p><h2 id="editorTitle">Crea uno scenario</h2></div><button class="icon-button" onclick="cancelSceneEdit()" aria-label="Chiudi editor"><span data-icon="close"></span></button></div><div class="form-grid"><div class="form-row"><label for="sceneName">Nome scenario</label><input id="sceneName" type="text" maxlength="100" placeholder="Es. Serata in oratorio"></div><div class="form-row"><label for="sceneType">Esecuzione</label><select id="sceneType"><option value="manuale">Manuale · con un tocco</option><option value="crepuscolare" disabled>Crepuscolare · non disponibile</option></select></div></div><h3 class="editor-subtitle">Scegli dispositivi e azioni</h3><p class="page-note">Per cancello e relè con autoritorno già configurato scegli “Impulso”. Il colore indica lo stato del relè, non la posizione del cancello.</p><div id="sceneDevicesList" class="devices-list"></div><div class="editor-footer"><button class="secondary-button" onclick="cancelSceneEdit()">Annulla</button><button class="primary-button" onclick="saveScene()"><span data-icon="check"></span>Salva scenario</button></div></div></section>
+  <section id="installView" class="view" style="display:none" aria-labelledby="installHeading"><div class="page-heading"><div><p class="eyebrow">SEMPRE A PORTATA DI MANO</p><h1 id="installHeading">La tua webapp<span class="green-dot">.</span></h1><p class="heading-sub">Lo stesso spazio, sul telefono, sul tablet e sul computer.</p></div></div><article class="install-hero"><span class="install-app-icon" data-icon="building"></span><div><h2>eWeLink Oratorio, sulla tua schermata.</h2><p>Apri la plancia dalla sua icona, in una finestra dedicata.</p><button id="installBtn" class="primary-button" hidden><span data-icon="download"></span>Installa la webapp</button><p id="installedLabel" class="success-label" hidden>La plancia è aperta come app.</p></div></article><div class="install-guides"><article class="guide-card"><span data-icon="smartphone"></span><h3>iPhone e iPad</h3><p>Apri il sito in Safari, tocca <strong>Condividi</strong> e scegli <strong>Aggiungi alla schermata Home</strong>.</p></article><article class="guide-card"><span data-icon="tablet"></span><h3>Tablet e telefoni Android</h3><p>Apri il sito in Chrome. Nel menu scegli <strong>Installa app</strong> o <strong>Aggiungi a schermata Home</strong>, se disponibile.</p></article><article class="guide-card"><span data-icon="monitor"></span><h3>Computer</h3><p>In Chrome o Edge usa l’opzione di installazione nel menu del browser. Su Safari per Mac usa <strong>File → Aggiungi al Dock</strong>, se disponibile.</p></article></div><div class="info-strip"><span data-icon="wifi"></span><span>Serve Internet per leggere gli stati e comandare i dispositivi. Ogni browser mantiene il proprio accesso; gli scenari collegati a Firebase sono condivisi fra i dispositivi della stessa casa eWeLink.</span></div><article class="account-card migration-card"><div><h3>Trasferisci i tuoi scenari</h3><p>Esportali da questo browser e importali sul nuovo sito o su un altro dispositivo.</p></div><div class="scene-actions"><button class="secondary-button" onclick="exportScenes()">Esporta scenari</button><button class="secondary-button" onclick="document.getElementById('sceneImport').click()">Importa scenari</button><input id="sceneImport" type="file" accept="application/json,.json" hidden aria-label="File degli scenari da importare"></div></article><article class="account-card"><div><h3>Il tuo account</h3><p>Esci se vuoi disconnettere questo browser da eWeLink.</p></div><button class="secondary-button" onclick="logout()">Esci dall’account</button></article></section>
+  <footer class="app-footer"><span>eWeLink Oratorio <span class="footer-separator">/</span> Uno spazio da vivere.</span><span>Plancia luci e accessi</span></footer>
 </main>
 <noscript><p>Attiva JavaScript nel browser per usare la plancia.</p></noscript>
 <script>
@@ -136,7 +137,10 @@
                 throw error;
             }
             if (!response.ok || data?.ok !== true) {
-                throw new Error(data?.raw?.msg || data?.msg || data?.error || "Errore HTTP " + response.status);
+                const error = new Error(data?.raw?.msg || data?.msg || data?.error || "Errore HTTP " + response.status);
+                error.code = data?.error;
+                error.status = response.status;
+                throw error;
             }
             return data;
         } catch (error) {
@@ -149,7 +153,8 @@
 
     function updateControlLocks() {
         document.querySelectorAll("#devicesTable input, #devicesTable button, .scene-tile, .scene-run, [data-device-command]").forEach(el => {
-            el.disabled = commandBusy || devicesLoading || !devicesFresh || navigator.onLine === false || el.dataset.offline === "true";
+            el.disabled = commandBusy || Boolean(activeCloudExecution()) || devicesLoading || !devicesFresh || navigator.onLine === false || el.dataset.offline === "true" || (el.classList.contains("scene-run") && (sceneSyncMode === "loading" || Boolean(cloudScenes && sceneSyncMode !== "live")));
+            if (el.dataset.sceneId && runningScene(el.dataset.sceneId)) el.disabled = true;
         });
         reloadBtn.disabled = commandBusy || devicesLoading;
     }
@@ -158,7 +163,8 @@
         if (!devicesFresh || !scene.actions?.length) return null;
         const states = scene.actions.map(action => {
             const dev = currentDevices.find(d => d.deviceid === action.deviceId);
-            if (!dev?.online || action.kind === "gate") return null;
+            if (!dev?.online) return null;
+            if (action.kind === "gate") return dev.params?.switches?.find(channel => channel.outlet === 0)?.switch ?? dev.params?.switch ?? null;
             if (action.kind === "single") return dev.params?.switch ?? null;
             if (action.kind === "multi" && action.outlets?.length) {
                 const values = action.outlets.map(outlet => dev.params?.switches?.find(s => s.outlet === outlet)?.switch);
@@ -171,7 +177,7 @@
     }
 
     async function performCommand(path, body) {
-        if (commandBusy || devicesLoading || !devicesFresh) return;
+        if (commandBusy || activeCloudExecution() || devicesLoading || !devicesFresh) return;
         commandBusy = true;
         updateControlLocks();
         let error = null;
@@ -221,6 +227,11 @@
             return;
         }
 
+        closeSceneStream();
+        cloudScenes = null;
+        sceneWorkspace = null;
+        cloudExecutions = {};
+        sceneSyncMode = "local";
         currentDevices = [];
         devicesFresh = false;
         showLoginRequired("Hai disconnesso questo browser. Premi Accedi solo quando vuoi collegarlo di nuovo.");
@@ -258,6 +269,7 @@
                 tbody.innerHTML = '<tr><td colspan="5" class="msg">Nessun dispositivo associato all’account.</td></tr>';
                 if (editingSceneId === null && sceneEditorEl.style.display !== "block") buildSceneDevicesList();
                 renderScenes();
+                if (!commandBusy) await syncScenes();
                 return true;
             }
 
@@ -322,6 +334,7 @@
 
             if (sceneEditorEl.style.display !== "block") buildSceneDevicesList();
             renderScenes();
+            if (!commandBusy) await syncScenes();
             return true;
         } catch (err) {
             console.error(err);
@@ -352,6 +365,7 @@
     const SCENES_STORAGE_KEY = "ewelink_user_scenes_v2";
 
     function loadUserScenes() {
+        if (Array.isArray(cloudScenes)) return cloudScenes;
         try {
             const raw = localStorage.getItem(SCENES_STORAGE_KEY);
             if (!raw) return [];
@@ -387,78 +401,15 @@
         const scenes = loadUserScenes();
         document.getElementById("statScenes").textContent = scenes.length;
         document.getElementById("homeSceneCount").textContent = scenes.length;
-
-        // HOME
         homeScenesGrid.innerHTML = "";
-        if (!scenes.length) {
-            homeEmpty.style.display = "block";
-        } else {
-            homeEmpty.style.display = "none";
-            scenes.forEach(scene => {
-                const tile = document.createElement("button");
-                tile.type = "button";
-                tile.className = "scene-tile";
-
-                const tipoLabel = scene.type === "crepuscolare" ? "Crepuscolare" : "Manuale";
-                const state = sceneState(scene);
-
-                if (state === true) {
-                    tile.classList.add("state-on");
-                } else if (state === false) {
-                    tile.classList.add("state-off");
-                }
-
-                const stateText = state === true ? "Dispositivi accesi" : state === false ? "Dispositivi spenti" : "Stato misto o da verificare";
-                const gateScene = scene.actions.some(action => action.kind === "gate");
-                const turnsOff = scene.actions.length > 0 && scene.actions.every(action => action.state === "off");
-                const sceneIcon = gateScene ? "gate" : turnsOff ? "moon" : "sun";
-
-                tile.innerHTML = `
-                    <div class="scene-tile-top"><span class="scene-icon ${turnsOff ? "night" : ""}">${icon(sceneIcon)}</span><span class="scene-execute">${icon("arrow-up-right")}</span></div>
-                    <div class="scene-tile-name">${escapeHtml(scene.name)}</div>
-                    <div class="scene-tile-meta">${scene.actions.length} ${scene.actions.length === 1 ? "azione" : "azioni"} · ${tipoLabel}</div>
-                    <div class="scene-tile-state-label"><i></i>${stateText}</div>`;
-                tile.setAttribute("aria-label", "Esegui scenario " + scene.name);
-                tile.onclick = () => runUserScene(scene.id);
-                homeScenesGrid.appendChild(tile);
-            });
-        }
-
-        // LISTA IN IMPOSTAZIONI
         scenesListEl.innerHTML = "";
-        if (!scenes.length) {
-            scenesListEl.innerHTML =
-                '<div class="msg">Nessuno scenario. Crea il primo con “Nuovo scenario”.</div>';
-            return;
+        homeEmpty.style.display = scenes.length ? "none" : "block";
+        for (const scene of scenes) {
+            homeScenesGrid.appendChild(makeSceneTile(scene));
+            scenesListEl.appendChild(makeSceneTile(scene, sceneManageMode));
         }
-
-        scenes.forEach(scene => {
-            const div = document.createElement("div");
-            div.className = "scene-card";
-            const tipoLabel = scene.type === "crepuscolare" ? "Crepuscolare" : "Manuale";
-
-            div.innerHTML = `
-                <div class="scene-name">${escapeHtml(scene.name)}</div>
-                <div class="scene-meta">
-                    Tipo: ${tipoLabel} · Azioni: ${(scene.actions || []).length}
-                </div>
-                <div class="scene-actions">
-                    <button type="button" class="btn-primary btn-small scene-run"
-                        onclick="runUserScene(${jsArg(scene.id)})">
-                        Esegui
-                    </button>
-                    <button type="button" class="btn-small"
-                        onclick="startSceneEdit(${jsArg(scene.id)})">
-                        Modifica
-                    </button>
-                    <button type="button" class="btn-ghost-danger btn-small"
-                        onclick="deleteScene(${jsArg(scene.id)})">
-                        Elimina
-                    </button>
-                </div>
-            `;
-            scenesListEl.appendChild(div);
-        });
+        if (!scenes.length) scenesListEl.innerHTML = '<div class="empty-state">Nessuno scenario. Premi “Nuovo scenario” per creare il primo pulsante.</div>';
+        updateSyncLabel();
         updateControlLocks();
     }
 
@@ -494,8 +445,8 @@
                             isGate
                                 ? '<option value="gate">Comando cancello ON</option>'
                                 : isMulti
-                                    ? '<option value="multi_on">Tutti ON</option><option value="multi_off">Tutti OFF</option>'
-                                    : '<option value="on">ON</option><option value="off">OFF</option>'
+                                    ? '<option value="multi_on">Tutti ON</option><option value="multi_off">Tutti OFF</option>' + dev.params.switches.map(channel => `<option value="pulse_${channel.outlet}">Impulso CH ${channel.outlet + 1}</option>`).join('')
+                                    : '<option value="on">ON</option><option value="off">OFF</option><option value="pulse_single">Impulso</option>'
                         }
                     </select>
                 </div>
@@ -515,6 +466,7 @@
 
         buildSceneDevicesList();
 
+        sceneEditVersion = scene?.version || 0;
         if (scene) {
             sceneNameInput.value = scene.name || "";
             sceneTypeSelect.value = scene.type || "manuale";
@@ -532,6 +484,10 @@
 
                 if (action.kind === "gate") {
                     select.value = "gate";
+                } else if (action.pulse && action.kind === "multi") {
+                    select.value = "pulse_" + action.outlets[0];
+                } else if (action.pulse && action.kind === "single") {
+                    select.value = "pulse_single";
                 } else if (action.kind === "multi") {
                     select.value = action.state === "on" ? "multi_on" : "multi_off";
                 } else if (action.kind === "single") {
@@ -553,7 +509,8 @@
         sceneEditorEl.style.display = "none";
     }
 
-    function saveScene() {
+    async function saveScene() {
+        if (sceneSaveBusy) return;
         const name = sceneNameInput.value.trim();
         const type = sceneTypeSelect.value;
         if (type !== "manuale") {
@@ -586,6 +543,10 @@
                     kind: "gate",
                     state: "on"
                 });
+            } else if (val === "pulse_single") {
+                actions.push({deviceId:devId,kind:"single",state:"on",pulse:true});
+            } else if (/^pulse_\d+$/.test(val)) {
+                actions.push({deviceId:devId,kind:"multi",state:"on",pulse:true,outlets:[Number(val.slice(6))]});
             } else if (val === "multi_on" || val === "multi_off") {
                 const outlets = dev.params.switches.map(channel => channel.outlet);
 
@@ -609,28 +570,44 @@
             return;
         }
 
-        let scenes = loadUserScenes();
-        if (editingSceneId) {
-            scenes = scenes.map(s =>
-                s.id === editingSceneId ? { ...s, name, type, actions } : s
-            );
-        } else {
-            const id = String(Date.now());
-            scenes.push({ id, name, type, actions });
-        }
-
-        if (!saveUserScenes(scenes)) return;
-        renderScenes();
-        sceneEditorEl.style.display = "none";
-        editingSceneId = null;
-        setMessage("Scenario salvato.", "");
+        sceneSaveBusy = true;
+        const id = editingSceneId || crypto.randomUUID();
+        const scene = {id,name,type,actions};
+        try {
+            if (cloudScenes) await cloudSceneChange({op:"upsert",scene,expectedVersion:editingSceneId ? sceneEditVersion : 0});
+            else {
+                const scenes = loadUserScenes();
+                const next = editingSceneId ? scenes.map(s => s.id === id ? scene : s) : [...scenes,scene];
+                if (!saveUserScenes(next)) return;
+                renderScenes();
+            }
+            sceneEditorEl.style.display = "none";
+            editingSceneId = null;
+            setMessage(cloudScenes ? "Scenario condiviso con gli altri dispositivi." : "Scenario salvato solo in questo browser: Firebase non è collegato.", "");
+        } catch(error) { setMessage(error.message,"error"); }
+        finally { sceneSaveBusy = false; }
     }
 
     async function runUserScene(sceneId) {
-        if (commandBusy || devicesLoading || !devicesFresh) return;
+        if (commandBusy || activeCloudExecution() || devicesLoading || !devicesFresh) return;
         const scene = loadUserScenes().find(s => s.id === sceneId);
         if (!scene?.actions?.length) return;
+        if (cloudScenes) {
+            if (sceneSyncMode !== "live") { setMessage("Attendi il collegamento a Firebase.", "error"); return; }
+            localRunningScene = sceneId;
+            commandBusy = true;
+            renderScenes();
+            try {
+                const data = await apiRequest("/api/user-scenes/run", {id:sceneId,workspaceId:sceneWorkspace.id});
+                if (cloudExecutions[sceneId]?.runId !== data.run.runId || cloudExecutions[sceneId]?.status === "running") cloudExecutions[sceneId] = data.run;
+                setMessage("Scenario avviato. Il comando è visibile su tutti i dispositivi.", "");
+            } catch(error) { setMessage(error.message,"error"); await syncScenes(); }
+            finally { localRunningScene = null; commandBusy = false; renderScenes(); }
+            return;
+        }
+        localRunningScene = sceneId;
         commandBusy = true;
+        renderScenes();
         updateControlLocks();
         setMessage("Esecuzione scenario: " + scene.name + "…", "");
         let completed = 0;
@@ -657,14 +634,169 @@
             : "Scenario: " + scene.name + ". Comandi accettati: " + completed + ". " + (refreshed ? "Stato aggiornato dal server." : "Stato non verificato: ricarica i dispositivi."),
             failure || !refreshed ? "error" : "");
         commandBusy = false;
+        localRunningScene = null;
+        renderScenes();
         updateControlLocks();
     }
 
-    function deleteScene(sceneId) {
+    async function deleteScene(sceneId) {
+        const scene = loadUserScenes().find(scene => scene.id === sceneId);
+        if (cloudScenes) {
+            try { await cloudSceneChange({op:"delete",id:sceneId,expectedVersion:scene?.version || 0}); }
+            catch(error) { setMessage(error.message,"error"); }
+            return;
+        }
         let scenes = loadUserScenes();
         scenes = scenes.filter(s => s.id !== sceneId);
         if (!saveUserScenes(scenes)) return;
         renderScenes();
+    }
+
+    let cloudScenes = null;
+    let sceneWorkspace = null;
+    let sceneSyncMode = "local";
+    let sceneSyncTask = null;
+    let sceneStream = null;
+    let sceneReconnect = null;
+    let cloudExecutions = {};
+    let localRunningScene = null;
+    let sceneEditVersion = 0;
+    let sceneSaveBusy = false;
+    let sceneManageMode = false;
+
+    function activeCloudExecution() {
+        return Object.values(cloudExecutions).find(run => run.status === "running" && run.expiresAt > Date.now());
+    }
+    function runningScene(sceneId) {
+        const run = cloudExecutions[sceneId];
+        return localRunningScene === sceneId || Boolean(run?.status === "running" && run.expiresAt > Date.now());
+    }
+    function localSceneList() {
+        try {
+            const parsed = JSON.parse(localStorage.getItem(SCENES_STORAGE_KEY) || "[]");
+            return validImportedScenes(parsed) ? parsed : [];
+        } catch { return []; }
+    }
+    function migrationScenes() {
+        if (!sceneWorkspace) return [];
+        try { if (localStorage.getItem("ewelink_cloud_migrated_" + sceneWorkspace.id)) return []; } catch {}
+        const ids = new Set((cloudScenes || []).map(scene => scene.id));
+        return localSceneList().filter(scene => !ids.has(scene.id));
+    }
+    function updateSyncLabel(message) {
+        const el = document.getElementById("sceneSyncText");
+        el.textContent = message || (sceneSyncMode === "live"
+            ? "Scenari condivisi · " + sceneWorkspace.name
+            : sceneSyncMode === "loading" ? "Collegamento a Firebase…"
+            : cloudScenes ? "Sincronizzazione interrotta · modifiche sospese" : "Scenari solo su questo browser · Firebase da collegare");
+        document.getElementById("sceneMigrationBtn").hidden = sceneSyncMode !== "live" || migrationScenes().length === 0;
+    }
+    function acceptCloudScenes(data) {
+        if (!Array.isArray(data.scenes) || !validImportedScenes(data.scenes) || !data.workspace?.id) throw new Error("Elenco scenari condivisi non valido.");
+        const previousExecutions = cloudExecutions;
+        cloudScenes = data.scenes;
+        sceneWorkspace = data.workspace;
+        cloudExecutions = data.executions || {};
+        sceneSyncMode = "live";
+        if (!migrationScenes().length) {
+            try { localStorage.setItem("ewelink_cloud_migrated_" + sceneWorkspace.id, "1"); } catch {}
+        }
+        renderScenes();
+        updateSyncLabel();
+        const completed = Object.entries(cloudExecutions).some(([id, run]) => previousExecutions[id]?.status === "running" && run.status !== "running");
+        if (completed && !devicesLoading && !commandBusy) {
+            void loadDevices();
+        }
+        updateControlLocks();
+    }
+    function closeSceneStream() {
+        if (sceneStream) { sceneStream.close(); sceneStream = null; }
+        if (sceneReconnect) { clearTimeout(sceneReconnect); sceneReconnect = null; }
+    }
+    function openSceneStream() {
+        if (typeof EventSource === "undefined" || !sceneWorkspace || sceneStream || document.visibilityState === "hidden") return;
+        sceneStream = new EventSource(BACKEND_URL + "/api/user-scenes/events?workspaceId=" + encodeURIComponent(sceneWorkspace.id), {withCredentials: true});
+        sceneStream.addEventListener("scenes", event => {
+            try { acceptCloudScenes(JSON.parse(event.data)); }
+            catch { updateSyncLabel("Aggiornamento scenari non valido. Premi Aggiorna."); }
+        });
+        sceneStream.addEventListener("sync-error", () => {
+            closeSceneStream();
+            sceneSyncMode = "error";
+            updateSyncLabel();
+            updateControlLocks();
+        });
+        sceneStream.onerror = () => {
+            closeSceneStream();
+            sceneSyncMode = "error";
+            updateSyncLabel();
+            updateControlLocks();
+            if (!authRequired && navigator.onLine !== false && document.visibilityState !== "hidden") {
+                sceneReconnect = setTimeout(() => { sceneReconnect = null; void syncScenes(); }, 5000);
+            }
+        };
+    }
+    async function syncScenes() {
+        if (sceneSyncTask) return sceneSyncTask;
+        if (authRequired || navigator.onLine === false) return;
+        sceneSyncTask = (async () => {
+            if (!cloudScenes) sceneSyncMode = "loading";
+            updateSyncLabel();
+            updateControlLocks();
+            try {
+                const query = sceneWorkspace ? "?workspaceId=" + encodeURIComponent(sceneWorkspace.id) : "";
+                let data = await apiRequest("/api/user-scenes" + query);
+                if (!Array.isArray(data.scenes)) throw new Error("Risposta di sincronizzazione non valida.");
+                if (!data.exists) data = await apiRequest("/api/user-scenes", {op:"init",workspaceId:data.workspace.id,scenes:localSceneList()});
+                acceptCloudScenes(data);
+                openSceneStream();
+            } catch (error) {
+                sceneSyncMode = cloudScenes ? "error" : "local";
+                updateSyncLabel(error.code === "sync_not_configured" ? "Firebase non ancora collegato · scenari salvati soltanto qui" : undefined);
+                updateControlLocks();
+            }
+        })();
+        try { await sceneSyncTask; } finally { sceneSyncTask = null; }
+    }
+    async function cloudSceneChange(body) {
+        if (sceneSyncMode !== "live" || !sceneWorkspace) throw new Error("Attendi il collegamento a Firebase prima di modificare gli scenari.");
+        try {
+            const data = await apiRequest("/api/user-scenes", {...body,workspaceId:sceneWorkspace.id});
+            acceptCloudScenes(data);
+        } catch (error) {
+            if (error.code === "scene_conflict") await syncScenes();
+            throw error;
+        }
+    }
+    async function migrateLocalScenes() {
+        try {
+            await cloudSceneChange({op:"import",scenes:migrationScenes()});
+            localStorage.setItem("ewelink_cloud_migrated_" + sceneWorkspace.id,"1");
+            updateSyncLabel();
+            setMessage("Gli scenari di questo browser sono ora condivisi.", "");
+        } catch(error) { setMessage(error.message,"error"); }
+    }
+    function setSceneManageMode() {
+        sceneManageMode = !sceneManageMode;
+        document.getElementById("sceneManageBtn").textContent = sceneManageMode ? "Fine gestione" : "Gestisci";
+        renderScenes();
+    }
+    function makeSceneTile(scene, manage = false) {
+        const tile = document.createElement("div");
+        const pulse = scene.actions.some(action => action.kind === "gate" || action.pulse === true);
+        const state = sceneState(scene);
+        const running = runningScene(scene.id);
+        const run = cloudExecutions[scene.id];
+        const expired = run?.status === "unknown" || (run?.status === "running" && run.expiresAt <= Date.now());
+        const turnsOff = scene.actions.every(action => action.state === "off");
+        const status = running ? "running" : expired ? "unknown" : state === true ? "on" : state === false ? "off" : "unknown";
+        const label = running ? "Comando in esecuzione…" : expired ? "Esito da verificare" : pulse
+            ? state === false ? "Relè a riposo" : state === true ? "Relè attivo" : "Impulso · stato non rilevato"
+            : state === true ? "Acceso" : state === false ? "Spento" : "Stato misto o non rilevato";
+        const lastResult = !running && run?.status === "succeeded" && pulse ? "Ultimo impulso inviato" : !running && run?.status === "failed" ? "Comando non completato · verifica l’esito" : "";
+        tile.className = "scenario-unit";
+        tile.innerHTML = `<button type="button" class="scenario-pad scene-run state-${status}" data-scene-id="${escapeHtml(scene.id)}" aria-busy="${running}" aria-label="${escapeHtml((running ? "In esecuzione: " : "Esegui scenario: ") + scene.name + ". " + label)}" onclick="runUserScene(${jsArg(scene.id)})"><span class="pad-top"><span class="pad-icon">${icon(running ? "refresh" : pulse ? "gate" : turnsOff ? "moon" : "sun")}</span><span class="pad-dot"></span></span><span class="pad-name">${escapeHtml(scene.name)}</span><span class="pad-type">${pulse ? "COMANDO A IMPULSO" : turnsOff ? "SPEGNIMENTO" : "SCENARIO"} · ${scene.actions.length} ${scene.actions.length === 1 ? "AZIONE" : "AZIONI"}</span><span class="pad-state">${running ? '<span class="pad-spinner"></span>' : ""}${label}</span>${lastResult ? `<span class="pad-result">${escapeHtml(lastResult)}</span>` : ""}</button>${manage ? `<div class="pad-management"><button onclick="startSceneEdit(${jsArg(scene.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteScene(${jsArg(scene.id)})">Elimina</button></div>` : ""}`;
+        return tile;
     }
 
     const ICONS = {
@@ -717,7 +849,7 @@
             else button.removeAttribute("aria-current");
         });
         document.getElementById("pageLabel").textContent = VIEW_NAMES[name];
-        document.title = VIEW_NAMES[name] + " · San Luigi";
+        document.title = VIEW_NAMES[name] + " · eWeLink Oratorio";
         window.scrollTo({top: 0, behavior: "instant"});
     }
     function deviceOn(dev) {
@@ -770,6 +902,7 @@
     }
     function showLoginRequired(message) {
         authRequired = true;
+        closeSceneStream();
         devicesFresh = false;
         document.getElementById("authPanel").hidden = false;
         const crossSite = window.location.origin !== BACKEND_URL;
@@ -798,7 +931,7 @@
         return Array.isArray(scenes) && scenes.every(scene => scene && typeof scene.id === "string" && scene.id.length > 0 && typeof scene.name === "string" && Array.isArray(scene.actions) && scene.actions.every(action => action && typeof action.deviceId === "string" && /^[a-zA-Z0-9_-]+$/.test(action.deviceId) && ["gate", "single", "multi"].includes(action.kind) && (action.kind === "gate" || ["on", "off"].includes(action.state)) && (action.kind !== "multi" || (Array.isArray(action.outlets) && action.outlets.length > 0 && action.outlets.every(n => Number.isInteger(n) && n >= 0)))));
     }
     async function importScenes(event) {
-        if (commandBusy) return;
+        if (commandBusy || activeCloudExecution()) return;
         const file = event.target.files[0];
         if (!file) return;
         try {
@@ -806,6 +939,11 @@
             const parsed = JSON.parse(await file.text());
             const scenes = Array.isArray(parsed) ? parsed : parsed.scenes;
             if (!validImportedScenes(scenes)) throw new Error("Il file non contiene scenari validi.");
+            if (cloudScenes) {
+                await cloudSceneChange({op:"import",scenes});
+                setMessage("Scenari importati e condivisi.", "");
+                return;
+            }
             const previous = loadUserScenes();
             // Mantiene gli scenari esistenti e aggiunge solo identificativi nuovi.
             const ids = new Set(previous.map(scene => scene.id));
@@ -849,6 +987,8 @@
         });
         if (window.matchMedia("(display-mode: standalone)").matches || navigator.standalone) document.getElementById("installedLabel").hidden = false;
         window.addEventListener("offline", () => {
+            closeSceneStream();
+            if (cloudScenes) sceneSyncMode = "error";
             devicesFresh = false;
             setStatus("Sei offline", "err");
             renderScenes();
@@ -856,6 +996,7 @@
         });
         window.addEventListener("online", () => { if (!authRequired && !commandBusy && !devicesLoading) loadDevices(); });
         document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "hidden") closeSceneStream();
             if (document.visibilityState === "visible" && !authRequired && !commandBusy && !devicesLoading && sceneEditorEl.style.display !== "block" && navigator.onLine !== false) loadDevices();
         });
         if ("serviceWorker" in navigator && window.location.protocol !== "file:") {
@@ -869,6 +1010,11 @@
 
     document.addEventListener("DOMContentLoaded", () => {
         initApp();
+        setInterval(() => {
+            let expired = false;
+            for (const run of Object.values(cloudExecutions)) if (run.status === "running" && run.expiresAt <= Date.now()) { run.status = "unknown"; expired = true; }
+            if (expired || localRunningScene || activeCloudExecution()) renderScenes();
+        }, 1000);
         ensureDefaultScenes();
         renderScenes();
         loadDevices();
