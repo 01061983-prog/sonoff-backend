@@ -71,6 +71,7 @@
 
     let currentDevices = [];
     let editingSceneId = null;
+    let sceneEditorSnapshot = null;
 
     // Stati confermati dall’ultima lettura del backend.
     let authRequired = false;
@@ -455,6 +456,14 @@
         });
     }
 
+    function sceneEditorSelection() {
+        return Array.from(sceneDevicesListEl.querySelectorAll(".device-row"), row => ({
+            deviceId: row.dataset.deviceid,
+            checked: row.querySelector(".scene-device-check").checked,
+            action: row.querySelector(".scene-device-action").value
+        }));
+    }
+
     function startSceneEdit(sceneId) {
         setView("scenes");
         document.getElementById("editorTitle").textContent = sceneId ? "Modifica scenario" : "Crea uno scenario";
@@ -489,7 +498,12 @@
                 } else if (action.pulse && action.kind === "single") {
                     select.value = "pulse_single";
                 } else if (action.kind === "multi") {
-                    select.value = action.state === "on" ? "multi_on" : "multi_off";
+                    const saved = document.createElement("option");
+                    saved.value = "saved_multi";
+                    saved.textContent = "CH " + action.outlets.map(outlet => outlet + 1).join(", ") + " · " + action.state.toUpperCase();
+                    select.appendChild(saved);
+                    row.dataset.savedMultiAction = JSON.stringify(action);
+                    select.value = "saved_multi";
                 } else if (action.kind === "single") {
                     select.value = action.state === "on" ? "on" : "off";
                 }
@@ -499,6 +513,11 @@
             sceneTypeSelect.value = "manuale";
         }
 
+        sceneEditorSnapshot = scene ? {
+            actions: JSON.parse(JSON.stringify(scene.actions)),
+            selection: JSON.stringify(sceneEditorSelection())
+        } : null;
+
         setMessage("Configura le azioni e premi Salva scenario.", "");
         sceneEditorEl.scrollIntoView({ behavior: "smooth", block: "start" });
         sceneNameInput.focus({ preventScroll: true });
@@ -506,6 +525,7 @@
 
     function cancelSceneEdit() {
         editingSceneId = null;
+        sceneEditorSnapshot = null;
         sceneEditorEl.style.display = "none";
     }
 
@@ -525,8 +545,10 @@
 
         const actions = [];
         const rows = sceneDevicesListEl.querySelectorAll(".device-row");
+        const selectionUnchanged = sceneEditorSnapshot && sceneEditorSnapshot.selection === JSON.stringify(sceneEditorSelection());
 
-        rows.forEach(row => {
+        if (selectionUnchanged) actions.push(...JSON.parse(JSON.stringify(sceneEditorSnapshot.actions)));
+        else rows.forEach(row => {
             const devId    = row.dataset.deviceid;
             const checkbox = row.querySelector(".scene-device-check");
             const select   = row.querySelector(".scene-device-action");
@@ -537,7 +559,9 @@
             const dev = currentDevices.find(d => d.deviceid === devId);
             if (!dev) return;
 
-            if (val === "gate") {
+            if (val === "saved_multi" && row.dataset.savedMultiAction) {
+                actions.push(JSON.parse(row.dataset.savedMultiAction));
+            } else if (val === "gate") {
                 actions.push({
                     deviceId: devId,
                     kind: "gate",
