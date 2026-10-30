@@ -1193,6 +1193,7 @@
     }
     function locationSearchKeys(event,kind){
         const results=programmingElement(kind+'Results'),search=programmingElement(kind+'Search');
+        if(event.target===search&&event.key==='Enter'){event.preventDefault();if(!results.hidden)results.querySelector('button')?.click();return;}
         if(event.key==='Escape'){hideLocationResults(kind);search.focus();return;}
         if(results.hidden||!['ArrowDown','ArrowUp'].includes(event.key))return;
         const buttons=[...results.querySelectorAll('button')];if(!buttons.length)return;
