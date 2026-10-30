@@ -1,7 +1,7 @@
 'use strict';
 const crypto=require('crypto');
 const core=require('./programming-core');
-module.exports=function createProgramming({db,api,listDevices,appid,secret,saveSession,now=Date.now}){
+module.exports=function createProgramming({db,api,listDevices,appid,secret,saveSession,region='eu',now=Date.now}){
  const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
  const encryptionKey=crypto.hkdfSync('sha256',Buffer.from(secret),Buffer.from(appid),Buffer.from('ewelink-programming-token-v1'),32);
  const accounts=()=>db().collection('ewelinkProgrammingAccounts'), schedules=()=>db().collection('ewelinkProgrammingSchedules'), aliases=()=>db().collection('ewelinkProgrammingSessions');
@@ -41,15 +41,29 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
   if(data.atExpiredTime<=now()+60000){const fresh=await access(owner);saveSession(req,res,fresh);return true;}
   saveSession(req,res,data);return true;
  }
+ function accountOwner(uid,r=region){
+  if(typeof uid!=='string'||!uid||uid.trim()!==uid||uid.length>512||r!==region)throw error(503,'identity_unavailable','Impossibile verificare l’identità dell’account eWeLink con le autorizzazioni disponibili.');
+  return hash(appid+':'+r+':'+uid);
+ }
  const identityCache=new Map();
  async function identity(req){
   if(req.programmingOwner)return req.programmingOwner;
   const accessToken=req.cookies.ewelink_access,key=hash(accessToken||'');
   const cached=identityCache.get(key);if(cached&&cached.until>now())return cached.owner;
-  const response=await api('/v2/user/profile',accessToken);
-  const uid=response.data?.user?.apikey;
-  if(typeof uid!=='string'||!uid)throw error(401,'not_authenticated','Impossibile verificare l’identità eWeLink. Accedi nuovamente.');
-  const owner=hash(appid+':'+String(response.data.region||'eu')+':'+uid);
+  let owner;
+  try{
+   const response=await api('/v2/user/profile',accessToken);
+   owner=accountOwner(response.data?.user?.apikey,response.data?.region||region);
+  }catch(e){
+   if(e.providerError!==407&&e.code!==407)throw e;
+   // OAuth non autorizza /profile per tutti gli APPID. Il protocollo distingue
+   // esplicitamente device propri (itemType 1) e condivisi (2): mai dedurre
+   // l'identità da una casa, da sharedBy o dal proprietario di un device condiviso.
+   const devices=await listDevices(accessToken,undefined,{includeOwnership:true});
+   const owners=new Set(devices.filter(d=>d.itemType===1&&typeof d.ownerApikey==='string'&&d.ownerApikey).map(d=>d.ownerApikey));
+   if(owners.size!==1)throw error(503,'identity_unavailable','Impossibile verificare l’identità dell’account eWeLink con le autorizzazioni disponibili.');
+   owner=accountOwner([...owners][0]);
+  }
   for(const[k,v]of identityCache)if(v.until<now())identityCache.delete(k);
   identityCache.set(key,{owner,until:now()+5*60000});req.programmingOwner=owner;return owner;
  }
@@ -72,9 +86,11 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
   });
   return owner;
  }
- async function connectBrowser(req,res){
+ async function connectBrowser(req,res,providerData){
   // Il profilo del nuovo token verifica l'account: non usare un owner fornito dal client.
   delete req.programmingOwner;
+  // providerData viene soltanto dallo scambio OAuth eseguito sul server.
+  if(providerData?.user?.apikey)req.programmingOwner=accountOwner(providerData.user.apikey,providerData.region||region);
   const owner=await remember(req,{browserLogin:true});
   const session=crypto.randomBytes(32).toString('hex'),validUntil=now()+60*core.DAY;
   await browserRef(session).set({kind:'browser',owner,validUntil,createdAt:now()});

@@ -95,7 +95,10 @@ async function renewSession(req, res) {
 function requireLogin(req, res, next) {
   if (programming && !req.programmingChecked) {
     req.programmingChecked = true;
-    return programming.restoreSession(req, res).then(() => requireLogin(req, res, next)).catch(error => failure(res, error, req));
+    return programming.restoreSession(req, res).then(async () => {
+      if (!req.browserSession && req.cookies.ewelink_access && Number(req.cookies.ewelink_expires) > Date.now() + 60000) await programming.connectBrowser(req, res);
+      return requireLogin(req, res, next);
+    }).catch(error => failure(res, error, req));
   }
   const expiry = Number(req.cookies.ewelink_expires);
   if (req.cookies.ewelink_access && (!expiry || expiry > Date.now() + 60000)) return next();
@@ -204,7 +207,10 @@ app.get("/", (_req, res) => res.json({ ok: true, message: "Backend Sonoff OAuth 
 
 app.get("/login", route(async (req, res) => {
   if (programming) {
-    try { await programming.restoreSession(req, res); }
+    try {
+      await programming.restoreSession(req, res);
+      if (!req.browserSession && req.cookies.ewelink_access && Number(req.cookies.ewelink_expires) > Date.now() + 60000) await programming.connectBrowser(req, res);
+    }
     catch (error) {
       if (error.code !== "not_authenticated") throw error;
       for (const name of ["ewelink_access", "ewelink_refresh", "ewelink_expires"]) delete req.cookies[name];
@@ -249,7 +255,7 @@ app.get("/oauth/callback", route(async (req, res) => {
   const body = { code: req.query.code, redirectUrl: REDIRECT_URL, grantType: "authorization_code" };
   const data = await api("/v2/user/oauth/token", null, body, "Sign " + sign(JSON.stringify(body)));
   saveSession(req, res, data.data || {});
-  if (programming) await programming.connectBrowser(req, res);
+  if (programming) await programming.connectBrowser(req, res, data.data);
   res.redirect(returnUrl(pending.returnUrl));
 }));
 
@@ -265,7 +271,7 @@ async function families(token) {
   return response.data.familyList;
 }
 
-async function listDevices(token, homes) {
+async function listDevices(token, homes, {includeOwnership = false} = {}) {
   homes = homes || await families(token);
   const devices = new Map();
   for (const home of homes) {
@@ -279,9 +285,11 @@ async function listDevices(token, homes) {
       for (const thing of things) {
         if (![1, 2].includes(thing.itemType) || !thing.itemData?.deviceid) continue;
         const d = thing.itemData;
+        if (includeOwnership && devices.get(d.deviceid)?.itemType === 1 && thing.itemType !== 1) continue;
         devices.set(d.deviceid, {
           deviceid: d.deviceid, name: d.name, online: d.online === true,
-          params: d.params || {}, familyId: home.id, itemType: thing.itemType
+          params: d.params || {}, familyId: home.id, itemType: thing.itemType,
+          ...(includeOwnership && thing.itemType === 1 && !d.sharedBy && typeof d.apikey === "string" ? {ownerApikey:d.apikey} : {})
         });
       }
       if (things.length < 30) break;
@@ -573,7 +581,7 @@ app.post("/api/toggle-multi", requireLogin, route(async (req, res) => {
 // Programmazione autonoma: disabilitata finché non viene attivata su Render.
 // I token sono conservati soltanto dopo il consenso esplicito al primo salvataggio.
 if (process.env.EWELINK_PROGRAMMING_ENABLED === "true") {
-  programming = require("./programming")({db:getSceneDatabase, api, listDevices, appid:APPID, secret:APPSECRET, saveSession});
+  programming = require("./programming")({db:getSceneDatabase, api, listDevices, appid:APPID, secret:APPSECRET, saveSession, region:new URL(API_BASE).hostname.split("-")[0]});
   programming.start();
 }
 function requireProgramming() {
