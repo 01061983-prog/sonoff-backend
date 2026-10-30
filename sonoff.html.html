@@ -61,14 +61,14 @@
       <div id="programmingDetails" hidden>
         <label class="programming-step" for="programmingAction"><span>2</span> Che cosa deve fare?</label>
         <select id="programmingAction"><option value="on">Accendere</option><option value="off">Spegnere</option><option value="pulse">Inviare un impulso</option></select>
-        <p id="programmingPulseNote" class="page-note" hidden>L’autoritorno deve essere già configurato sul Sonoff. Il timer invia un solo comando ON.</p>
+        <p id="programmingPulseNote" class="page-note" hidden>L’autoritorno deve essere già configurato sul Sonoff. Il timer invia un solo comando ON. Puoi programmarlo all’alba o al tramonto; per entrambi crea due programmazioni. Su un cancello la direzione dipende dalla centralina, non dallo stato del relè.</p>
         <label class="programming-step" for="programmingRepeat"><span>3</span> In quale giorno?</label>
         <select id="programmingRepeat"><option value="date">Una data precisa</option><option value="daily">Ogni giorno</option><option value="weekly">Ogni settimana</option></select>
         <div id="programmingDateRow" class="form-row"><label for="programmingDate">Data</label><input id="programmingDate" type="date"></div>
         <fieldset id="programmingWeekRow" class="programming-days" hidden><legend>Giorni della settimana</legend><label><input type="checkbox" name="programmingDay" value="1"><span>Lun</span></label><label><input type="checkbox" name="programmingDay" value="2"><span>Mar</span></label><label><input type="checkbox" name="programmingDay" value="3"><span>Mer</span></label><label><input type="checkbox" name="programmingDay" value="4"><span>Gio</span></label><label><input type="checkbox" name="programmingDay" value="5"><span>Ven</span></label><label><input type="checkbox" name="programmingDay" value="6"><span>Sab</span></label><label><input type="checkbox" name="programmingDay" value="0"><span>Dom</span></label></fieldset>
         <label class="programming-step" for="programmingStart"><span>4</span> A che ora?</label>
-        <div id="programmingModeRow" class="form-row"><label for="programmingMode">Modalità di programmazione</label><select id="programmingMode"><option value="custom">Personalizzata · orari, alba o tramonto</option><option value="twilight">Crepuscolare automatico · tramonto → alba</option></select></div><p id="programmingTwilightNote" class="programming-summary" hidden>Accende al tramonto e spegne all’alba successiva. Gli orari seguono automaticamente il sole nella località scelta, senza aggiornamenti manuali. Per ripeterlo ogni giorno scegli “Ogni giorno”.</p><div id="programmingHours" class="programming-hours"><div class="form-row"><label id="programmingStartLabel" for="programmingStart">Accendi alle / dalle</label><select id="programmingStartType" aria-label="Quando iniziare"><option value="fixed">Orario fisso</option><option value="sunset">Al tramonto</option><option value="sunrise">All’alba</option></select><input id="programmingStart" type="time" required step="60"></div><div id="programmingEndGroup"><label class="programming-checkbox"><input type="checkbox" id="programmingHasEnd">Aggiungi lo spegnimento (facoltativo)</label><div id="programmingEndRow" class="form-row" hidden><div id="programmingEndDateRow"><label for="programmingEndDate">Data di spegnimento</label><input id="programmingEndDate" type="date"></div><label for="programmingEnd">Spegni alle</label><select id="programmingEndType" aria-label="Quando spegnere"><option value="fixed">Orario fisso</option><option value="sunrise">All’alba</option><option value="sunset">Al tramonto</option></select><input id="programmingEnd" type="time" step="60"><p id="programmingFixedEndNote" class="page-note">Per una data precisa scegli anche il giorno di fine. Nelle ripetizioni giornaliere o settimanali, un’ora precedente indica il giorno successivo.</p></div></div></div>
-        <fieldset id="programmingSolarGroup" class="programming-solar" hidden><legend>Località per alba e tramonto</legend><p class="page-note">Scegli provincia e comune: le coordinate vengono impostate automaticamente. Gli orari seguono il sole nella località scelta e sono espressi nell’ora italiana.</p><label class="programming-checkbox"><input id="programmingCustomLocation" type="checkbox">Usa coordinate personalizzate</label><div id="programmingLocationPicker"><div class="programming-location-pickers"><div class="form-row"><label for="programmingProvinceSearch">Cerca provincia</label><input id="programmingProvinceSearch" type="search" placeholder="Nome o sigla, es. Pavia o PV" autocomplete="off"><label for="programmingProvince">Provincia / città metropolitana</label><select id="programmingProvince"><option value="">Caricamento province…</option></select></div><div class="form-row"><label for="programmingMunicipalitySearch">Cerca comune</label><input id="programmingMunicipalitySearch" type="search" placeholder="Nome del comune" autocomplete="off"><label for="programmingMunicipality">Comune dell’impianto</label><select id="programmingMunicipality"><option value="">Seleziona prima la provincia</option></select></div></div><p id="programmingLocationStatus" class="page-note" role="status"></p><button id="programmingLocationsRetry" type="button" class="secondary-button" hidden onclick="loadProgrammingLocations()">Riprova caricamento località</button><p class="page-note">La scelta usa una posizione indicativa del comune. Per indicare il punto esatto dell’impianto, usa le coordinate personalizzate.</p></div><div id="programmingCoordinates" class="programming-location" hidden><div class="form-row"><label for="programmingLocation">Località</label><input id="programmingLocation" maxlength="80" value="Pavia"></div><div class="form-row"><label for="programmingLatitude">Latitudine</label><input id="programmingLatitude" type="number" min="-90" max="90" step="any" value="45.19205"></div><div class="form-row"><label for="programmingLongitude">Longitudine</label><input id="programmingLongitude" type="number" min="-180" max="180" step="any" value="9.15917"></div></div><button id="programmingSolarPreviewBtn" type="button" class="secondary-button" onclick="previewProgrammingSolar()">Verifica alba e tramonto</button><p id="programmingSolarPreview" class="page-note" role="status"></p><p class="page-note">Con alba o tramonto, lo spegnimento usa la prima occorrenza successiva all’accensione, anche il giorno dopo. I giorni selezionati indicano il giorno di inizio.</p><p class="page-note">Dati astronomici: <a href="https://sunrise-sunset.org" target="_blank" rel="noopener noreferrer">Sunrise-Sunset.org</a>. Località: <a href="https://www.istat.it/classificazione/codici-dei-comuni-delle-province-e-delle-regioni/" target="_blank" rel="noopener noreferrer">ISTAT</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>; coordinate indicative elaborate dai confini comunali.</p></fieldset>
+        <div id="programmingModeRow" class="form-row"><label for="programmingMode">Modalità di programmazione</label><select id="programmingMode"><option value="custom">Personalizzata · orari, alba o tramonto</option><option value="solar">Crepuscolare · scegli alba o tramonto</option><option value="twilight">Crepuscolare notte · tramonto → alba</option><option value="daylight">Crepuscolare giorno · alba → tramonto</option></select></div><p id="programmingTwilightNote" class="programming-summary" hidden>Accende al tramonto e spegne all’alba successiva. Gli orari seguono automaticamente il sole nella località scelta, senza aggiornamenti manuali. Per ripeterlo ogni giorno scegli “Ogni giorno”.</p><div id="programmingHours" class="programming-hours"><div class="form-row"><label id="programmingStartLabel" for="programmingStart">Accendi alle / dalle</label><select id="programmingStartType" aria-label="Quando iniziare"><option value="fixed">Orario fisso</option><option value="sunset">Al tramonto</option><option value="sunrise">All’alba</option></select><input id="programmingStart" type="time" required step="60"></div><div id="programmingEndGroup"><label class="programming-checkbox"><input type="checkbox" id="programmingHasEnd">Aggiungi lo spegnimento (facoltativo)</label><div id="programmingEndRow" class="form-row" hidden><div id="programmingEndDateRow"><label for="programmingEndDate">Data di spegnimento</label><input id="programmingEndDate" type="date"></div><label for="programmingEnd">Spegni alle</label><select id="programmingEndType" aria-label="Quando spegnere"><option value="fixed">Orario fisso</option><option value="sunrise">All’alba</option><option value="sunset">Al tramonto</option></select><input id="programmingEnd" type="time" step="60"><p id="programmingFixedEndNote" class="page-note">Per una data precisa scegli anche il giorno di fine. Nelle ripetizioni giornaliere o settimanali, un’ora precedente indica il giorno successivo.</p></div></div></div>
+        <fieldset id="programmingSolarGroup" class="programming-solar" hidden><legend>Località per alba e tramonto</legend><p class="page-note">Scegli provincia e comune: le coordinate vengono impostate automaticamente. Gli orari seguono il sole nella località scelta e sono espressi nell’ora italiana.</p><label class="programming-checkbox"><input id="programmingCustomLocation" type="checkbox">Usa coordinate personalizzate</label><div id="programmingLocationPicker"><div class="programming-location-pickers"><div class="form-row"><label for="programmingProvinceSearch">Cerca provincia</label><input id="programmingProvinceSearch" type="search" placeholder="Nome o sigla, es. Pavia o PV" autocomplete="off"><div id="programmingProvinceResults" class="location-search-results" role="group" aria-label="Risultati province" hidden></div><p id="programmingProvinceResultsStatus" class="page-note" role="status" hidden></p><label for="programmingProvince">Provincia / città metropolitana</label><select id="programmingProvince"><option value="">Caricamento province…</option></select></div><div class="form-row"><label for="programmingMunicipalitySearch">Cerca comune</label><input id="programmingMunicipalitySearch" type="search" placeholder="Nome del comune" autocomplete="off"><div id="programmingMunicipalityResults" class="location-search-results" role="group" aria-label="Risultati comuni" hidden></div><p id="programmingMunicipalityResultsStatus" class="page-note" role="status" hidden></p><label for="programmingMunicipality">Comune dell’impianto</label><select id="programmingMunicipality"><option value="">Seleziona prima la provincia</option></select></div></div><p id="programmingLocationStatus" class="page-note" role="status"></p><button id="programmingLocationsRetry" type="button" class="secondary-button" hidden onclick="loadProgrammingLocations()">Riprova caricamento località</button><p class="page-note">La scelta usa una posizione indicativa del comune. Per indicare il punto esatto dell’impianto, usa le coordinate personalizzate.</p></div><div id="programmingCoordinates" class="programming-location" hidden><div class="form-row"><label for="programmingLocation">Località</label><input id="programmingLocation" maxlength="80" value="Pavia"></div><div class="form-row"><label for="programmingLatitude">Latitudine</label><input id="programmingLatitude" type="number" min="-90" max="90" step="any" value="45.19205"></div><div class="form-row"><label for="programmingLongitude">Longitudine</label><input id="programmingLongitude" type="number" min="-180" max="180" step="any" value="9.15917"></div></div><button id="programmingSolarPreviewBtn" type="button" class="secondary-button" onclick="previewProgrammingSolar()">Verifica alba e tramonto</button><p id="programmingSolarPreview" class="page-note" role="status"></p><p class="page-note">Con alba o tramonto, lo spegnimento usa la prima occorrenza successiva all’accensione, anche il giorno dopo. I giorni selezionati indicano il giorno di inizio.</p><p class="page-note">Dati astronomici: <a href="https://sunrise-sunset.org" target="_blank" rel="noopener noreferrer">Sunrise-Sunset.org</a>. Località: <a href="https://www.istat.it/classificazione/codici-dei-comuni-delle-province-e-delle-regioni/" target="_blank" rel="noopener noreferrer">ISTAT</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>; coordinate indicative elaborate dai confini comunali.</p></fieldset>
         <p id="programmingValidation" class="programming-validation" role="alert" hidden></p><p id="programmingSummary" class="programming-summary" aria-live="polite"></p>
         <div class="form-row"><label for="programmingName">Nome (facoltativo)</label><input id="programmingName" maxlength="100" placeholder="Es. Luci campetto · prenotazione"></div>
         <label class="programming-checkbox"><input type="checkbox" id="programmingEnabled" checked>Programmazione attiva</label>
@@ -1182,16 +1182,37 @@
         for(const item of items)select.add(new Option(label(item),item.id));
         select.value=items.some(item=>item.id===selected)?selected:'';
     }
+    function hideLocationResults(kind){programmingElement(kind+'Results').hidden=true;programmingElement(kind+'ResultsStatus').hidden=true;}
+    function showLocationResults(kind,items,label,choose){
+        const results=programmingElement(kind+'Results'),status=programmingElement(kind+'ResultsStatus');
+        results.replaceChildren();
+        if(!normalizeLocation(programmingElement(kind+'Search').value)){hideLocationResults(kind);return;}
+        status.hidden=false;status.textContent=items.length?`${items.length} ${kind==='Province'?(items.length===1?'provincia trovata':'province trovate'):(items.length===1?'comune trovato':'comuni trovati')}. Seleziona un risultato.`:'Nessun risultato. Prova un altro nome.';
+        results.hidden=!items.length;
+        for(const item of items){const button=document.createElement('button');button.type='button';button.textContent=label(item);button.addEventListener('click',()=>{choose(item);hideLocationResults(kind);});results.appendChild(button);}
+    }
+    function locationSearchKeys(event,kind){
+        const results=programmingElement(kind+'Results'),search=programmingElement(kind+'Search');
+        if(event.key==='Escape'){hideLocationResults(kind);search.focus();return;}
+        if(results.hidden||!['ArrowDown','ArrowUp'].includes(event.key))return;
+        const buttons=[...results.querySelectorAll('button')];if(!buttons.length)return;
+        event.preventDefault();const index=buttons.indexOf(event.target),next=index<0?0:Math.max(0,Math.min(buttons.length-1,index+(event.key==='ArrowDown'?1:-1)));buttons[next].focus();
+    }
     function filterProgrammingProvinces(){
         const select=programmingElement('Province'),previous=select.value,q=normalizeLocation(programmingElement('ProvinceSearch').value);
-        locationOptions(select,italianProvinces.filter(p=>normalizeLocation(p.name+' '+p.abbr+' '+p.region).includes(q)),previous,'Scegli una provincia',p=>p.name+(p.abbr?' ('+p.abbr+')':'')+' · '+p.region);
-        if(previous!==select.value){italianLocationEpoch++;italianLocationLoading=false;italianMunicipalities=[];locationOptions(programmingElement('Municipality'),[],'','Seleziona prima la provincia',m=>m.name);programmingElement('LocationStatus').textContent='Seleziona una provincia e poi il comune.';}
+        const rank=p=>normalizeLocation(p.abbr)===q?0:normalizeLocation(p.name).startsWith(q)?1:normalizeLocation(p.name).includes(q)?2:3;
+        const matches=italianProvinces.filter(p=>normalizeLocation(p.name+' '+p.abbr+' '+p.region).includes(q)).sort((a,b)=>rank(a)-rank(b)),label=p=>p.name+(p.abbr?' ('+p.abbr+')':'')+' · '+p.region;
+        locationOptions(select,matches,previous,'Scegli una provincia',label);
+        showLocationResults('Province',matches,label,p=>{select.value=p.id;programmingElement('ProvinceSearch').value=p.name;void loadProgrammingMunicipalities();});
+        if(previous!==select.value){italianLocationEpoch++;italianLocationLoading=false;italianMunicipalities=[];hideLocationResults('Municipality');locationOptions(programmingElement('Municipality'),[],'','Seleziona prima la provincia',m=>m.name);programmingElement('LocationStatus').textContent='Seleziona una provincia e poi il comune.';}
         programmingFieldsChanged();
     }
     function filterProgrammingMunicipalities(){
         const select=programmingElement('Municipality'),q=normalizeLocation(programmingElement('MunicipalitySearch').value);
-        locationOptions(select,italianMunicipalities.filter(m=>normalizeLocation(m.name).includes(q)),select.value,'Scegli un comune',m=>m.name);
+        const matches=italianMunicipalities.filter(m=>normalizeLocation(m.name).includes(q));
+        locationOptions(select,matches,select.value,'Scegli un comune',m=>m.name);
         programmingMunicipalityChanged();
+        showLocationResults('Municipality',matches,m=>m.name,m=>{select.value=m.id;programmingElement('MunicipalitySearch').value=m.name;programmingMunicipalityChanged();});
     }
     function programmingMunicipalityChanged(){
         solarPreviewEpoch++;programmingElement('SolarPreview').textContent='';
@@ -1205,6 +1226,7 @@
     }
     async function loadProgrammingMunicipalities(selectedId=''){
         const province=programmingElement('Province').value,epoch=++italianLocationEpoch;
+        hideLocationResults('Province');hideLocationResults('Municipality');
         italianLocationLoading=Boolean(province);italianMunicipalities=[];solarPreviewEpoch++;programmingElement('SolarPreview').textContent='';
         locationOptions(programmingElement('Municipality'),[],'',province?'Caricamento comuni…':'Seleziona prima la provincia',m=>m.name);
         programmingElement('LocationsRetry').hidden=true;programmingFieldsChanged();
@@ -1221,6 +1243,7 @@
         finally{if(epoch===italianLocationEpoch){italianLocationLoading=false;programmingFieldsChanged();}}
     }
     async function loadProgrammingLocations(selectedId='',provinceId=''){
+        hideLocationResults('Province');hideLocationResults('Municipality');
         const epoch=++italianLocationEpoch;italianLocationLoading=true;programmingElement('LocationsRetry').hidden=true;
         programmingElement('LocationStatus').textContent='Caricamento delle province italiane…';programmingFieldsChanged();
         try{
@@ -1298,8 +1321,9 @@
         programmingElement('CustomLocation').checked=Boolean(s?.solar?.location&&!s.solar.location.municipalityId);
         programmingElement('ProvinceSearch').value='';programmingElement('MunicipalitySearch').value='';
         italianMunicipalities=[];locationOptions(programmingElement('Municipality'),[],'','Caricamento comuni…',m=>m.name);
-        programmingElement('Mode').value=s?.action==='on'&&s.start==='sunset'&&s.end==='sunrise'?'twilight':'custom';
-        programmingDeviceChanged(s?.outlets||[],s?.action);programmingFieldsChanged();
+        programmingDeviceChanged(s?.outlets||[],s?.action);
+        programmingElement('Mode').value=s?.action==='on'&&s.start==='sunset'&&s.end==='sunrise'?'twilight':s?.action==='on'&&s.start==='sunrise'&&s.end==='sunset'?'daylight':isSolarTime(s?.start)?'solar':'custom';
+        programmingFieldsChanged();
         void loadProgrammingLocations(loc.municipalityId||'018110',loc.provinceCode||'018');
         form.scrollIntoView({behavior:'smooth',block:'start'});select.focus();
     }
@@ -1319,16 +1343,23 @@
         programmingFieldsChanged();
     }
     function programmingModeChanged(){
-        if(programmingElement('Mode').value==='twilight'){
-            programmingElement('StartType').value='sunset';programmingElement('HasEnd').checked=true;programmingElement('EndType').value='sunrise';
-        }
+        const mode=programmingElement('Mode').value;
+        if(mode==='twilight'||mode==='daylight'){
+            programmingElement('StartType').value=mode==='twilight'?'sunset':'sunrise';programmingElement('HasEnd').checked=true;programmingElement('EndType').value=mode==='twilight'?'sunrise':'sunset';
+        }else if(mode==='solar'&&!isSolarTime(programmingElement('StartType').value))programmingElement('StartType').value='sunrise';
         programmingFieldsChanged();
     }
     function programmingFieldsChanged(){
         const action=programmingElement('Action').value,weekly=programmingElement('Repeat').value!=='date',end=action==='on'&&programmingElement('HasEnd').checked;
-        if(action!=='on')programmingElement('Mode').value='custom';
-        const twilight=action==='on'&&programmingElement('Mode').value==='twilight';
-        programmingElement('ModeRow').hidden=action!=='on';programmingElement('Hours').hidden=twilight;programmingElement('TwilightNote').hidden=!twilight;
+        const modeSelect=programmingElement('Mode'),range=action==='on';
+        if(modeSelect.dataset.range!==String(range)){
+            const previous=modeSelect.value,choices=[['custom','Personalizzata · orari, alba o tramonto'],['solar','Crepuscolare · scegli alba o tramonto'],...(range?[['twilight','Crepuscolare notte · tramonto → alba'],['daylight','Crepuscolare giorno · alba → tramonto']]:[])];
+            modeSelect.replaceChildren(...choices.map(([value,label])=>new Option(label,value)));modeSelect.value=choices.some(([value])=>value===previous)?previous:isSolarTime(programmingElement('StartType').value)?'solar':'custom';modeSelect.dataset.range=String(range);
+        }
+        const mode=modeSelect.value,paired=range&&(mode==='twilight'||mode==='daylight');
+        programmingElement('ModeRow').hidden=false;programmingElement('Hours').hidden=paired;programmingElement('TwilightNote').hidden=!paired;
+        programmingElement('TwilightNote').textContent=(mode==='daylight'?'Invia ON all’alba e OFF al tramonto.':'Invia ON al tramonto e OFF all’alba successiva.')+' Gli orari seguono automaticamente il sole nella località scelta. Per ripeterlo ogni giorno scegli “Ogni giorno”.';
+        for(const option of programmingElement('StartType').options)if(option.value==='fixed')option.disabled=mode==='solar';
         programmingElement('DateRow').hidden=weekly;programmingElement('WeekRow').hidden=programmingElement('Repeat').value!=='weekly';
         programmingElement('Date').required=!weekly;
         programmingElement('StartLabel').textContent=action==='on'?'Accendi alle / dalle':action==='off'?'Spegni alle':action==='run'?'Esegui scenario alle':'Invia impulso alle';
@@ -1338,6 +1369,7 @@
         programmingElement('End').hidden=endType!=='fixed';programmingElement('End').required=end&&endType==='fixed';programmingElement('End').disabled=!end||endType!=='fixed';
         programmingElement('SolarGroup').hidden=!solar;programmingElement('FixedEndNote').hidden=solar;
         const custom=programmingElement('CustomLocation').checked;
+        if(!solar||custom){hideLocationResults('Province');hideLocationResults('Municipality');}
         programmingElement('LocationPicker').hidden=custom;programmingElement('Coordinates').hidden=!custom;
         for(const id of ['Location','Latitude','Longitude']){programmingElement(id).required=solar&&custom;programmingElement(id).disabled=!solar||!custom;}
         programmingElement('Province').required=solar&&!custom;programmingElement('Municipality').required=solar&&!custom;
@@ -1378,10 +1410,11 @@
     async function changeProgramming(op,id){const s=programmingData.schedules.find(s=>s.id===id);if(s)await programmingRequest({op,id,expectedVersion:s.version});}
     async function disconnectProgramming(){await programmingRequest({op:'disconnect'});}
     function initProgramming(){
+        for(const kind of ['Province','Municipality']){programmingElement(kind+'Search').addEventListener('keydown',event=>locationSearchKeys(event,kind));programmingElement(kind+'Results').addEventListener('keydown',event=>locationSearchKeys(event,kind));}
         programmingElement('ProvinceSearch').addEventListener('input',filterProgrammingProvinces);
         programmingElement('MunicipalitySearch').addEventListener('input',filterProgrammingMunicipalities);
-        programmingElement('Province').addEventListener('change',()=>{void loadProgrammingMunicipalities();});
-        programmingElement('Municipality').addEventListener('change',programmingMunicipalityChanged);
+        programmingElement('Province').addEventListener('change',()=>{programmingElement('ProvinceSearch').value='';void loadProgrammingMunicipalities();});
+        programmingElement('Municipality').addEventListener('change',()=>{hideLocationResults('Municipality');programmingElement('MunicipalitySearch').value='';programmingMunicipalityChanged();});
         programmingElement('CustomLocation').addEventListener('change',()=>{solarPreviewEpoch++;programmingElement('SolarPreview').textContent='';if(!programmingElement('CustomLocation').checked)programmingMunicipalityChanged();else programmingFieldsChanged();});
         programmingElement('Mode').addEventListener('change',programmingModeChanged);
         programmingElement('Device').addEventListener('change',()=>programmingDeviceChanged());
