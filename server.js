@@ -307,6 +307,48 @@ app.get("/api/devices", requireLogin, route(async (req, res) => {
   res.json({ ok: true, devices: await listDevices(req.cookies.ewelink_access) });
 }));
 
+// Letture di diagnostica: nessun endpoint di comando viene chiamato.
+app.get("/api/device-diagnostics", requireLogin, route(async (req, res) => {
+  const id=req.query.deviceId;
+  if(typeof id!=="string"||!/^[0-9a-f]{10}$/i.test(id))throw cloudError(400,"invalid_device","Indica un ID dispositivo eWeLink valido.");
+  const token=req.cookies.ewelink_access,homes=await families(token),checks=[],matches=[];
+  const info=thing=>{
+    const d=thing.itemData||{},p=d.params||{};
+    return {deviceId:d.deviceid,name:d.name||null,itemType:thing.itemType,brand:d.brandName||null,model:d.productModel||null,uiid:d.extra?.uiid??d.extra?.extra?.uiid??d.uiid??null,online:typeof d.online==="boolean"?d.online:null,switch:["on","off"].includes(p.switch)?p.switch:null,channels:Array.isArray(p.switches)?p.switches.map(c=>({outlet:c.outlet,state:["on","off"].includes(c.switch)?c.switch:null})):[]};
+  };
+  const readError=e=>{
+    if(e.code==="not_authenticated")throw e;
+    return {httpStatus:e.status||502,providerError:e.providerError??e.code??null,message:String(e.message||"Lettura non riuscita").slice(0,400)};
+  };
+  for(const home of homes){
+    try{
+      const query=new URLSearchParams({familyid:home.id,num:"0",beginIndex:"-9999999"});
+      const raw=await api("/v2/device/thing?"+query,token),things=raw.data?.thingList;
+      if(!Array.isArray(things))throw new Error("Elenco dispositivi non valido.");
+      const found=things.filter(t=>t.itemData?.deviceid===id).map(info);matches.push(...found);
+      checks.push({source:"all-devices",home:home.name||null,reportedTotal:raw.data?.total??null,received:things.length,found:found.length>0});
+    }catch(e){checks.push({source:"all-devices",home:home.name||null,...readError(e)});}
+  }
+  const listed=(await listDevices(token,homes)).some(d=>d.deviceid===id);
+  for(const itemType of [1,2]){
+    try{
+      const raw=await api("/v2/device/thing",token,{thingList:[{itemType,id}]}),things=raw.data?.thingList;
+      if(!Array.isArray(things))throw new Error("Risposta dispositivo non valida.");
+      const found=things.filter(t=>t.itemData?.deviceid===id).map(info);matches.push(...found);
+      checks.push({source:itemType===1?"specified-owned":"specified-shared",found:found.length>0});
+      if(found.length)break;
+    }catch(e){checks.push({source:itemType===1?"specified-owned":"specified-shared",...readError(e)});}
+  }
+  try{
+    // GET legge lo stato; soltanto POST sullo stesso percorso sarebbe un comando.
+    const raw=await api("/v2/device/thing/status?"+new URLSearchParams({type:"1",id}),token);
+    const p=raw.data?.params;
+    if(!p||typeof p!=="object"||Array.isArray(p))throw new Error("Stato non disponibile nella risposta eWeLink.");
+    checks.push({source:"read-status",found:true,switch:["on","off"].includes(p.switch)?p.switch:null,channels:Array.isArray(p.switches)?p.switches.map(c=>({outlet:c.outlet,state:["on","off"].includes(c.switch)?c.switch:null})):[]});
+  }catch(e){checks.push({source:"read-status",...readError(e)});}
+  res.set("Cache-Control","no-store");res.json({ok:true,deviceId:id,listed,matches,checks});
+}));
+
 app.get("/api/scenes", requireLogin, route(async (req, res) => {
   const token = req.cookies.ewelink_access;
   const homes = await families(token);
