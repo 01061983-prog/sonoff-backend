@@ -27,7 +27,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    }
    const owner=link.data().owner;req.programmingOwner=owner;req.browserSession=session;
    const data=await access(owner);
-   applyCredentials(req,data);return true;
+   applyCredentials(req,data);identityCache.set(hash(data.accessToken),{owner,until:now()+5*60000});return true;
   }
   if(!req.cookies.ewelink_refresh)return false;
   const link=await aliasRef(req.cookies.ewelink_refresh).get();
@@ -84,6 +84,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
     ...(browserLogin?{refreshClaim:null,refreshUntil:0}:{}),lastError:null,updatedAt:now()});
    t.set(aliasRef(credentials.refreshToken),{owner,generation,validUntil:credentials.rtExpiredTime});
   });
+  identityCache.set(hash(credentials.accessToken),{owner,until:now()+5*60000});
   return owner;
  }
  async function connectBrowser(req,res,providerData){
@@ -128,14 +129,26 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    if(credentials.rtExpiredTime<=now())throw error(401,'not_authenticated','Autorizzazione dei timer scaduta. Ricollega eWeLink.');
    t.set(ref,{...data,refreshClaim:claim,refreshUntil:now()+120000});return {credentials,refresh:true};
   });
-  if(!result.refresh)return result.credentials;
+  if(!result.refresh){identityCache.set(hash(result.credentials.accessToken),{owner,until:now()+5*60000});return result.credentials;}
   try{
    const body={rt:result.credentials.refreshToken};
    const response=await api('/v2/user/refresh',null,body,'Sign '+crypto.createHmac('sha256',secret).update(JSON.stringify(body)).digest('base64'));
    if(!response.data?.at||!response.data?.rt)throw error(502,'refresh_failed','Rinnovo eWeLink non valido.');
    const c={accessToken:response.data.at,refreshToken:response.data.rt,atExpiredTime:Number(response.data.atExpiredTime)||now()+30*core.DAY,rtExpiredTime:Number(response.data.rtExpiredTime)||now()+60*core.DAY};
-   await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data.refreshClaim!==claim)throw error(409,'refresh_lost','Rinnovo non confermato.');t.set(ref,{...data,credentials:seal(c),renewAt:c.atExpiredTime-5*60000,refreshUntil:0,lastError:null,updatedAt:now()});t.set(aliasRef(c.refreshToken),{owner,generation:data.generation,validUntil:c.rtExpiredTime});});return c;
+   await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data.refreshClaim!==claim)throw error(409,'refresh_lost','Rinnovo non confermato.');t.set(ref,{...data,credentials:seal(c),renewAt:c.atExpiredTime-5*60000,refreshUntil:0,lastError:null,updatedAt:now()});t.set(aliasRef(c.refreshToken),{owner,generation:data.generation,validUntil:c.rtExpiredTime});});identityCache.set(hash(c.accessToken),{owner,until:now()+5*60000});return c;
   }catch(e){await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data?.refreshClaim===claim)t.set(ref,{...data,refreshUntil:0,...(e.status===401?{reauthRequired:true}:{}),renewAt:e.status===401?core.NEVER:now()+5*60000,lastError:e.status===401?'Ricollega l’account eWeLink per i timer.':'Rinnovo temporaneamente non disponibile. Nuovo tentativo tra 5 minuti.'});});throw e;}
+ }
+ async function linkedDevices(token){
+  const owner=await identity({cookies:{ewelink_access:token}}),snap=await db().collection('ewelinkLinkedDevices').doc(owner).get();
+  return (snap.data()?.devices||[]).filter(d=>typeof d.id==='string'&&/^[a-f0-9]{10}$/i.test(d.id)&&typeof d.workspaceId==='string').slice(0,20);
+ }
+ async function registerLinkedDevice(req,verified){
+  const owner=await identity(req),ref=db().collection('ewelinkLinkedDevices').doc(owner);
+  await db().runTransaction(async t=>{
+   const snap=await t.get(ref),data=snap.data()||{},devices=(data.devices||[]).filter(d=>d.id!==verified.id);
+   if(devices.length>=20)throw error(400,'linked_limit','Puoi collegare fino a 20 dispositivi per ID.');
+   t.set(ref,{devices:[...devices,{id:verified.id,name:verified.name,workspaceId:verified.workspaceId,uiid:2,outlets:[0,1]}],updatedAt:now()});
+  });return {ok:true,deviceId:verified.id,name:verified.name};
  }
  async function owned(owner){const snap=await schedules().where('owner','==',owner).get();return snap.docs.map(d=>({...d.data(),id:d.id}));}
  function visible(s){const {owner,...result}=s; if(result.last?.status==='claimed'&&result.last.until<now())result.last={...result.last,status:'unknown',message:'Server riavviato: esito da verificare. Nessun reinvio automatico.'};return result;}
@@ -254,5 +267,5 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
   }finally{busy=false;}
  }
  function start(){if(timer)return;timer=setInterval(()=>{void tick().catch(()=>console.error('Controllo programmazioni non riuscito.'));},30000);timer.unref?.();void tick().catch(()=>console.error('Avvio programmazioni non riuscito.'));}
- return {list,mutate,identity,restoreSession,connectBrowser,logoutBrowser,markAuthenticationRequired,remember,access,start,tick,seal,open,stop(){if(timer)clearInterval(timer);timer=null;}};
+ return {linkedDevices,registerLinkedDevice,list,mutate,identity,restoreSession,connectBrowser,logoutBrowser,markAuthenticationRequired,remember,access,start,tick,seal,open,stop(){if(timer)clearInterval(timer);timer=null;}};
 };

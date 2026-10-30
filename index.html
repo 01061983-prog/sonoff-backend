@@ -44,7 +44,7 @@
     <section class="dashboard-section"><div class="section-heading"><div><h2>I tuoi dispositivi</h2><p>Le cose importanti, sempre a portata di mano.</p></div><button class="text-button" onclick="setView('devices')">Vedi tutti <span data-icon="arrow-right"></span></button></div><div id="homeDevicesGrid" class="devices-grid"></div></section>
     <div class="sync-footer"><span data-icon="shield"></span><span>Collegamento al tuo account eWeLink</span><span id="lastSync">In attesa del primo aggiornamento</span></div>
   </section>
-  <section id="devicesView" class="view" style="display:none" aria-labelledby="devicesHeading"><div class="page-heading"><div><p class="eyebrow">LUCI E ACCESSI</p><h1 id="devicesHeading">I tuoi dispositivi<span class="green-dot">.</span></h1><p class="heading-sub">Controlla gli ambienti, uno alla volta.</p></div></div><div class="device-toolbar"><label class="search-box"><span data-icon="search"></span><input type="search" id="deviceSearch" placeholder="Cerca un dispositivo…" aria-label="Cerca un dispositivo"></label><div class="filter-tabs" aria-label="Filtra dispositivi"><button data-filter="all" class="selected" aria-pressed="true">Tutti</button><button data-filter="online" aria-pressed="false">Online</button><button data-filter="offline" aria-pressed="false">Offline</button></div></div><div id="allDevicesGrid" class="devices-grid"></div><details class="technical-details"><summary>Dettagli tecnici dei dispositivi</summary><div class="table-wrap"><table id="devicesTable"><thead><tr><th>Dispositivo</th><th>ID</th><th>Connessione</th><th>Stato</th><th>Comando</th></tr></thead><tbody><tr><td colspan="5">Caricamento…</td></tr></tbody></table></div></details><p class="page-note">Gli stati si aggiornano all’apertura della pagina e dopo ogni comando. Usa il pulsante Aggiorna per una nuova lettura.</p></section>
+  <section id="devicesView" class="view" style="display:none" aria-labelledby="devicesHeading"><div class="page-heading"><div><p class="eyebrow">LUCI E ACCESSI</p><h1 id="devicesHeading">I tuoi dispositivi<span class="green-dot">.</span></h1><p class="heading-sub">Controlla gli ambienti, uno alla volta.</p></div></div><details class="technical-details"><summary>Collega un dispositivo mancante tramite ID</summary><p class="page-note">Per dispositivi compatibili a due canali, come New Smart G2, leggibili da eWeLink ma assenti dall’elenco automatico. Il collegamento è condiviso soltanto tra i tuoi dispositivi dello stesso account.</p><form id="linkDeviceForm" class="device-toolbar"><label class="search-box">ID eWeLink<input id="linkDeviceId" name="deviceId" required pattern="[0-9A-Fa-f]{10}" maxlength="10" placeholder="ID di 10 caratteri" autocomplete="off"></label><button id="linkDeviceBtn" type="submit" class="primary-button">Collega dispositivo</button><p id="linkDeviceStatus" role="status"></p></form></details><div class="device-toolbar"><label class="search-box"><span data-icon="search"></span><input type="search" id="deviceSearch" placeholder="Cerca un dispositivo…" aria-label="Cerca un dispositivo"></label><div class="filter-tabs" aria-label="Filtra dispositivi"><button data-filter="all" class="selected" aria-pressed="true">Tutti</button><button data-filter="online" aria-pressed="false">Online</button><button data-filter="offline" aria-pressed="false">Offline</button></div></div><div id="allDevicesGrid" class="devices-grid"></div><details class="technical-details"><summary>Dettagli tecnici dei dispositivi</summary><div class="table-wrap"><table id="devicesTable"><thead><tr><th>Dispositivo</th><th>ID</th><th>Connessione</th><th>Stato</th><th>Comando</th></tr></thead><tbody><tr><td colspan="5">Caricamento…</td></tr></tbody></table></div></details><p class="page-note">Gli stati si aggiornano all’apertura della pagina e dopo ogni comando. Usa il pulsante Aggiorna per una nuova lettura.</p></section>
   <section id="settingsView" class="view" aria-labelledby="scenesHeading"><div class="page-heading"><div><p class="eyebrow">PICCOLI GESTI, GRANDI COMODITÀ</p><h1 id="scenesHeading">Scenari<span class="green-dot">.</span></h1><p class="heading-sub">Combina più azioni in un unico pulsante.</p></div></div><div id="scenesList" class="scenes-grid-settings"></div><div id="sceneEditor" class="scene-editor" style="display:none"><div class="editor-heading"><div><p class="eyebrow">PERSONALIZZA</p><h2 id="editorTitle">Crea uno scenario</h2></div><button class="icon-button" onclick="cancelSceneEdit()" aria-label="Chiudi editor"><span data-icon="close"></span></button></div><div class="form-grid"><div class="form-row"><label for="sceneName">Nome scenario</label><input id="sceneName" type="text" maxlength="100" placeholder="Es. Serata in oratorio"></div><div class="form-row"><label for="sceneType">Esecuzione</label><select id="sceneType"><option value="manuale">Manuale · con un tocco</option><option value="crepuscolare" disabled>Crepuscolare · non disponibile</option></select></div></div><h3 class="editor-subtitle">Scegli dispositivi e azioni</h3><p class="page-note">Per cancello e relè con autoritorno già configurato scegli “Impulso”. Il colore indica lo stato del relè, non la posizione del cancello.</p><div id="sceneDevicesList" class="devices-list"></div><div class="editor-footer"><button class="secondary-button" onclick="cancelSceneEdit()">Annulla</button><button class="primary-button" onclick="saveScene()"><span data-icon="check"></span>Salva scenario</button></div></div></section>
 
   <section id="programmingView" class="view" style="display:none" aria-labelledby="programmingHeading">
@@ -244,6 +244,19 @@
     logoutBtn.addEventListener("click", logout);
     newSceneBtn.addEventListener("click", () => startSceneEdit(null));
 
+    async function linkMissingDevice(event){
+        event.preventDefault();
+        const button=document.getElementById('linkDeviceBtn'),status=document.getElementById('linkDeviceStatus');
+        if(button.disabled)return;
+        if(!devicesFresh||authRequired||sceneSyncMode!=='live'||!sceneWorkspace){status.textContent='Attendi il caricamento dei dispositivi e della casa eWeLink.';return;}
+        button.disabled=true;status.textContent='Verifico il dispositivo con eWeLink…';
+        try{
+            const result=await apiRequest('/api/linked-devices',{deviceId:document.getElementById('linkDeviceId').value.trim().toLowerCase(),workspaceId:sceneWorkspace.id});
+            status.textContent=result.name+' collegato con due canali. Aggiorno l’elenco…';
+            if(await loadDevices()){status.textContent=result.name+' collegato. Disponibile anche negli scenari e nella programmazione.';document.getElementById('linkDeviceId').value='';}else status.textContent='Collegamento salvato. Aggiorna l’elenco per visualizzarlo.';
+        }catch(error){status.textContent=error.message;}
+        finally{button.disabled=false;}
+    }
     // LOGOUT
     async function logout() {
         resumableSession = false;
@@ -296,6 +309,7 @@
             document.getElementById("authPanel").hidden = true;
             const devices = Array.isArray(data.devices) ? data.devices : [];
             currentDevices = devices;
+            if(Array.isArray(data.warnings)&&data.warnings.length)setMessage(data.warnings.join(" "),"error");
 
             if (!devices.length) {
                 setStatus("Nessun dispositivo trovato", "ok");
@@ -1247,6 +1261,7 @@
     document.addEventListener("DOMContentLoaded", () => {
         initApp();
         initProgramming();
+        document.getElementById('linkDeviceForm').addEventListener('submit',linkMissingDevice);
         setInterval(tryResumeDeviceSession, 10000);
         setInterval(() => {
             let expired = false;

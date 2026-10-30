@@ -271,6 +271,42 @@ async function families(token) {
   return response.data.familyList;
 }
 
+// Ricerca autorizzata per ID: non modifica lo stato dei dispositivi.
+async function readLinkedDevice(token,id,workspaceId){
+  let found=null,lastError;
+  for(const itemType of [1,2]){
+    try{
+      const raw=await api("/v2/device/thing",token,{thingList:[{itemType,id}]});
+      found=raw.data?.thingList?.find(t=>[1,2].includes(t.itemType)&&t.itemData?.deviceid===id);
+      if(found)break;
+    }catch(error){if(error.code==="not_authenticated")throw error;lastError=error;}
+  }
+  if(!found)throw lastError||cloudError(404,"device_not_found","Il dispositivo non è accessibile a questo account eWeLink.");
+  const d=found.itemData,uiid=d.extra?.uiid??d.extra?.extra?.uiid??d.uiid;
+  // UIID 2 è Dual-Channel Plug: gli altri slot della risposta non sono canali fisici.
+  if(uiid!==2)throw cloudError(400,"unsupported_linked_model","La mappatura dei canali di questo modello deve essere verificata prima di collegarlo.");
+  const switches=[0,1].map(outlet=>{
+    const channel=d.params?.switches?.find(c=>c.outlet===outlet);
+    if(!channel||!["on","off"].includes(channel.switch))throw cloudError(502,"invalid_device_state","Stato dei due canali non verificabile. Nessun comando disponibile.");
+    return {outlet,switch:channel.switch};
+  });
+  return {deviceid:id,name:d.name||id,online:d.online===true,params:{switches},familyId:workspaceId,itemType:found.itemType,uiid:2,linkedById:true};
+}
+async function assertLinkedDeviceChannels(token,id,outlets){
+  if(!programming?.linkedDevices)return;
+  const entry=(await programming.linkedDevices(token)).find(d=>d.id===id);
+  if(entry&&(!Array.isArray(outlets)||!outlets.length||outlets.some(o=>![0,1].includes(o))))throw cloudError(400,"invalid_linked_channels","Per questo dispositivo scegli soltanto Canale 1 o Canale 2.");
+}
+app.post("/api/linked-devices",requireLogin,route(async(req,res)=>{
+  const id=typeof req.body?.deviceId==="string"?req.body.deviceId.trim().toLowerCase():"",workspaceId=req.body?.workspaceId;
+  if(!/^[a-f0-9]{10}$/.test(id))throw cloudError(400,"invalid_device","Indica un ID dispositivo eWeLink valido di 10 caratteri.");
+  const homes=await families(req.cookies.ewelink_access);
+  if(typeof workspaceId!=="string"||!homes.some(h=>h.id===workspaceId))throw cloudError(403,"workspace_forbidden","Scegli una casa eWeLink del tuo account.");
+  const verified=await readLinkedDevice(req.cookies.ewelink_access,id,workspaceId);
+  const result=await requireProgramming().registerLinkedDevice(req,{id,name:verified.name,workspaceId});
+  res.json({...result,channels:2});
+}));
+
 async function listDevices(token, homes, {includeOwnership = false} = {}) {
   homes = homes || await families(token);
   const devices = new Map();
@@ -299,12 +335,24 @@ async function listDevices(token, homes, {includeOwnership = false} = {}) {
       beginIndex = next;
     }
   }
-  // Restituisce solo dispositivi reali: non inventa stati o dispositivi online.
-  return [...devices.values()];
+  const warnings=[];
+  if(!includeOwnership&&programming?.linkedDevices){
+    const linked=await programming.linkedDevices(token);
+    for(const entry of linked.filter(d=>homes.some(h=>h.id===d.workspaceId))){
+      try{devices.set(entry.id,await readLinkedDevice(token,entry.id,entry.workspaceId));}
+      catch(error){
+        if(error.code==="not_authenticated")throw error;
+        devices.delete(entry.id);warnings.push((entry.name||entry.id)+": lettura non disponibile. Verifica il collegamento eWeLink.");
+      }
+    }
+  }
+  const result=[...devices.values()];if(warnings.length)Object.defineProperty(result,"warnings",{value:warnings});
+  return result;
 }
 app.get("/api/session", requireLogin, (_req, res) => res.json({ok:true}));
 app.get("/api/devices", requireLogin, route(async (req, res) => {
-  res.json({ ok: true, devices: await listDevices(req.cookies.ewelink_access) });
+  const devices=await listDevices(req.cookies.ewelink_access);
+  res.json({ok:true,devices,warnings:devices.warnings||[]});
 }));
 
 // Letture di diagnostica: nessun endpoint di comando viene chiamato.
@@ -514,6 +562,7 @@ app.get("/api/user-scenes/events", requireLogin, route(async (req, res) => {
 async function runCloudScene(context, run, scene, accessToken) {
   let completed = 0, failure = null;
   try {
+    for(const action of scene.actions)await assertLinkedDeviceChannels(accessToken,action.deviceId,action.kind==="multi"?action.outlets:action.kind==="gate"?[0]:null);
     if (scene.mode === "toggle") {
       const devices = await listDevices(accessToken, [context.workspace]);
       const states = scene.actions.flatMap(action => {
@@ -625,6 +674,7 @@ app.post("/api/toggle", requireLogin, route(async (req, res) => {
   await assertNoSceneRunning(req);
   // Il cancello è un dispositivo: type 1. Type 2 indicherebbe un gruppo.
   // L'eventuale modalità impulso resta configurata sul Sonoff.
+  await assertLinkedDeviceChannels(req.cookies.ewelink_access,deviceId,null);
   const sent = { type: 1, id: deviceId, params };
   const raw = await api("/v2/device/thing/status", req.cookies.ewelink_access, sent);
   res.json({ ok: true, sent, raw });
@@ -637,6 +687,7 @@ app.post("/api/toggle-multi", requireLogin, route(async (req, res) => {
     return res.status(400).json({ ok: false, error: "invalid_params", msg: "deviceId, outlets o state non validi." });
   }
   await assertNoSceneRunning(req);
+  await assertLinkedDeviceChannels(req.cookies.ewelink_access,body.deviceId,body.outlets);
   const switches = [...new Set(body.outlets)].map(outlet => ({ outlet, switch: body.state }));
   const sent = { type: 1, id: body.deviceId, params: { switches } };
   const raw = await api("/v2/device/thing/status", req.cookies.ewelink_access, sent);
