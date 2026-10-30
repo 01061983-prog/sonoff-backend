@@ -52,6 +52,7 @@ body[data-view="scenes"] #settingsView{padding-top:8px}body[data-view="scenes"] 
 @media(prefers-reduced-motion:reduce){.scenario-pad{transition:none}}
 
 /* Gli impulsi usano il blu anche durante il relè attivo e la breve conferma. */
+.scenario-pad{gap:0}
 .scenario-pad.state-pulse,.scenario-pad.state-pulse:hover:not(:disabled){--pad-edge:#134397;--pad-shadow:#1d5fca30;background:linear-gradient(145deg,#398bf0,#1c5ac4);color:#fff;border-color:#377ce0;opacity:1}
 .scenario-pad.state-unknown:hover:not(:disabled){background:linear-gradient(145deg,#8492a6,#5d6b80);color:#fff;border-color:#718096}
 .scenario-pad.state-running:hover:not(:disabled){background:linear-gradient(145deg,#398bf0,#1c5ac4);color:#fff;border-color:#377ce0}
