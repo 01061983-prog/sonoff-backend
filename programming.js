@@ -46,7 +46,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    const same=previous?.refreshToken===credentials.refreshToken;
    if(same)credentials.rtExpiredTime=previous.rtExpiredTime;
    const generation=same&&data.generation?data.generation:crypto.randomUUID();
-   t.set(ref,{...data,generation,credentials:seal(credentials),revoked:false,lastError:null,updatedAt:now()});
+   t.set(ref,{...data,generation,credentials:seal(credentials),renewAt:credentials.atExpiredTime-5*60000,revoked:false,lastError:null,updatedAt:now()});
    t.set(aliasRef(credentials.refreshToken),{owner,generation,validUntil:credentials.rtExpiredTime});
   });
   return owner;
@@ -68,8 +68,8 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    const response=await api('/v2/user/refresh',null,body,'Sign '+crypto.createHmac('sha256',secret).update(JSON.stringify(body)).digest('base64'));
    if(!response.data?.at||!response.data?.rt)throw error(502,'refresh_failed','Rinnovo eWeLink non valido.');
    const c={accessToken:response.data.at,refreshToken:response.data.rt,atExpiredTime:Number(response.data.atExpiredTime)||now()+30*core.DAY,rtExpiredTime:Number(response.data.rtExpiredTime)||now()+60*core.DAY};
-   await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data.refreshClaim!==claim)throw error(409,'refresh_lost','Rinnovo non confermato.');t.set(ref,{...data,credentials:seal(c),refreshUntil:0,lastError:null,updatedAt:now()});t.set(aliasRef(c.refreshToken),{owner,generation:data.generation,validUntil:c.rtExpiredTime});});return c;
-  }catch(e){await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data?.refreshClaim===claim)t.set(ref,{...data,refreshUntil:0,lastError:'Ricollega l’account eWeLink per i timer.'});});throw e;}
+   await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data.refreshClaim!==claim)throw error(409,'refresh_lost','Rinnovo non confermato.');t.set(ref,{...data,credentials:seal(c),renewAt:c.atExpiredTime-5*60000,refreshUntil:0,lastError:null,updatedAt:now()});t.set(aliasRef(c.refreshToken),{owner,generation:data.generation,validUntil:c.rtExpiredTime});});return c;
+  }catch(e){await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data?.refreshClaim===claim)t.set(ref,{...data,refreshUntil:0,renewAt:e.status===401?core.NEVER:now()+5*60000,lastError:e.status===401?'Ricollega l’account eWeLink per i timer.':'Rinnovo temporaneamente non disponibile. Nuovo tentativo tra 5 minuti.'});});throw e;}
  }
  async function owned(owner){const snap=await schedules().where('owner','==',owner).get();return snap.docs.map(d=>({...d.data(),id:d.id}));}
  function visible(s){const {owner,...result}=s; if(result.last?.status==='claimed'&&result.last.until<now())result.last={...result.last,status:'unknown',message:'Server riavviato: esito da verificare. Nessun reinvio automatico.'};return result;}
@@ -79,7 +79,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
   if(op==='connect'){if(req.body.authorize!==true)throw error(400,'consent_required','Consenti l’esecuzione dei timer a webapp chiusa.');await remember(req);return list(req);}
   if(op==='disconnect'){
    const records=await owned(owner);for(const s of records){const ref=schedules().doc(s.id);await db().runTransaction(async t=>{const doc=await t.get(ref);if(doc.data()?.last?.status==='claimed'&&doc.data().last.until>now())throw error(409,'schedule_busy','Un comando programmato è già in corso.');t.set(ref,{...doc.data(),enabled:false,nextAt:core.NEVER,version:doc.data().version+1});});}
-   await accounts().doc(owner).set({revoked:true,credentials:null,lastError:null,updatedAt:now()},{merge:true});return list(req);
+   await accounts().doc(owner).set({revoked:true,credentials:null,renewAt:core.NEVER,lastError:null,updatedAt:now()},{merge:true});return list(req);
   }
   const id=req.body?.id||crypto.randomUUID();if(typeof id!=='string'||!/^[\w-]{1,100}$/.test(id))throw error(400,'invalid_id','Programmazione non valida.');
   const ref=schedules().doc(id),records=await owned(owner);
@@ -134,7 +134,15 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
   await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data?.last?.id===claim)t.set(ref,{...data,last:{...data.last,status,message,finishedAt:now(),until:0}});});
  }
  let busy=false,timer=null;
- async function tick(){if(busy)return;busy=true;try{const due=await schedules().where('nextAt','<=',now()).limit(20).get();for(const doc of due.docs)await execute(doc.ref);}finally{busy=false;}}
+ async function tick(){
+  if(busy)return;busy=true;
+  try{
+   const due=await schedules().where('nextAt','<=',now()).limit(20).get();for(const doc of due.docs)await execute(doc.ref);
+   // Mantiene valida l'autorizzazione anche per prenotazioni lontane nel tempo.
+   const renewals=await accounts().where('renewAt','<=',now()).limit(5).get();
+   for(const doc of renewals.docs)if(!doc.data().revoked)await access(doc.id).catch(()=>{});
+  }finally{busy=false;}
+ }
  function start(){if(timer)return;timer=setInterval(()=>{void tick().catch(()=>console.error('Controllo programmazioni non riuscito.'));},30000);timer.unref?.();void tick().catch(()=>console.error('Avvio programmazioni non riuscito.'));}
  return {list,mutate,identity,restoreSession,remember,access,start,tick,seal,open,stop(){if(timer)clearInterval(timer);timer=null;}};
 };
