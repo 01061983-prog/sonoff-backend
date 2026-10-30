@@ -67,7 +67,8 @@
         <div id="programmingDateRow" class="form-row"><label for="programmingDate">Data</label><input id="programmingDate" type="date"></div>
         <fieldset id="programmingWeekRow" class="programming-days" hidden><legend>Giorni della settimana</legend><label><input type="checkbox" name="programmingDay" value="1"><span>Lun</span></label><label><input type="checkbox" name="programmingDay" value="2"><span>Mar</span></label><label><input type="checkbox" name="programmingDay" value="3"><span>Mer</span></label><label><input type="checkbox" name="programmingDay" value="4"><span>Gio</span></label><label><input type="checkbox" name="programmingDay" value="5"><span>Ven</span></label><label><input type="checkbox" name="programmingDay" value="6"><span>Sab</span></label><label><input type="checkbox" name="programmingDay" value="0"><span>Dom</span></label></fieldset>
         <label class="programming-step" for="programmingStart"><span>4</span> A che ora?</label>
-        <div class="programming-hours"><div class="form-row"><label id="programmingStartLabel" for="programmingStart">Accendi alle / dalle</label><input id="programmingStart" type="time" required step="60"></div><div id="programmingEndGroup"><label class="programming-checkbox"><input type="checkbox" id="programmingHasEnd">Aggiungi lo spegnimento (facoltativo)</label><div id="programmingEndRow" class="form-row" hidden><div id="programmingEndDateRow"><label for="programmingEndDate">Data di spegnimento</label><input id="programmingEndDate" type="date"></div><label for="programmingEnd">Spegni alle</label><input id="programmingEnd" type="time" step="60"><p class="page-note">Per una data precisa scegli anche il giorno di fine. Nella ripetizione settimanale, un’ora precedente indica il giorno successivo.</p></div></div></div>
+        <div class="programming-hours"><div class="form-row"><label id="programmingStartLabel" for="programmingStart">Accendi alle / dalle</label><select id="programmingStartType" aria-label="Quando iniziare"><option value="fixed">Orario fisso</option><option value="sunset">Al tramonto</option><option value="sunrise">All’alba</option></select><input id="programmingStart" type="time" required step="60"></div><div id="programmingEndGroup"><label class="programming-checkbox"><input type="checkbox" id="programmingHasEnd">Aggiungi lo spegnimento (facoltativo)</label><div id="programmingEndRow" class="form-row" hidden><div id="programmingEndDateRow"><label for="programmingEndDate">Data di spegnimento</label><input id="programmingEndDate" type="date"></div><label for="programmingEnd">Spegni alle</label><select id="programmingEndType" aria-label="Quando spegnere"><option value="fixed">Orario fisso</option><option value="sunrise">All’alba</option><option value="sunset">Al tramonto</option></select><input id="programmingEnd" type="time" step="60"><p id="programmingFixedEndNote" class="page-note">Per una data precisa scegli anche il giorno di fine. Nella ripetizione settimanale, un’ora precedente indica il giorno successivo.</p></div></div></div>
+        <fieldset id="programmingSolarGroup" class="programming-solar" hidden><legend>Località per alba e tramonto</legend><p class="page-note">Orari astronomici da Internet, aggiornati automaticamente. Pavia è la località iniziale; puoi indicare le coordinate di un altro impianto. Gli orari sono espressi nell’ora italiana.</p><div class="programming-location"><div class="form-row"><label for="programmingLocation">Località</label><input id="programmingLocation" maxlength="80" value="Pavia"></div><div class="form-row"><label for="programmingLatitude">Latitudine</label><input id="programmingLatitude" type="number" min="-90" max="90" step="any" value="45.19205"></div><div class="form-row"><label for="programmingLongitude">Longitudine</label><input id="programmingLongitude" type="number" min="-180" max="180" step="any" value="9.15917"></div></div><button id="programmingSolarPreviewBtn" type="button" class="secondary-button" onclick="previewProgrammingSolar()">Verifica alba e tramonto</button><p id="programmingSolarPreview" class="page-note" role="status"></p><p class="page-note">Con alba o tramonto, lo spegnimento usa la prima occorrenza successiva all’accensione, anche il giorno dopo. I giorni selezionati indicano il giorno di inizio.</p><p class="page-note">Dati astronomici: <a href="https://sunrise-sunset.org" target="_blank" rel="noopener noreferrer">Sunrise-Sunset.org</a>. Coordinate iniziali di Pavia: <a href="https://www.geonames.org/3171366/pavia.html" target="_blank" rel="noopener noreferrer">GeoNames</a>.</p></fieldset>
         <p id="programmingValidation" class="programming-validation" role="alert" hidden></p><p id="programmingSummary" class="programming-summary" aria-live="polite"></p>
         <div class="form-row"><label for="programmingName">Nome (facoltativo)</label><input id="programmingName" maxlength="100" placeholder="Es. Luci campetto · prenotazione"></div>
         <label class="programming-checkbox"><input type="checkbox" id="programmingEnabled" checked>Programmazione attiva</label>
@@ -1148,7 +1149,7 @@
     let programmingEditing = null, programmingEpoch = 0, programmingBusy = false;
     const programmingElement = id => document.getElementById('programming'+id);
     function clearProgramming() {
-        programmingEpoch++;
+        programmingEpoch++;solarPreviewEpoch++;
         programmingData = {schedules:[],connected:false};programmingEditing=null;
         programmingElement('List').innerHTML='';programmingElement('Form').hidden=true;
         programmingElement('Status').textContent='Accedi al tuo account per vedere le tue programmazioni.';
@@ -1169,6 +1170,25 @@
             programmingData=data;renderProgramming();
         }catch(error){if(epoch===programmingEpoch)programmingElement('Status').textContent=error.message;}
     }
+    const isSolarTime = value => value==='sunrise'||value==='sunset';
+    const programmingTimeLabel = value => value==='sunrise'?"all’alba":value==='sunset'?'al tramonto':'alle '+value;
+    let solarPreviewEpoch=0;
+    function programmingUsesSolar(){return isSolarTime(programmingElement('StartType').value)||(programmingElement('Action').value==='on'&&programmingElement('HasEnd').checked&&isSolarTime(programmingElement('EndType').value));}
+    async function previewProgrammingSolar(){
+        const epoch=++solarPreviewEpoch,output=programmingElement('SolarPreview');
+        if(!programmingUsesSolar())return;
+        for(const id of ['Location','Latitude','Longitude'])if(!programmingElement(id).checkValidity()){output.textContent='Indica una località e coordinate valide.';return;}
+        const date=programmingElement('Repeat').value==='date'?programmingElement('Date').value:new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+        output.textContent='Recupero gli orari astronomici da Internet…';
+        const query=new URLSearchParams({date,name:programmingElement('Location').value,latitude:programmingElement('Latitude').value,longitude:programmingElement('Longitude').value});
+        try{
+            const data=await apiRequest('/api/solar?'+query);
+            if(epoch!==solarPreviewEpoch||!programmingUsesSolar())return;
+            const format=at=>at===null?'non presente':new Date(at).toLocaleTimeString('it-IT',{timeZone:'Europe/Rome',hour:'2-digit',minute:'2-digit'});
+            const today=data.solar.days[date],tomorrow=Object.entries(data.solar.days).find(([key])=>key>date)?.[1];
+            output.textContent=`${data.solar.location.name} · ${new Date(date+'T12:00:00').toLocaleDateString('it-IT')}: alba ${format(today.sunrise)}, tramonto ${format(today.sunset)}.${tomorrow?' Alba del giorno successivo: '+format(tomorrow.sunrise)+'.':''} Orari salvati sul server.`;
+        }catch(error){if(epoch===solarPreviewEpoch)output.textContent=error.message;}
+    }
     function renderProgramming(){
         const data=programmingData;
         programmingElement('Status').textContent=data.connectionError|| (data.connected?'Le tue programmazioni sono sincronizzate. Si eseguono anche con la webapp chiusa.':'Crea la prima programmazione per collegare l’esecuzione automatica al tuo account.');
@@ -1176,13 +1196,14 @@
         programmingElement('List').innerHTML=data.schedules.length?data.schedules.map(s=>{
             const when=s.repeat==='date'?new Date(s.date+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'}):s.days.map(d=>['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d]).join(' · ');
             const time=s.end?`Dalle ${s.start} alle ${s.end}${s.endDate&&s.endDate!==s.date?' del '+new Date(s.endDate+'T12:00:00').toLocaleDateString('it-IT'):!s.endDate&&s.end<=s.start?' del giorno successivo':''}`:`${s.action==='off'?'Spegni':s.action==='pulse'?'Impulso':s.action==='run'?'Esegui scenario':'Accendi'} alle ${s.start}`;
+            const description=s.solar?`${s.end?'Accendi':s.action==='off'?'Spegni':s.action==='pulse'?'Impulso':'Esegui'} ${programmingTimeLabel(s.start)}${s.end?'; spegni '+programmingTimeLabel(s.end)+' alla prima occorrenza successiva':''} · ${s.solar.location.name}`:time;
             const next=s.enabled&&s.nextAt<8640000000000000?new Date(s.nextAt).toLocaleString('it-IT',{timeZone:'Europe/Rome',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):null;
-            return `<article class="programming-card"><div class="programming-card-top"><h2>${escapeHtml(s.name)}</h2><span class="programming-badge ${s.enabled?'is-enabled':''}">${!s.enabled?'Sospesa':next?'Attiva':'Conclusa'}</span></div><p class="programming-device">${s.kind==='scene'?'Scenario · ':''}${escapeHtml(s.deviceName)}${s.kind==='multi'?' · '+s.outlets.map(o=>'CH '+(o+1)).join(', '):''}</p><p class="programming-time">${escapeHtml(time)}</p><p>${escapeHtml(when)}</p>${next?`<p class="page-note">Prossimo comando: ${escapeHtml(next)}</p>`:''}${s.last?`<p class="programming-result" role="status">${escapeHtml(s.last.message)}</p>`:''}<div class="scene-actions"><button onclick="editProgramming(${jsArg(s.id)})">Modifica</button><button onclick="changeProgramming('toggle',${jsArg(s.id)})">${s.enabled?'Sospendi':'Riattiva'}</button><button class="btn-ghost-danger" onclick="changeProgramming('delete',${jsArg(s.id)})">Elimina</button></div></article>`;
+            return `<article class="programming-card"><div class="programming-card-top"><h2>${escapeHtml(s.name)}</h2><span class="programming-badge ${s.enabled?'is-enabled':''}">${!s.enabled?'Sospesa':next?'Attiva':'Conclusa'}</span></div><p class="programming-device">${s.kind==='scene'?'Scenario · ':''}${escapeHtml(s.deviceName)}${s.kind==='multi'?' · '+s.outlets.map(o=>'CH '+(o+1)).join(', '):''}</p><p class="programming-time">${escapeHtml(description)}</p>${s.solarError?`<p class="programming-validation" role="status">${escapeHtml(s.solarError)}</p>`:''}<p>${escapeHtml(when)}</p>${next?`<p class="page-note">Prossimo comando: ${escapeHtml(next)}</p>`:''}${s.last?`<p class="programming-result" role="status">${escapeHtml(s.last.message)}</p>`:''}<div class="scene-actions"><button onclick="editProgramming(${jsArg(s.id)})">Modifica</button><button onclick="changeProgramming('toggle',${jsArg(s.id)})">${s.enabled?'Sospendi':'Riattiva'}</button><button class="btn-ghost-danger" onclick="changeProgramming('delete',${jsArg(s.id)})">Elimina</button></div></article>`;
         }).join(''):'<div class="empty-state"><h3>Nessuna programmazione</h3><p>Scegli un dispositivo e imposta il primo orario.</p></div>';
     }
     function editProgramming(id){
         if(!devicesFresh||authRequired){setMessage('Aggiorna i dispositivi prima di programmare.','error');return;}
-        closeNavigation();programmingEditing=programmingData.schedules.find(s=>s.id===id)||null;
+        solarPreviewEpoch++;closeNavigation();programmingEditing=programmingData.schedules.find(s=>s.id===id)||null;
         const form=programmingElement('Form');form.reset();form.hidden=false;
         const select=programmingElement('Device');select.innerHTML='<option value="">Scegli uno scenario o un dispositivo…</option>';
         if(sceneSyncMode==='live'&&sceneWorkspace&&Array.isArray(cloudScenes)){
@@ -1199,14 +1220,17 @@
         programmingElement('Date').value=s?.date||today;
         programmingElement('EndDate').value=s?.endDate||(s?.end&&s?.repeat==='date'&&s.end<=s.start?new Date(Date.parse(s.date+'T12:00:00Z')+86400000).toISOString().slice(0,10):s?.date||today);
         programmingElement('EndDate').dataset.userSet=s?.end?'true':'';
-        programmingElement('Start').value=s?.start||'';programmingElement('HasEnd').checked=!!s?.end;programmingElement('End').value=s?.end||'';
+        programmingElement('StartType').value=isSolarTime(s?.start)?s.start:'fixed';programmingElement('EndType').value=isSolarTime(s?.end)?s.end:'fixed';
+        const loc=s?.solar?.location||{name:'Pavia',latitude:45.19205,longitude:9.15917};
+        programmingElement('Location').value=loc.name;programmingElement('Latitude').value=loc.latitude;programmingElement('Longitude').value=loc.longitude;programmingElement('SolarPreview').textContent='';
+        programmingElement('Start').value=isSolarTime(s?.start)?'':s?.start||'';programmingElement('HasEnd').checked=!!s?.end;programmingElement('End').value=isSolarTime(s?.end)?'':s?.end||'';
         programmingElement('Enabled').checked=s?.enabled!==false;
         document.querySelectorAll('[name="programmingDay"]').forEach(input=>{input.checked=!!s?.days.includes(Number(input.value));});
         programmingElement('ConsentRow').hidden=programmingData.connected;
         programmingDeviceChanged(s?.outlets||[],s?.action);programmingFieldsChanged();
         form.scrollIntoView({behavior:'smooth',block:'start'});select.focus();
     }
-    function cancelProgramming(){programmingEditing=null;programmingElement('Form').hidden=true;}
+    function cancelProgramming(){solarPreviewEpoch++;programmingEditing=null;programmingElement('Form').hidden=true;}
     function programmingTarget(){
         const value=programmingElement('Device').value;
         if(value.startsWith('scene:'))return {scene:sceneSyncMode==='live'&&cloudScenes?.find(s=>s.id===value.slice(6))};
@@ -1227,24 +1251,31 @@
         programmingElement('Date').required=!weekly;
         programmingElement('StartLabel').textContent=action==='on'?'Accendi alle / dalle':action==='off'?'Spegni alle':action==='run'?'Esegui scenario alle':'Invia impulso alle';
         programmingElement('PulseNote').hidden=action!=='pulse';programmingElement('EndGroup').hidden=action!=='on';programmingElement('EndRow').hidden=!end;
-        programmingElement('End').required=end;programmingElement('End').disabled=!end;
-        const start=programmingElement('Start').value,finish=programmingElement('End').value,date=programmingElement('Date').value,finalDate=programmingElement('EndDate');
+        const startType=programmingElement('StartType').value,endType=programmingElement('EndType').value,solar=programmingUsesSolar();
+        programmingElement('Start').hidden=startType!=='fixed';programmingElement('Start').disabled=startType!=='fixed';programmingElement('Start').required=startType==='fixed';
+        programmingElement('End').hidden=endType!=='fixed';programmingElement('End').required=end&&endType==='fixed';programmingElement('End').disabled=!end||endType!=='fixed';
+        programmingElement('SolarGroup').hidden=!solar;programmingElement('FixedEndNote').hidden=solar;
+        for(const id of ['Location','Latitude','Longitude']){programmingElement(id).required=solar;programmingElement(id).disabled=!solar;}
+        const start=startType==='fixed'?programmingElement('Start').value:startType,finish=endType==='fixed'?programmingElement('End').value:endType,date=programmingElement('Date').value,finalDate=programmingElement('EndDate');
         if(!finalDate.dataset.userSet)finalDate.value=date;
-        finalDate.min=date;finalDate.required=end&&!weekly;finalDate.disabled=!end||weekly;programmingElement('EndDateRow').hidden=weekly;
+        finalDate.min=date;finalDate.required=end&&!weekly&&!solar;finalDate.disabled=!end||weekly||solar;programmingElement('EndDateRow').hidden=weekly||solar;
         let validation='';
-        if(end&&!weekly&&finalDate.value&&date&&finalDate.value<date)validation='La data di fine non può essere precedente alla data di inizio.';
-        else if(end&&!weekly&&finalDate.value===date&&start&&finish&&finish<=start)validation='La fine deve essere successiva all’inizio. Per terminare dopo mezzanotte scegli il giorno successivo.';
+        if(end&&!weekly&&!solar&&finalDate.value&&date&&finalDate.value<date)validation='La data di fine non può essere precedente alla data di inizio.';
+        else if(end&&!weekly&&!solar&&finalDate.value===date&&start&&finish&&finish<=start)validation='La fine deve essere successiva all’inizio. Per terminare dopo mezzanotte scegli il giorno successivo.';
+        if(end&&solar&&start===finish)validation='Accensione e spegnimento devono avere momenti diversi.';
         finalDate.setCustomValidity(validation);programmingElement('Validation').textContent=validation;programmingElement('Validation').hidden=!validation;
         document.getElementById('saveProgrammingBtn').disabled=programmingBusy||Boolean(validation);
         programmingElement('Summary').textContent=validation?'':(!start?'':end&&!finish?'Scegli anche l’orario di spegnimento.':end&&finish?`Accendi dalle ${start} alle ${finish}${weekly?(finish<=start?' del giorno successivo':''):finalDate.value?' del '+new Date(finalDate.value+'T12:00:00').toLocaleDateString('it-IT'):''}.`:`${action==='on'?'Accendi':action==='off'?'Spegni':action==='run'?'Esegui lo scenario':'Invia un impulso'} alle ${start}.${action==='on'?' Nessuno spegnimento automatico impostato.':''}`);
+        if(solar&&!validation)programmingElement('Summary').textContent=`${action==='off'?'Spegni':action==='pulse'?'Invia impulso':action==='run'?'Esegui scenario':'Accendi'} ${programmingTimeLabel(start)}${end?'; spegni '+programmingTimeLabel(finish)+' alla prima occorrenza successiva.':'. Nessuno spegnimento automatico impostato.'} Gli orari astronomici cambiano automaticamente ogni giorno.`;
     }
     async function saveProgramming(event){
         event.preventDefault();if(programmingBusy)return;programmingFieldsChanged();
         if(!programmingElement('Form').reportValidity()||!programmingElement('Validation').hidden)return;
         if(!programmingData.connected&&!programmingElement('Consent').checked){setMessage('Consenti l’esecuzione a webapp chiusa per attivare il timer.','error');return;}
         const action=programmingElement('Action').value,{scene}=programmingTarget();
-        const schedule={name:programmingElement('Name').value,...(scene?{targetType:'scene',sceneId:scene.id,workspaceId:sceneWorkspace.id}:{targetType:'device',deviceId:programmingElement('Device').value}),action,repeat:programmingElement('Repeat').value,date:programmingElement('Date').value,days:[...document.querySelectorAll('[name="programmingDay"]:checked')].map(input=>Number(input.value)),outlets:[...document.querySelectorAll('[name="programmingOutlet"]:checked')].map(input=>Number(input.value)),start:programmingElement('Start').value,end:action==='on'&&programmingElement('HasEnd').checked?programmingElement('End').value:null,enabled:programmingElement('Enabled').checked};
-        if(schedule.end&&schedule.repeat==='date')schedule.endDate=programmingElement('EndDate').value;
+        const schedule={name:programmingElement('Name').value,...(scene?{targetType:'scene',sceneId:scene.id,workspaceId:sceneWorkspace.id}:{targetType:'device',deviceId:programmingElement('Device').value}),action,repeat:programmingElement('Repeat').value,date:programmingElement('Date').value,days:[...document.querySelectorAll('[name="programmingDay"]:checked')].map(input=>Number(input.value)),outlets:[...document.querySelectorAll('[name="programmingOutlet"]:checked')].map(input=>Number(input.value)),start:programmingElement('StartType').value==='fixed'?programmingElement('Start').value:programmingElement('StartType').value,end:action==='on'&&programmingElement('HasEnd').checked?(programmingElement('EndType').value==='fixed'?programmingElement('End').value:programmingElement('EndType').value):null,enabled:programmingElement('Enabled').checked};
+        if(programmingUsesSolar())schedule.location={name:programmingElement('Location').value,latitude:Number(programmingElement('Latitude').value),longitude:Number(programmingElement('Longitude').value)};
+        if(schedule.end&&schedule.repeat==='date'&&!programmingUsesSolar())schedule.endDate=programmingElement('EndDate').value;
         const success=await programmingRequest({op:'save',...(programmingEditing?{id:programmingEditing.id,expectedVersion:programmingEditing.version}:{}),schedule,authorize:programmingElement('Consent').checked});
         if(success){cancelProgramming();setMessage('Programmazione salvata.','');}
     }
@@ -1261,7 +1292,8 @@
         programmingElement('Date').addEventListener('input',programmingFieldsChanged);
         programmingElement('EndDate').addEventListener('input',()=>{programmingElement('EndDate').dataset.userSet='true';programmingFieldsChanged();});
         programmingElement('EndDate').addEventListener('change',()=>{programmingElement('EndDate').dataset.userSet='true';programmingFieldsChanged();});
-        for(const id of ['Action','Repeat','HasEnd','Start','End','Date'])programmingElement(id).addEventListener('change',programmingFieldsChanged);
+        for(const id of ['Action','Repeat','HasEnd','Start','End','Date','StartType','EndType'])programmingElement(id).addEventListener('change',programmingFieldsChanged);
+        for(const id of ['StartType','EndType','Date','Location','Latitude','Longitude'])programmingElement(id).addEventListener('change',()=>{solarPreviewEpoch++;programmingElement('SolarPreview').textContent='Premi Verifica alba e tramonto per vedere gli orari della località.';});
         programmingElement('Form').addEventListener('submit',saveProgramming);
         setInterval(()=>{if(document.body.dataset.view==='programming'&&document.visibilityState==='visible'&&!authRequired&&!programmingBusy&&programmingElement('Form').hidden)void loadProgramming();},30000);
     }

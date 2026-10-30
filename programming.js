@@ -1,7 +1,8 @@
 'use strict';
 const crypto=require('crypto');
 const core=require('./programming-core');
-module.exports=function createProgramming({db,api,listDevices,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now}){
+module.exports=function createProgramming({db,api,listDevices,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch}){
+ const astronomy=require('./astronomy')({db,fetch:solarFetch,now});
  const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
  const encryptionKey=crypto.hkdfSync('sha256',Buffer.from(secret),Buffer.from(appid),Buffer.from('ewelink-programming-token-v1'),32);
  const accounts=()=>db().collection('ewelinkProgrammingAccounts'), schedules=()=>db().collection('ewelinkProgrammingSchedules'), aliases=()=>db().collection('ewelinkProgrammingSessions');
@@ -152,12 +153,20 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
  }
  async function owned(owner){const snap=await schedules().where('owner','==',owner).get();return snap.docs.map(d=>({...d.data(),id:d.id}));}
  function visible(s){const {owner,...result}=s; if(result.last?.status==='claimed'&&result.last.until<now())result.last={...result.last,status:'unknown',message:'Server riavviato: esito da verificare. Nessun reinvio automatico.'};return result;}
+ async function solarPreview(req){
+  await identity(req);
+  const date=req.query?.date||core.dateKey(now());
+  if(!core.validDate(date))throw error(400,'invalid_schedule','Data non valida.');
+  const loc=req.query?.latitude!==undefined?{name:req.query.name,latitude:Number(req.query.latitude),longitude:Number(req.query.longitude)}:astronomy.PAVIA;
+  const solar=await astronomy.calendar(loc,date,core.addDays(date,1));
+  return {ok:true,timeZone:core.ZONE,solar};
+ }
  async function list(req){const owner=await identity(req),account=await accounts().doc(owner).get();return {ok:true,accountId:owner,timeZone:core.ZONE,connected:account.exists&&automatic(account.data()),connectionError:account.data()?.lastError||null,schedules:(await owned(owner)).map(visible).sort((a,b)=>a.nextAt-b.nextAt)};}
  async function mutate(req){
   const owner=await identity(req),op=req.body?.op;
   if(op==='connect'){if(req.body.authorize!==true)throw error(400,'consent_required','Consenti l’esecuzione dei timer a webapp chiusa.');await remember(req);return list(req);}
   if(op==='disconnect'){
-   const records=await owned(owner);for(const s of records){const ref=schedules().doc(s.id);await db().runTransaction(async t=>{const doc=await t.get(ref);if(doc.data()?.last?.status==='claimed'&&doc.data().last.until>now())throw error(409,'schedule_busy','Un comando programmato è già in corso.');t.set(ref,{...doc.data(),enabled:false,nextAt:core.NEVER,version:doc.data().version+1});});}
+   const records=await owned(owner);for(const s of records){const ref=schedules().doc(s.id);await db().runTransaction(async t=>{const doc=await t.get(ref);if(doc.data()?.last?.status==='claimed'&&doc.data().last.until>now())throw error(409,'schedule_busy','Un comando programmato è già in corso.');t.set(ref,{...doc.data(),enabled:false,nextAt:core.NEVER,solarRefreshAt:core.NEVER,version:doc.data().version+1});});}
    const ref=accounts().doc(owner);
    await db().runTransaction(async t=>{
     const doc=await t.get(ref),data=doc.data()||{},keepBrowser=(data.browserUntil||0)>now();
@@ -168,7 +177,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
   const ref=schedules().doc(id),records=await owned(owner);
   let clean=null;
   if(op==='save'){
-   const input=req.body.schedule,devices=await listDevices(req.cookies.ewelink_access);
+   const input=await astronomy.prepare(req.body.schedule||{}),devices=await listDevices(req.cookies.ewelink_access);
    if(input?.targetType==='scene'){
     if(!getScene)throw error(503,'scene_unavailable','Programmazione scenari non disponibile.');
     const scene=await getScene(req,input.sceneId,input.workspaceId);
@@ -196,6 +205,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    const account=await accounts().doc(owner).get();
    if(!account.exists||!automatic(account.data()))throw error(400,'consent_required','Apri Modifica e consenti di nuovo l’esecuzione dei timer.');
   }
+  if(op==='toggle'){const old=records.find(s=>s.id===id);if(old&&!old.enabled&&core.usesSolar(old)){const prepared=await astronomy.prepare({...old,location:old.solar.location});clean={solar:prepared.solar};}}
   await db().runTransaction(async t=>{
    const snap=await t.get(ref),old=snap.exists?snap.data():null;
    if(old&&old.owner!==owner)throw error(404,'not_found','Programmazione non trovata.');
@@ -204,15 +214,42 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    if(old?.last?.status==='claimed'&&old.last.until>now())throw error(409,'schedule_busy','Un comando è già in corso. Attendi il suo esito.');
    if(op==='delete'){t.delete(ref);return;}
    const next={...(old||{}),...(clean||{}),owner,version:(old?.version||0)+1,updatedAt:now(),createdAt:old?.createdAt||now()};
-   if(op==='toggle')next.enabled=!old.enabled;
+   if(op==='toggle'){next.enabled=!old.enabled;next.solarRefreshAt=next.enabled&&core.usesSolar(next)&&next.repeat==='weekly'?now()+7*core.DAY:core.NEVER;if(clean?.solar)delete next.solarError;}
    if(op==='save'&&!clean.endDate)delete next.endDate;
+   if(op==='save'){
+    if(!core.usesSolar(clean))delete next.solar;
+    delete next.solarError;next.solarRefreshAt=clean.enabled&&core.usesSolar(clean)&&clean.repeat==='weekly'?now()+7*core.DAY:core.NEVER;
+   }
    if(op==='save'&&next.kind!=='scene')for(const key of ['sceneId','workspaceId','sceneSignature','targets'])delete next[key];
    next.nextAt=core.nextEvent(next,now())?.at||core.NEVER;
    if(next.enabled&&next.nextAt===core.NEVER)throw error(400,'schedule_past','Gli orari sono già trascorsi. Modifica la programmazione.');
    t.set(ref,next);
   });return list(req);
  }
+ async function refreshSolar(s){
+  const ref=schedules().doc(s.id);
+  try{
+   const prepared=await astronomy.prepare({...s,location:s.solar?.location});
+   await db().runTransaction(async t=>{const snap=await t.get(ref),current=snap.data();
+    if(!current||!current.enabled||current.version!==s.version||!core.usesSolar(current)||current.last?.status==='claimed'&&current.last.until>now())return;
+    const next={...current,solar:prepared.solar,solarError:null,solarRefreshAt:now()+7*core.DAY};
+    if(current.nextAt>now())next.nextAt=core.nextEvent(next,now())?.at||core.NEVER;
+    t.set(ref,next);
+   });
+  }catch(e){
+   await db().runTransaction(async t=>{const snap=await t.get(ref),current=snap.data();if(current?.version===s.version&&core.usesSolar(current))t.set(ref,{...current,solarRefreshAt:now()+5*60000,solarError:'Aggiornamento astronomico non disponibile. Uso gli orari già salvati; senza dati validi i comandi vengono sospesi.'});});
+  }
+ }
+ async function ensureSolar(owner,due){
+  const targets=s=>s.kind==='scene'?(s.targets||[]):[s];
+  const relevant=s=>s.id===due.id||targets(s).some(a=>targets(due).some(b=>a.deviceId===b.deviceId&&(a.kind==='single'||b.kind==='single'||(a.outlets||[]).some(o=>(b.outlets||[]).includes(o)))));
+  const records=await owned(owner),today=core.dateKey(now()),from=core.addDays(today,-1),to=core.addDays(today,9);
+  for(const s of records)if(relevant(s)&&s.enabled&&core.usesSolar(s)&&s.repeat==='weekly'&&(!s.solar?.days?.[from]||!s.solar?.days?.[to])&&(!s.solarError||s.solarRefreshAt<=now()))await refreshSolar(s);
+  const fresh=await owned(owner);
+  for(const s of fresh)if(relevant(s)&&s.enabled&&core.usesSolar(s)&&s.repeat==='weekly')for(let date=from;date<=core.addDays(today,1);date=core.addDays(date,1))if(!s.solar?.days?.[date])throw error(503,'astronomy_unavailable','Orari astronomici mancanti: nessun comando inviato.');
+ }
  async function execute(ref){
+  const before=await ref.get();if(before.data()?.owner)await ensureSolar(before.data().owner,{...before.data(),id:ref.id});
   const claimed=await db().runTransaction(async t=>{
    const snap=await t.get(ref),s=snap.exists?{...snap.data(),id:ref.id}:null;
    if(!s||!s.enabled||s.nextAt>now()||s.last?.until>now()&&s.last.status==='claimed')return null;
@@ -256,7 +293,8 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
  async function tick(){
   if(busy)return;busy=true;
   try{
-   const due=await schedules().where('nextAt','<=',now()).limit(20).get();for(const doc of due.docs)await execute(doc.ref);
+   const refresh=await schedules().where('solarRefreshAt','<=',now()).limit(5).get();for(const doc of refresh.docs)if(doc.data().enabled&&core.usesSolar(doc.data()))await refreshSolar({...doc.data(),id:doc.id});
+   const due=await schedules().where('nextAt','<=',now()).limit(20).get();for(const doc of due.docs)try{await execute(doc.ref);}catch{console.error('Programmazione temporaneamente sospesa: dati necessari non disponibili.');}
    // Mantiene valida l'autorizzazione anche per prenotazioni lontane nel tempo.
    const renewals=await accounts().where('renewAt','<=',now()).limit(5).get();
    for(const doc of renewals.docs){
@@ -267,5 +305,5 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
   }finally{busy=false;}
  }
  function start(){if(timer)return;timer=setInterval(()=>{void tick().catch(()=>console.error('Controllo programmazioni non riuscito.'));},30000);timer.unref?.();void tick().catch(()=>console.error('Avvio programmazioni non riuscito.'));}
- return {linkedDevices,registerLinkedDevice,list,mutate,identity,restoreSession,connectBrowser,logoutBrowser,markAuthenticationRequired,remember,access,start,tick,seal,open,stop(){if(timer)clearInterval(timer);timer=null;}};
+ return {solarPreview,linkedDevices,registerLinkedDevice,list,mutate,identity,restoreSession,connectBrowser,logoutBrowser,markAuthenticationRequired,remember,access,start,tick,seal,open,stop(){if(timer)clearInterval(timer);timer=null;}};
 };

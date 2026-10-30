@@ -15,11 +15,23 @@ function localTime(date,time,end=false){
  }
  const values=[...candidates].sort((a,b)=>a-b);return values.length?(end?values.at(-1):values[0]):null;
 }
+const solarTime=t=>t==='sunrise'||t==='sunset';
+const usesSolar=s=>solarTime(s?.start)||solarTime(s?.end);
+function timeAt(s,date,time,end=false){return solarTime(time)?s.solar?.days?.[date]?.[time]??null:localTime(date,time,end);}
+function windowFor(s,date){
+ const start=timeAt(s,date,s.start);let end=null;
+ if(s.end){
+  const explicit=s.repeat==='date'&&s.endDate;
+  end=timeAt(s,explicit||date,s.end,true);
+  if(!explicit&&start!==null&&end!==null&&end<=start)end=timeAt(s,addDays(date,1),s.end,true);
+ }
+ return {start,end};
+}
 function windows(s,from,to){
  const dates=[];
  if(s.repeat==='date')dates.push(s.date);
  else {for(let d=addDays(dateKey(from),-1),last=dateKey(to),i=0;d<=last&&i<370;d=addDays(d,1),i++)if(s.days.includes(new Date(d+'T12:00:00Z').getUTCDay()))dates.push(d);}
- return dates.map(date=>({start:localTime(date,s.start),end:s.end?localTime(s.repeat==='date'&&s.endDate?s.endDate:addDays(date,s.end<=s.start?1:0),s.end,true):null})).filter(w=>w.start!==null&&(!s.end||w.end!==null));
+ return dates.map(date=>windowFor(s,date)).filter(w=>w.start!==null&&(!s.end||w.end!==null&&w.end>w.start));
 }
 function events(s,from,to){
  return windows(s,from,to).flatMap(w=>[{at:w.start,state:s.action==='off'?'off':'on',pulse:s.action==='pulse'},...(w.end?[{at:w.end,state:'off',pulse:false}]:[])]).filter(e=>e.at>from&&e.at<=to).sort((a,b)=>a.at-b.at);
@@ -30,9 +42,9 @@ function validate(input,device,now=Date.now()){
  if(!input||!device||input.deviceId!==device.deviceid)err('Seleziona un dispositivo del tuo account.');
  if(!['on','off','pulse'].includes(input.action))err('Scegli accensione, spegnimento o impulso.');
  if(!['date','weekly'].includes(input.repeat))err('Scegli una data o i giorni della settimana.');
- if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.start||''))err('Indica un orario valido.');
+ if(!solarTime(input.start)&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.start||''))err('Indica un orario valido oppure alba o tramonto.');
  const end=input.end||null;
- if(end&&(!/^([01]\d|2[0-3]):[0-5]\d$/.test(end)||input.action!=='on'||end===input.start))err('Lo spegnimento facoltativo deve avere un orario diverso dall’accensione.');
+ if(end&&((!solarTime(end)&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(end))||input.action!=='on'||end===input.start))err('Lo spegnimento facoltativo deve avere un orario diverso dall’accensione.');
  if(input.outlets!==undefined&&!Array.isArray(input.outlets))err('Canali non validi.');
  if(input.days!==undefined&&!Array.isArray(input.days))err('Giorni non validi.');
  const channels=Array.isArray(device.params?.switches)?device.params.switches.map(c=>c.outlet).filter(Number.isInteger):null;
@@ -42,9 +54,17 @@ function validate(input,device,now=Date.now()){
  const name=typeof input.name==='string'?input.name.trim():'';
  if(name.length>100)err('Nome troppo lungo.');
  const s={name:name||device.name||'Programmazione',deviceId:device.deviceid,deviceName:device.name||device.deviceid,kind:channels?'multi':'single',outlets,action:input.action,repeat:input.repeat,date:input.repeat==='date'?input.date:null,days:input.repeat==='weekly'?[...new Set(input.days||[])].sort():[],start:input.start,end,...(input.repeat==='date'&&end&&input.endDate?{endDate:input.endDate}:{}),enabled:input.enabled!==false,timeZone:ZONE};
- if(s.repeat==='date'&&(!validDate(s.date)||localTime(s.date,s.start)===null))err('Data o orario non valido, anche rispetto al cambio dell’ora.');
- if(s.endDate&&(!validDate(s.endDate)||s.endDate<s.date||s.endDate===s.date&&s.end<=s.start))err('La data e l’ora di fine devono essere successive all’inizio.');
- if(s.repeat==='date'&&s.end&&localTime(s.endDate||addDays(s.date,s.end<=s.start?1:0),s.end,true)===null)err('L’orario di spegnimento non esiste nel giorno scelto per il cambio dell’ora.');
+ if(usesSolar(s)){
+  if(!input.solar?.days||!input.solar.location)err('Orari astronomici non disponibili. Verifica la località e riprova.');
+  s.solar=input.solar;
+ }
+ if(s.repeat==='date'&&(!validDate(s.date)||timeAt(s,s.date,s.start)===null))err('Data o orario non valido, anche rispetto al cambio dell’ora o ai dati astronomici.');
+ if(s.endDate&&(!validDate(s.endDate)||s.endDate<s.date))err('La data e l’ora di fine devono essere successive all’inizio.');
+ if(s.repeat==='date'&&s.end){
+  const w=windowFor(s,s.date);
+  if(w.end===null)err('L’orario di spegnimento non esiste nel giorno scelto per il cambio dell’ora o per dati astronomici mancanti.');
+  if(w.end<=w.start)err('La data e l’ora di fine devono essere successive all’inizio.');
+ }
  if(s.repeat==='weekly'&&(!s.days.length||s.days.some(d=>!Number.isInteger(d)||d<0||d>6)))err('Seleziona almeno un giorno della settimana.');
  if(s.enabled&&!nextEvent(s,now))err('Tutti gli orari sono già trascorsi. Scegli una data futura.');
  return s;
@@ -59,4 +79,4 @@ function plan(s,all,now){
  const outlets=selected.filter(outlet=>last.state!=='off'||!all.some(other=>other.id!==s.id&&other.deviceId===s.deviceId&&activeWindow(other,now)&&(other.kind==='single'||other.outlets.includes(outlet))));
  return {event:last,outlets,reason:outlets.length?'':'Spegnimento evitato: un’altra fascia è ancora attiva.'};
 }
-module.exports={ZONE,NEVER,DAY,dateKey,addDays,localTime,windows,events,nextEvent,validate,activeWindow,plan};
+module.exports={ZONE,NEVER,DAY,dateKey,addDays,localTime,validDate,solarTime,usesSolar,timeAt,windowFor,windows,events,nextEvent,validate,activeWindow,plan};
