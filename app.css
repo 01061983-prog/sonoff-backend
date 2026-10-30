@@ -50,3 +50,8 @@ body[data-view="scenes"] #settingsView{padding-top:8px}body[data-view="scenes"] 
 .scenario-pad:disabled:not(.state-running){opacity:.65}.pad-icon{background:#ffffff26;box-shadow:inset 0 1px 0 #ffffff40}.pad-dot{background:#fff;opacity:1;box-shadow:0 0 0 4px #ffffff18}.pad-spinner{border-color:#ffffff60;border-top-color:white}.pad-name{font-size:21px}.pad-result{opacity:1}.scenes-grid-settings,.scenes-grid-home{gap:24px}
 @media(max-width:700px){.main-content{padding-left:16px;padding-right:16px;padding-bottom:max(28px,env(safe-area-inset-bottom))}.topbar{height:70px}.view{padding-top:16px}.scenes-grid-settings,.scenes-grid-home{gap:18px 14px}.scenario-pad{min-height:180px;padding:16px;border-radius:20px}.pad-name{font-size:18px}.pad-state{font-size:12px}.pad-result{font-size:10px}}
 @media(prefers-reduced-motion:reduce){.scenario-pad{transition:none}}
+
+/* Gli impulsi usano il blu anche durante il relè attivo e la breve conferma. */
+.scenario-pad.state-pulse,.scenario-pad.state-pulse:hover:not(:disabled){--pad-edge:#134397;--pad-shadow:#1d5fca30;background:linear-gradient(145deg,#398bf0,#1c5ac4);color:#fff;border-color:#377ce0;opacity:1}
+.scenario-pad.state-unknown:hover:not(:disabled){background:linear-gradient(145deg,#8492a6,#5d6b80);color:#fff;border-color:#718096}
+.scenario-pad.state-running:hover:not(:disabled){background:linear-gradient(145deg,#398bf0,#1c5ac4);color:#fff;border-color:#377ce0}

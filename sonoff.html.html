@@ -669,6 +669,7 @@
             ? "Scenario interrotto: " + completed + "/" + scene.actions.length + " comandi accettati. " + failure.message
             : "Scenario: " + scene.name + ". Comandi accettati: " + completed + ". " + (refreshed ? "Stato aggiornato dal server." : "Stato non verificato: ricarica i dispositivi."),
             failure || !refreshed ? "error" : "");
+        if (!failure && scene.actions.some(action => action.kind === "gate" || action.pulse === true)) localPulseFeedback.set(scene.id, Date.now() + 2500);
         commandBusy = false;
         localRunningScene = null;
         renderScenes();
@@ -696,6 +697,7 @@
     let sceneReconnect = null;
     let cloudExecutions = {};
     let localRunningScene = null;
+    const localPulseFeedback = new Map();
     let sceneEditVersion = 0;
     let sceneSaveBusy = false;
     let sceneManageMode = false;
@@ -825,9 +827,11 @@
         const running = runningScene(scene.id);
         const run = cloudExecutions[scene.id];
         const expired = run?.status === "unknown" || (run?.status === "running" && run.expiresAt <= Date.now());
+        const pulseFeedbackUntil = Math.max(localPulseFeedback.get(scene.id) || 0, run?.status === "succeeded" ? Number(run.finishedAt || 0) + 2500 : 0);
+        const pulseConfirmed = pulse && pulseFeedbackUntil > Date.now();
         const turnsOff = scene.mode === "toggle" ? state === true : scene.actions.every(action => action.state === "off");
-        const status = running ? "running" : expired ? "unknown" : state === true ? "on" : state === false ? "off" : "unknown";
-        const label = running ? "Comando in esecuzione…" : expired ? "Esito da verificare" : pulse
+        const status = running ? "running" : expired ? "unknown" : pulse && (pulseConfirmed || state === true) ? "pulse" : state === true ? "on" : state === false ? "off" : "unknown";
+        const label = running ? "Comando in esecuzione…" : expired ? "Esito da verificare" : pulseConfirmed ? "Impulso inviato" : pulse
             ? state === false ? "Relè a riposo" : state === true ? "Relè attivo" : "Impulso · stato non rilevato"
             : state === true ? "Acceso" : state === false ? "Spento" : "Stato misto o non rilevato";
         const lastResult = !running && run?.status === "succeeded" && pulse ? "Ultimo impulso inviato" : !running && run?.status === "failed" ? "Comando non completato · verifica l’esito" : "";
@@ -1069,7 +1073,10 @@
         setInterval(() => {
             let expired = false;
             for (const run of Object.values(cloudExecutions)) if (run.status === "running" && run.expiresAt <= Date.now()) { run.status = "unknown"; expired = true; }
-            if (expired || localRunningScene || activeCloudExecution()) renderScenes();
+            let pulseFeedbackChanged = false;
+            for (const [id, until] of localPulseFeedback) if (until <= Date.now()) { localPulseFeedback.delete(id); pulseFeedbackChanged = true; }
+            const recentPulse = Object.values(cloudExecutions).some(run => run.status === "succeeded" && Number(run.finishedAt || 0) + 3500 > Date.now());
+            if (expired || pulseFeedbackChanged || recentPulse || localPulseFeedback.size || localRunningScene || activeCloudExecution()) renderScenes();
         }, 1000);
         ensureDefaultScenes();
         renderScenes();
