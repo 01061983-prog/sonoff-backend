@@ -214,11 +214,11 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    if(old?.last?.status==='claimed'&&old.last.until>now())throw error(409,'schedule_busy','Un comando è già in corso. Attendi il suo esito.');
    if(op==='delete'){t.delete(ref);return;}
    const next={...(old||{}),...(clean||{}),owner,version:(old?.version||0)+1,updatedAt:now(),createdAt:old?.createdAt||now()};
-   if(op==='toggle'){next.enabled=!old.enabled;next.solarRefreshAt=next.enabled&&core.usesSolar(next)&&next.repeat==='weekly'?now()+7*core.DAY:core.NEVER;if(clean?.solar)delete next.solarError;}
+   if(op==='toggle'){delete next.solarPendingAt;next.enabled=!old.enabled;next.solarRefreshAt=next.enabled&&core.usesSolar(next)&&next.repeat==='weekly'?now()+7*core.DAY:core.NEVER;if(clean?.solar)delete next.solarError;}
    if(op==='save'&&!clean.endDate)delete next.endDate;
    if(op==='save'){
     if(!core.usesSolar(clean))delete next.solar;
-    delete next.solarError;next.solarRefreshAt=clean.enabled&&core.usesSolar(clean)&&clean.repeat==='weekly'?now()+7*core.DAY:core.NEVER;
+    delete next.solarError;delete next.solarPendingAt;next.solarRefreshAt=clean.enabled&&core.usesSolar(clean)&&clean.repeat==='weekly'?now()+7*core.DAY:core.NEVER;
    }
    if(op==='save'&&next.kind!=='scene')for(const key of ['sceneId','workspaceId','sceneSignature','targets'])delete next[key];
    next.nextAt=core.nextEvent(next,now())?.at||core.NEVER;
@@ -233,7 +233,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    await db().runTransaction(async t=>{const snap=await t.get(ref),current=snap.data();
     if(!current||!current.enabled||current.version!==s.version||!core.usesSolar(current)||current.last?.status==='claimed'&&current.last.until>now())return;
     const next={...current,solar:prepared.solar,solarError:null,solarRefreshAt:now()+7*core.DAY};
-    if(current.nextAt>now())next.nextAt=core.nextEvent(next,now())?.at||core.NEVER;
+    if(current.solarPendingAt)next.nextAt=now();else if(current.nextAt>now())next.nextAt=core.nextEvent(next,now())?.at||core.NEVER;
     t.set(ref,next);
    });
   }catch(e){
@@ -249,10 +249,18 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
   for(const s of fresh)if(relevant(s)&&s.enabled&&core.usesSolar(s)&&s.repeat==='weekly')for(let date=from;date<=core.addDays(today,1);date=core.addDays(date,1))if(!s.solar?.days?.[date])throw error(503,'astronomy_unavailable','Orari astronomici mancanti: nessun comando inviato.');
  }
  async function execute(ref){
-  const before=await ref.get();if(before.data()?.owner)await ensureSolar(before.data().owner,{...before.data(),id:ref.id});
+  const before=await ref.get();
+  if(before.data()?.owner)try{await ensureSolar(before.data().owner,{...before.data(),id:ref.id});}
+  catch{
+   // Back off this item without occupying the first due slots forever, and
+   // retain the original event for the normal late-command recovery rules.
+   await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data?.version===before.data().version&&data.enabled&&data.nextAt<=now()&&!(data.last?.status==='claimed'&&data.last.until>now()))t.set(ref,{...data,solarPendingAt:data.solarPendingAt||data.nextAt,nextAt:now()+5*60000,solarError:'Comando sospeso: mancano orari astronomici validi. Nuova verifica tra 5 minuti.'});});
+   return;
+  }
   const claimed=await db().runTransaction(async t=>{
    const snap=await t.get(ref),s=snap.exists?{...snap.data(),id:ref.id}:null;
    if(!s||!s.enabled||s.nextAt>now()||s.last?.until>now()&&s.last.status==='claimed')return null;
+   if(s.solarPendingAt){s.nextAt=s.solarPendingAt;delete s.solarPendingAt;}
    const claim=crypto.randomUUID(),time=now();
    // Avanza prima dell'invio: dopo un arresto non ripete un impulso già tentato.
    const nextAt=core.nextEvent(s,time)?.at||core.NEVER;
