@@ -143,7 +143,8 @@ async function api(path, token, body, authorization) {
     catch { throw new Error("Risposta non JSON da eWeLink (HTTP " + response.status + ")."); }
     if (!response.ok || data?.error !== 0) {
       const error = new Error(data?.msg || "Errore eWeLink HTTP " + response.status);
-      const authError = response.status === 401 || [401, 402].includes(data?.error);
+      const authError = response.status === 401 || [401, 402].includes(data?.error) ||
+        (path === "/v2/user/refresh" && data?.error === 405);
       error.providerError = data?.error;
       error.code = authError ? "not_authenticated" : (data?.error || "upstream_error");
       error.status = authError ? 401 : 502;
