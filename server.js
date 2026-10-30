@@ -37,6 +37,7 @@ function returnUrl(value) {
 }
 const DAY = 24 * 60 * 60 * 1000;
 const refreshJobs = new Map();
+let programming = null;
 
 function clearSession(res) {
   for (const name of ["ewelink_access", "ewelink_refresh", "ewelink_expires"]) {
@@ -92,6 +93,10 @@ async function renewSession(req, res) {
 }
 
 function requireLogin(req, res, next) {
+  if (programming && !req.programmingChecked) {
+    req.programmingChecked = true;
+    return programming.restoreSession(req, res).then(() => requireLogin(req, res, next)).catch(error => failure(res, error));
+  }
   const expiry = Number(req.cookies.ewelink_expires);
   if (req.cookies.ewelink_access && (!expiry || expiry > Date.now() + 60000)) return next();
   return renewSession(req, res).then(() => next()).catch(error => failure(res, error));
@@ -177,6 +182,7 @@ app.get("/app/", (_req, res) => res.redirect(HOME));
 app.get("/", (_req, res) => res.json({ ok: true, message: "Backend Sonoff OAuth attivo" }));
 
 app.get("/login", route(async (req, res) => {
+  if (programming) await programming.restoreSession(req, res);
   const expiry = Number(req.cookies.ewelink_expires);
   if (req.cookies.ewelink_access && expiry > Date.now() + 60000) {
     return res.redirect(returnUrl(req.query.returnUrl));
@@ -533,6 +539,19 @@ app.post("/api/toggle-multi", requireLogin, route(async (req, res) => {
   const raw = await api("/v2/device/thing/status", req.cookies.ewelink_access, sent);
   res.json({ ok: true, sent, raw });
 }));
+
+// Programmazione autonoma: disabilitata finché non viene attivata su Render.
+// I token sono conservati soltanto dopo il consenso esplicito al primo salvataggio.
+if (process.env.EWELINK_PROGRAMMING_ENABLED === "true") {
+  programming = require("./programming")({db:getSceneDatabase, api, listDevices, appid:APPID, secret:APPSECRET, saveSession});
+  programming.start();
+}
+function requireProgramming() {
+  if (!programming) throw cloudError(503, "programming_not_configured", "Programmazione in preparazione: esecuzione automatica non ancora attivata.");
+  return programming;
+}
+app.get("/api/programming", requireLogin, route(async(req,res) => res.json(await requireProgramming().list(req))));
+app.post("/api/programming", requireLogin, route(async(req,res) => res.json(await requireProgramming().mutate(req))));
 
 app.use((error, _req, res, _next) => {
   res.status(error.type === "entity.parse.failed" ? 400 : 500).json({

@@ -24,6 +24,7 @@
     <button class="nav-item" data-view="home" aria-label="Panoramica"><span data-icon="grid"></span><span>Panoramica</span></button>
     <button class="nav-item" data-view="devices" aria-label="Dispositivi"><span data-icon="bulb"></span><span>Dispositivi</span><span class="nav-count" id="navDeviceCount">—</span></button>
     <button class="nav-item active" data-view="scenes" aria-label="Scenari" aria-current="page"><span data-icon="layers"></span><span>Scenari</span></button>
+    <button class="nav-item" data-view="programming" aria-label="Programmazione"><span data-icon="calendar"></span><span>Programmazione</span></button>
     <button class="nav-item" data-view="install" aria-label="La tua webapp"><span data-icon="download"></span><span>La tua webapp</span></button>
   </nav>
   <div class="drawer-commands"><div class="scene-page-actions"><button id="sceneManageBtn" class="secondary-button" onclick="setSceneManageMode()">Gestisci</button><button id="newSceneBtn" class="primary-button"><span data-icon="plus"></span>Nuovo scenario</button></div><button id="reloadBtn" class="icon-button" aria-label="Aggiorna lo stato dei dispositivi" title="Aggiorna dispositivi"><span data-icon="refresh"></span></button><span class="drawer-refresh-label">Aggiorna dispositivi</span></div>
@@ -45,6 +46,37 @@
   </section>
   <section id="devicesView" class="view" style="display:none" aria-labelledby="devicesHeading"><div class="page-heading"><div><p class="eyebrow">LUCI E ACCESSI</p><h1 id="devicesHeading">I tuoi dispositivi<span class="green-dot">.</span></h1><p class="heading-sub">Controlla gli ambienti, uno alla volta.</p></div></div><div class="device-toolbar"><label class="search-box"><span data-icon="search"></span><input type="search" id="deviceSearch" placeholder="Cerca un dispositivo…" aria-label="Cerca un dispositivo"></label><div class="filter-tabs" aria-label="Filtra dispositivi"><button data-filter="all" class="selected" aria-pressed="true">Tutti</button><button data-filter="online" aria-pressed="false">Online</button><button data-filter="offline" aria-pressed="false">Offline</button></div></div><div id="allDevicesGrid" class="devices-grid"></div><details class="technical-details"><summary>Dettagli tecnici dei dispositivi</summary><div class="table-wrap"><table id="devicesTable"><thead><tr><th>Dispositivo</th><th>ID</th><th>Connessione</th><th>Stato</th><th>Comando</th></tr></thead><tbody><tr><td colspan="5">Caricamento…</td></tr></tbody></table></div></details><p class="page-note">Gli stati si aggiornano all’apertura della pagina e dopo ogni comando. Usa il pulsante Aggiorna per una nuova lettura.</p></section>
   <section id="settingsView" class="view" aria-labelledby="scenesHeading"><div class="page-heading"><div><p class="eyebrow">PICCOLI GESTI, GRANDI COMODITÀ</p><h1 id="scenesHeading">Scenari<span class="green-dot">.</span></h1><p class="heading-sub">Combina più azioni in un unico pulsante.</p></div></div><div id="scenesList" class="scenes-grid-settings"></div><div id="sceneEditor" class="scene-editor" style="display:none"><div class="editor-heading"><div><p class="eyebrow">PERSONALIZZA</p><h2 id="editorTitle">Crea uno scenario</h2></div><button class="icon-button" onclick="cancelSceneEdit()" aria-label="Chiudi editor"><span data-icon="close"></span></button></div><div class="form-grid"><div class="form-row"><label for="sceneName">Nome scenario</label><input id="sceneName" type="text" maxlength="100" placeholder="Es. Serata in oratorio"></div><div class="form-row"><label for="sceneType">Esecuzione</label><select id="sceneType"><option value="manuale">Manuale · con un tocco</option><option value="crepuscolare" disabled>Crepuscolare · non disponibile</option></select></div></div><h3 class="editor-subtitle">Scegli dispositivi e azioni</h3><p class="page-note">Per cancello e relè con autoritorno già configurato scegli “Impulso”. Il colore indica lo stato del relè, non la posizione del cancello.</p><div id="sceneDevicesList" class="devices-list"></div><div class="editor-footer"><button class="secondary-button" onclick="cancelSceneEdit()">Annulla</button><button class="primary-button" onclick="saveScene()"><span data-icon="check"></span>Salva scenario</button></div></div></section>
+
+  <section id="programmingView" class="view" style="display:none" aria-labelledby="programmingHeading">
+    <div class="page-heading"><div><p class="eyebrow">IL TUO TEMPO, I TUOI SPAZI</p><h1 id="programmingHeading">Programmazione<span class="green-dot">.</span></h1><p class="heading-sub">Scegli il dispositivo, il giorno e l’orario. Lo spegnimento è facoltativo.</p></div><button id="newProgrammingBtn" class="primary-button" onclick="editProgramming(null)"><span data-icon="plus"></span>Nuova programmazione</button></div>
+    <p class="programming-zone"><span data-icon="calendar"></span> Ora italiana · cambio dell’ora automatico</p>
+    <div id="programmingStatus" class="info-strip" role="status">Caricamento programmazioni…</div>
+    <form id="programmingForm" class="scene-editor programming-form" hidden>
+      <div class="editor-heading"><h2 id="programmingEditorTitle">Nuova programmazione</h2><button type="button" class="icon-button" onclick="cancelProgramming()" aria-label="Chiudi programmazione"><span data-icon="close"></span></button></div>
+      <label class="programming-step" for="programmingDevice"><span>1</span> Quale dispositivo vuoi programmare?</label>
+      <select id="programmingDevice" required><option value="">Scegli un dispositivo…</option></select>
+      <fieldset id="programmingChannels" class="programming-channels" hidden><legend>Quali canali?</legend><div id="programmingChannelOptions"></div></fieldset>
+      <div id="programmingDetails" hidden>
+        <label class="programming-step" for="programmingAction"><span>2</span> Che cosa deve fare?</label>
+        <select id="programmingAction"><option value="on">Accendere</option><option value="off">Spegnere</option><option value="pulse">Inviare un impulso</option></select>
+        <p id="programmingPulseNote" class="page-note" hidden>L’autoritorno deve essere già configurato sul Sonoff. Il timer invia un solo comando ON.</p>
+        <label class="programming-step" for="programmingRepeat"><span>3</span> In quale giorno?</label>
+        <select id="programmingRepeat"><option value="date">Una data precisa</option><option value="weekly">Ogni settimana</option></select>
+        <div id="programmingDateRow" class="form-row"><label for="programmingDate">Data</label><input id="programmingDate" type="date"></div>
+        <fieldset id="programmingWeekRow" class="programming-days" hidden><legend>Giorni della settimana</legend><label><input type="checkbox" name="programmingDay" value="1"><span>Lun</span></label><label><input type="checkbox" name="programmingDay" value="2"><span>Mar</span></label><label><input type="checkbox" name="programmingDay" value="3"><span>Mer</span></label><label><input type="checkbox" name="programmingDay" value="4"><span>Gio</span></label><label><input type="checkbox" name="programmingDay" value="5"><span>Ven</span></label><label><input type="checkbox" name="programmingDay" value="6"><span>Sab</span></label><label><input type="checkbox" name="programmingDay" value="0"><span>Dom</span></label></fieldset>
+        <label class="programming-step" for="programmingStart"><span>4</span> A che ora?</label>
+        <div class="programming-hours"><div class="form-row"><label id="programmingStartLabel" for="programmingStart">Accendi alle / dalle</label><input id="programmingStart" type="time" required step="60"></div><div id="programmingEndGroup"><label class="programming-checkbox"><input type="checkbox" id="programmingHasEnd">Aggiungi lo spegnimento (facoltativo)</label><div id="programmingEndRow" class="form-row" hidden><label for="programmingEnd">Spegni alle</label><input id="programmingEnd" type="time" step="60"><p class="page-note">Se l’ora è precedente all’accensione, lo spegnimento avviene il giorno successivo.</p></div></div></div>
+        <p id="programmingSummary" class="programming-summary" aria-live="polite"></p>
+        <div class="form-row"><label for="programmingName">Nome (facoltativo)</label><input id="programmingName" maxlength="100" placeholder="Es. Luci campetto · prenotazione"></div>
+        <label class="programming-checkbox"><input type="checkbox" id="programmingEnabled" checked>Programmazione attiva</label>
+        <label id="programmingConsentRow" class="programming-checkbox programming-consent"><input type="checkbox" id="programmingConsent">Consento di conservare sul server l’autorizzazione eWeLink per eseguire i miei timer a webapp chiusa. Posso scollegarla da questa sezione.</label>
+        <div class="editor-footer"><button type="button" class="secondary-button" onclick="cancelProgramming()">Annulla</button><button type="submit" id="saveProgrammingBtn" class="primary-button"><span data-icon="check"></span>Salva programmazione</button></div>
+      </div>
+    </form>
+    <div id="programmingList" class="programming-list"></div>
+    <details class="programming-help"><summary>Come funzionano le programmazioni</summary><p>I timer funzionano anche con la webapp chiusa. Ogni fascia invia un comando esplicito: i comandi manuali restano validi fino al prossimo orario programmato.</p><p>Le fasce dello stesso account sullo stesso canale possono sovrapporsi: una fascia non spegne la luce mentre un’altra la richiede accesa.</p><p>In caso di interruzione, le accensioni in ritardo di oltre 5 minuti vengono saltate. Gli spegnimenti possono essere recuperati entro 24 ore. Non vengono ripetuti comandi dall’esito incerto. Serve che server, eWeLink e dispositivo siano disponibili.</p><p>Nel cambio all’ora solare, per gli orari ripetuti si usa la prima occorrenza per l’accensione e l’ultima per lo spegnimento finale; un orario settimanale inesistente nel cambio all’ora legale viene saltato.</p></details>
+    <button id="disconnectProgrammingBtn" class="secondary-button" hidden onclick="disconnectProgramming()">Disattiva tutti i timer e scollega l’esecuzione automatica</button>
+  </section>
   <section id="installView" class="view" style="display:none" aria-labelledby="installHeading"><div class="page-heading"><div><p class="eyebrow">SEMPRE A PORTATA DI MANO</p><h1 id="installHeading">La tua webapp<span class="green-dot">.</span></h1><p class="heading-sub">Lo stesso spazio, sul telefono, sul tablet e sul computer.</p></div></div><article class="install-hero"><span class="install-app-icon" data-icon="building"></span><div><h2>eWeLink Oratorio, sulla tua schermata.</h2><p>Apri la plancia dalla sua icona, in una finestra dedicata.</p><button id="installBtn" class="primary-button" hidden><span data-icon="download"></span>Installa la webapp</button><p id="installedLabel" class="success-label" hidden>La plancia è aperta come app.</p></div></article><div class="install-guides"><article class="guide-card"><span data-icon="smartphone"></span><h3>iPhone e iPad</h3><p>Apri il sito in Safari, tocca <strong>Condividi</strong> e scegli <strong>Aggiungi alla schermata Home</strong>.</p></article><article class="guide-card"><span data-icon="tablet"></span><h3>Tablet e telefoni Android</h3><p>Apri il sito in Chrome. Nel menu scegli <strong>Installa app</strong> o <strong>Aggiungi a schermata Home</strong>, se disponibile.</p></article><article class="guide-card"><span data-icon="monitor"></span><h3>Computer</h3><p>In Chrome o Edge usa l’opzione di installazione nel menu del browser. Su Safari per Mac usa <strong>File → Aggiungi al Dock</strong>, se disponibile.</p></article></div><div class="info-strip"><span data-icon="wifi"></span><span>Serve Internet per leggere gli stati e comandare i dispositivi. Ogni browser mantiene il proprio accesso; gli scenari collegati a Firebase sono condivisi fra i dispositivi della stessa casa eWeLink.</span></div><article class="account-card migration-card"><div><h3>Trasferisci i tuoi scenari</h3><p>Esportali da questo browser e importali sul nuovo sito o su un altro dispositivo.</p></div><div class="scene-actions"><button class="secondary-button" onclick="exportScenes()">Esporta scenari</button><button class="secondary-button" onclick="document.getElementById('sceneImport').click()">Importa scenari</button><input id="sceneImport" type="file" accept="application/json,.json" hidden aria-label="File degli scenari da importare"></div></article><article class="account-card"><div><h3>Il tuo account</h3><p>Esci se vuoi disconnettere questo browser da eWeLink.</p></div><button class="secondary-button" onclick="logout()">Esci dall’account</button></article></section>
   <footer class="app-footer"><span>eWeLink Oratorio <span class="footer-separator">/</span> Uno spazio da vivere.</span><span>Plancia luci e accessi</span></footer>
 </main>
@@ -210,6 +242,7 @@
 
     // LOGOUT
     async function logout() {
+        clearProgramming();
         try {
             const response = await fetch(BACKEND_URL + "/logout", {
                 method: "POST",
@@ -875,7 +908,7 @@
     let lastSyncTime = null;
     let activeDeviceFilter = "all";
     let installPrompt = null;
-    const VIEW_NAMES = { home: "Panoramica", devices: "Dispositivi", scenes: "Scenari", install: "La tua webapp" };
+    const VIEW_NAMES = { home: "Panoramica", devices: "Dispositivi", scenes: "Scenari", programming: "Programmazione", install: "La tua webapp" };
 
     function hydrateIcons() {
         document.querySelectorAll("[data-icon]").forEach(el => { el.innerHTML = icon(el.dataset.icon); });
@@ -895,7 +928,7 @@
         if (!VIEW_NAMES[name]) return;
         closeNavigation();
         document.body.dataset.view = name;
-        const views = { home: "homeView", devices: "devicesView", scenes: "settingsView", install: "installView" };
+        const views = { home: "homeView", devices: "devicesView", scenes: "settingsView", programming: "programmingView", install: "installView" };
         for (const [key, id] of Object.entries(views)) document.getElementById(id).style.display = key === name ? "block" : "none";
         document.querySelectorAll(".nav-item[data-view]").forEach(button => {
             button.classList.toggle("active", button.dataset.view === name);
@@ -904,6 +937,7 @@
         });
         document.getElementById("pageLabel").textContent = VIEW_NAMES[name];
         document.title = VIEW_NAMES[name] + " · eWeLink Oratorio";
+        if (name === "programming") void openProgramming();
         window.scrollTo({top: 0, behavior: "instant"});
     }
     function deviceOn(dev) {
@@ -957,6 +991,7 @@
     function showLoginRequired(message) {
         authRequired = true;
         closeSceneStream();
+        clearProgramming();
         devicesFresh = false;
         document.getElementById("authPanel").hidden = false;
         const crossSite = window.location.origin !== BACKEND_URL;
@@ -1068,8 +1103,105 @@
         renderDashboard();
     }
 
+    let programmingData = {schedules:[],connected:false};
+    let programmingEditing = null, programmingEpoch = 0, programmingBusy = false;
+    const programmingElement = id => document.getElementById('programming'+id);
+    function clearProgramming() {
+        programmingEpoch++;
+        programmingData = {schedules:[],connected:false};programmingEditing=null;
+        programmingElement('List').innerHTML='';programmingElement('Form').hidden=true;
+        programmingElement('Status').textContent='Accedi al tuo account per vedere le tue programmazioni.';
+    }
+    async function openProgramming(){
+        const epoch=programmingEpoch;
+        if(!devicesFresh&&!devicesLoading)await loadDevices();
+        if(epoch!==programmingEpoch||authRequired)return;
+        await loadProgramming();
+        if(!programmingData.schedules.length && devicesFresh && !authRequired && programmingElement("Form").hidden) editProgramming(null);
+    }
+    async function loadProgramming(){
+        const epoch=programmingEpoch;
+        try{
+            const data=await apiRequest('/api/programming');
+            if(epoch!==programmingEpoch)return;
+            if(programmingData.accountId&&data.accountId!==programmingData.accountId){clearProgramming();}
+            programmingData=data;renderProgramming();
+        }catch(error){if(epoch===programmingEpoch)programmingElement('Status').textContent=error.message;}
+    }
+    function renderProgramming(){
+        const data=programmingData;
+        programmingElement('Status').textContent=data.connectionError|| (data.connected?'Le tue programmazioni sono sincronizzate. Si eseguono anche con la webapp chiusa.':'Crea la prima programmazione per collegare l’esecuzione automatica al tuo account.');
+        document.getElementById('disconnectProgrammingBtn').hidden=!data.connected;
+        programmingElement('List').innerHTML=data.schedules.length?data.schedules.map(s=>{
+            const when=s.repeat==='date'?new Date(s.date+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'}):s.days.map(d=>['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d]).join(' · ');
+            const time=s.end?`Dalle ${s.start} alle ${s.end}${s.end<=s.start?' del giorno successivo':''}`:`${s.action==='off'?'Spegni':s.action==='pulse'?'Impulso':'Accendi'} alle ${s.start}`;
+            const next=s.enabled&&s.nextAt<8640000000000000?new Date(s.nextAt).toLocaleString('it-IT',{timeZone:'Europe/Rome',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):null;
+            return `<article class="programming-card"><div class="programming-card-top"><h2>${escapeHtml(s.name)}</h2><span class="programming-badge ${s.enabled?'is-enabled':''}">${!s.enabled?'Sospesa':next?'Attiva':'Conclusa'}</span></div><p class="programming-device">${escapeHtml(s.deviceName)}${s.kind==='multi'?' · '+s.outlets.map(o=>'CH '+(o+1)).join(', '):''}</p><p class="programming-time">${escapeHtml(time)}</p><p>${escapeHtml(when)}</p>${next?`<p class="page-note">Prossimo comando: ${escapeHtml(next)}</p>`:''}${s.last?`<p class="programming-result" role="status">${escapeHtml(s.last.message)}</p>`:''}<div class="scene-actions"><button onclick="editProgramming(${jsArg(s.id)})">Modifica</button><button onclick="changeProgramming('toggle',${jsArg(s.id)})">${s.enabled?'Sospendi':'Riattiva'}</button><button class="btn-ghost-danger" onclick="changeProgramming('delete',${jsArg(s.id)})">Elimina</button></div></article>`;
+        }).join(''):'<div class="empty-state"><h3>Nessuna programmazione</h3><p>Scegli un dispositivo e imposta il primo orario.</p></div>';
+    }
+    function editProgramming(id){
+        if(!devicesFresh||authRequired){setMessage('Aggiorna i dispositivi prima di programmare.','error');return;}
+        closeNavigation();programmingEditing=programmingData.schedules.find(s=>s.id===id)||null;
+        const form=programmingElement('Form');form.reset();form.hidden=false;
+        const select=programmingElement('Device');select.innerHTML='<option value="">Scegli un dispositivo…</option>';
+        for(const device of currentDevices.filter(d=>Array.isArray(d.params?.switches)||['on','off'].includes(d.params?.switch))){const option=document.createElement('option');option.value=device.deviceid;option.textContent=device.name+(device.online?'':' · offline');select.appendChild(option);}
+        const s=programmingEditing;
+        programmingElement('EditorTitle').textContent=s?'Modifica programmazione':'Nuova programmazione';
+        select.value=s?.deviceId||'';programmingElement('Name').value=s?.name||'';
+        programmingElement('Action').value=s?.action||'on';programmingElement('Repeat').value=s?.repeat||'date';
+        const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+        programmingElement('Date').value=s?.date||today;
+        programmingElement('Start').value=s?.start||'';programmingElement('HasEnd').checked=!!s?.end;programmingElement('End').value=s?.end||'';
+        programmingElement('Enabled').checked=s?.enabled!==false;
+        document.querySelectorAll('[name="programmingDay"]').forEach(input=>{input.checked=!!s?.days.includes(Number(input.value));});
+        programmingElement('ConsentRow').hidden=programmingData.connected;
+        programmingDeviceChanged(s?.outlets||[]);programmingFieldsChanged();
+        form.scrollIntoView({behavior:'smooth',block:'start'});select.focus();
+    }
+    function cancelProgramming(){programmingEditing=null;programmingElement('Form').hidden=true;}
+    function programmingDeviceChanged(selected=[]){
+        const device=currentDevices.find(d=>d.deviceid===programmingElement('Device').value);
+        programmingElement('Details').hidden=!device;
+        const multi=Array.isArray(device?.params.switches);programmingElement('Channels').hidden=!multi;
+        programmingElement('ChannelOptions').innerHTML=multi?device.params.switches.filter(c=>Number.isInteger(c.outlet)).map(c=>`<label class="programming-checkbox"><input name="programmingOutlet" type="checkbox" value="${c.outlet}" ${selected.includes(c.outlet)?'checked':''}>Canale ${c.outlet+1}</label>`).join(''):'';
+        programmingFieldsChanged();
+    }
+    function programmingFieldsChanged(){
+        const action=programmingElement('Action').value,weekly=programmingElement('Repeat').value==='weekly',end=action==='on'&&programmingElement('HasEnd').checked;
+        programmingElement('DateRow').hidden=weekly;programmingElement('WeekRow').hidden=!weekly;
+        programmingElement('Date').required=!weekly;
+        programmingElement('StartLabel').textContent=action==='on'?'Accendi alle / dalle':action==='off'?'Spegni alle':'Invia impulso alle';
+        programmingElement('PulseNote').hidden=action!=='pulse';programmingElement('EndGroup').hidden=action!=='on';programmingElement('EndRow').hidden=!end;
+        programmingElement('End').required=end;programmingElement('End').disabled=!end;
+        const start=programmingElement('Start').value,finish=programmingElement('End').value;
+        programmingElement('Summary').textContent=!start?'':end&&!finish?'Scegli anche l’orario di spegnimento.':end&&finish?`Accendi dalle ${start} alle ${finish}${finish<=start?' del giorno successivo':''}.`:`${action==='on'?'Accendi':action==='off'?'Spegni':'Invia un impulso'} alle ${start}.${action==='on'?' Nessuno spegnimento automatico impostato.':''}`;
+    }
+    async function saveProgramming(event){
+        event.preventDefault();if(programmingBusy)return;
+        if(!programmingData.connected&&!programmingElement('Consent').checked){setMessage('Consenti l’esecuzione a webapp chiusa per attivare il timer.','error');return;}
+        const action=programmingElement('Action').value;
+        const schedule={name:programmingElement('Name').value,deviceId:programmingElement('Device').value,action,repeat:programmingElement('Repeat').value,date:programmingElement('Date').value,days:[...document.querySelectorAll('[name="programmingDay"]:checked')].map(input=>Number(input.value)),outlets:[...document.querySelectorAll('[name="programmingOutlet"]:checked')].map(input=>Number(input.value)),start:programmingElement('Start').value,end:action==='on'&&programmingElement('HasEnd').checked?programmingElement('End').value:null,enabled:programmingElement('Enabled').checked};
+        const success=await programmingRequest({op:'save',...(programmingEditing?{id:programmingEditing.id,expectedVersion:programmingEditing.version}:{}),schedule,authorize:programmingElement('Consent').checked});
+        if(success){cancelProgramming();setMessage('Programmazione salvata.','');}
+    }
+    async function programmingRequest(body){
+        if(programmingBusy)return false;const epoch=programmingEpoch;programmingBusy=true;document.getElementById('saveProgrammingBtn').disabled=true;
+        try{const data=await apiRequest('/api/programming',body);if(epoch!==programmingEpoch)return false;programmingData=data;renderProgramming();return true;}
+        catch(error){if(epoch===programmingEpoch){setMessage(error.message,'error');if(error.code==='version_conflict')void loadProgramming();}return false;}
+        finally{programmingBusy=false;document.getElementById('saveProgrammingBtn').disabled=false;}
+    }
+    async function changeProgramming(op,id){const s=programmingData.schedules.find(s=>s.id===id);if(s)await programmingRequest({op,id,expectedVersion:s.version});}
+    async function disconnectProgramming(){await programmingRequest({op:'disconnect'});}
+    function initProgramming(){
+        programmingElement('Device').addEventListener('change',()=>programmingDeviceChanged());
+        for(const id of ['Action','Repeat','HasEnd','Start','End'])programmingElement(id).addEventListener('change',programmingFieldsChanged);
+        programmingElement('Form').addEventListener('submit',saveProgramming);
+        setInterval(()=>{if(document.body.dataset.view==='programming'&&document.visibilityState==='visible'&&!authRequired&&!programmingBusy&&programmingElement('Form').hidden)void loadProgramming();},30000);
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
         initApp();
+        initProgramming();
         setInterval(() => {
             let expired = false;
             for (const run of Object.values(cloudExecutions)) if (run.status === "running" && run.expiresAt <= Date.now()) { run.status = "unknown"; expired = true; }
