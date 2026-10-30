@@ -1,6 +1,6 @@
 // Solo interfaccia statica. Le API, il login e i comandi non entrano nella cache.
 const CACHE_PREFIX = "san-luigi-plancia-";
-const CACHE_NAME = CACHE_PREFIX + "2026-10-30-twilight-mode-v15";
+const CACHE_NAME = CACHE_PREFIX + "2026-10-30-italian-locations-v16";
 const ROOT = new URL("./", self.location.href);
 const ASSETS = ["index.html", "app.css", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable.png", "icons/apple-touch-icon.png"].map(path => new URL(path, ROOT).href);
 

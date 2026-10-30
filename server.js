@@ -713,6 +713,7 @@ function requireProgramming() {
   if (!programming) throw cloudError(503, "programming_not_configured", "Programmazione in preparazione: esecuzione automatica non ancora attivata.");
   return programming;
 }
+app.get("/api/locations", requireLogin, route(async(req,res) => res.json(require('./italian-locations').query(req.query))));
 app.get("/api/solar", requireLogin, route(async(req,res) => res.json(await requireProgramming().solarPreview(req))));
 app.get("/api/programming", requireLogin, route(async(req,res) => res.json(await requireProgramming().list(req))));
 app.post("/api/programming", requireLogin, route(async(req,res) => res.json(await requireProgramming().mutate(req))));

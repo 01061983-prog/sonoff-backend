@@ -3,6 +3,7 @@ const crypto=require('crypto'),core=require('./programming-core');
 const PAVIA={name:'Pavia',latitude:45.19205,longitude:9.15917};
 const failure=message=>Object.assign(new Error(message),{status:503,code:'astronomy_unavailable'});
 function location(value=PAVIA){
+ if(value?.municipalityId!==undefined)return require('./italian-locations').resolve(value.municipalityId);
  if(!value||typeof value.name!=='string'||!value.name.trim()||value.name.length>80||typeof value.latitude!=='number'||typeof value.longitude!=='number'||!Number.isFinite(value.latitude)||!Number.isFinite(value.longitude)||Math.abs(value.latitude)>90||Math.abs(value.longitude)>180)throw Object.assign(new Error('Indica una località e coordinate valide.'),{status:400,code:'invalid_location'});
  return {name:value.name.trim(),latitude:Number(value.latitude.toFixed(5)),longitude:Number(value.longitude.toFixed(5))};
 }

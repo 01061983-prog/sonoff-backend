@@ -190,7 +190,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
   await identity(req);
   const date=req.query?.date||core.dateKey(now());
   if(!core.validDate(date))throw error(400,'invalid_schedule','Data non valida.');
-  const loc=req.query?.latitude!==undefined?{name:req.query.name,latitude:Number(req.query.latitude),longitude:Number(req.query.longitude)}:astronomy.PAVIA;
+  const loc=req.query?.municipalityId!==undefined?{municipalityId:req.query.municipalityId}:req.query?.latitude!==undefined?{name:req.query.name,latitude:Number(req.query.latitude),longitude:Number(req.query.longitude)}:astronomy.PAVIA;
   const solar=await astronomy.calendar(loc,date,core.addDays(date,1));
   return {ok:true,timeZone:core.ZONE,solar};
  }
