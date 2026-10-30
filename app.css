@@ -63,3 +63,12 @@ body[data-view="scenes"] #settingsView{padding-top:8px}body[data-view="scenes"] 
 /* Nel menu aperto le etichette restano visibili anche nella fascia tablet. */
 .navigation-dialog .brand-copy,.navigation-dialog .nav-item>span:not(:first-child),.navigation-dialog .logout-button>span:not(:first-child){display:inline!important}
 .programming-validation{color:#a32632;background:#fff0f0;border:1px solid #e8b8be;border-radius:10px;padding:12px;margin:12px 0}
+
+/* Azioni degli scenari nello stesso gruppo della navigazione. */
+.navigation-dialog .scene-submenu{margin:0 0 6px 27px;padding:4px 0 4px 13px;border-left:2px solid #cee5d9;display:flex;flex-direction:column;gap:4px}
+.navigation-dialog .scene-submenu[hidden]{display:none}
+.navigation-dialog .submenu-item{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;padding:10px 12px;border:0;border-radius:10px;background:transparent;color:#176446;font:inherit;font-size:14px;text-align:left;cursor:pointer}
+.navigation-dialog .submenu-item:hover{background:#e8f4ed}
+.navigation-dialog .submenu-item:focus-visible{outline:2px solid #147d5a;outline-offset:2px}
+.navigation-dialog .submenu-chevron{margin-left:auto;transition:transform .15s}
+.navigation-dialog #sceneNavBtn[aria-expanded="true"] .submenu-chevron{transform:rotate(180deg)}

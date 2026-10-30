@@ -23,11 +23,12 @@
   <nav class="nav-list">
     <button class="nav-item" data-view="home" aria-label="Panoramica"><span data-icon="grid"></span><span>Panoramica</span></button>
     <button class="nav-item" data-view="devices" aria-label="Dispositivi"><span data-icon="bulb"></span><span>Dispositivi</span><span class="nav-count" id="navDeviceCount">—</span></button>
-    <button class="nav-item active" data-view="scenes" aria-label="Scenari" aria-current="page"><span data-icon="layers"></span><span>Scenari</span></button>
+    <button id="sceneNavBtn" class="nav-item active" data-view="scenes" aria-label="Scenari" aria-current="page" aria-controls="sceneSubmenu" aria-expanded="false"><span data-icon="layers"></span><span>Scenari</span><span class="submenu-chevron" aria-hidden="true">⌄</span></button>
+    <div id="sceneSubmenu" class="scene-submenu" hidden><button id="sceneManageBtn" class="submenu-item" onclick="setSceneManageMode()">Modifica scenari</button><button id="newSceneBtn" class="submenu-item"><span data-icon="plus"></span><span>Aggiungi scenario</span></button></div>
     <button class="nav-item" data-view="programming" aria-label="Programmazione"><span data-icon="calendar"></span><span>Programmazione</span></button>
     <button class="nav-item" data-view="install" aria-label="La tua webapp"><span data-icon="download"></span><span>La tua webapp</span></button>
   </nav>
-  <div class="drawer-commands"><div class="scene-page-actions"><button id="sceneManageBtn" class="secondary-button" onclick="setSceneManageMode()">Gestisci</button><button id="newSceneBtn" class="primary-button"><span data-icon="plus"></span>Nuovo scenario</button></div><button id="reloadBtn" class="icon-button" aria-label="Aggiorna lo stato dei dispositivi" title="Aggiorna dispositivi"><span data-icon="refresh"></span></button><span class="drawer-refresh-label">Aggiorna dispositivi</span></div>
+  <div class="drawer-commands"><button id="reloadBtn" class="icon-button" aria-label="Aggiorna lo stato dei dispositivi" title="Aggiorna dispositivi"><span data-icon="refresh"></span></button><span class="drawer-refresh-label">Aggiorna dispositivi</span></div>
   <div class="drawer-status"><div id="statusText" class="status" role="status"><span class="info">Connessione…</span></div><div class="info-strip scene-sync-strip"><span data-icon="wifi"></span><span id="sceneSyncText">Collegamento agli scenari condivisi…</span><button id="sceneMigrationBtn" class="secondary-button" hidden onclick="migrateLocalScenes()">Condividi scenari locali</button></div></div>
   <div class="sidebar-bottom"><div class="sidebar-note"><span data-icon="sparkles"></span><p>Un gesto, tutto pronto.<small>I tuoi spazi, a portata di mano.</small></p></div><button id="logoutBtn" class="logout-button" aria-label="Esci dall’account"><span data-icon="logout"></span><span>Esci dall’account</span></button><div class="workspace"><span class="workspace-avatar">SL</span><div>Oratorio San Luigi<small>Plancia di controllo</small></div><span class="workspace-dot" aria-hidden="true"></span></div></div>
 </aside></dialog>
@@ -869,7 +870,7 @@
     function setSceneManageMode() {
         setView("scenes");
         sceneManageMode = !sceneManageMode;
-        document.getElementById("sceneManageBtn").textContent = sceneManageMode ? "Fine gestione" : "Gestisci";
+        document.getElementById("sceneManageBtn").textContent = sceneManageMode ? "Termina modifica" : "Modifica scenari";
         renderScenes();
     }
     function makeSceneTile(scene, manage = false) {
@@ -943,9 +944,9 @@
         document.getElementById("menuBtn").setAttribute("aria-expanded", "true");
         document.body.classList.add("menu-open");
     }
-    function setView(name) {
+    function setView(name, {keepNavigation = false} = {}) {
         if (!VIEW_NAMES[name]) return;
-        closeNavigation();
+        if (!keepNavigation) closeNavigation();
         document.body.dataset.view = name;
         const views = { home: "homeView", devices: "devicesView", scenes: "settingsView", programming: "programmingView", install: "installView" };
         for (const [key, id] of Object.entries(views)) document.getElementById(id).style.display = key === name ? "block" : "none";
@@ -1092,7 +1093,14 @@
         document.getElementById("loginBtn").addEventListener("click", beginLogin);
         document.getElementById("sceneImport").addEventListener("change", importScenes);
         document.getElementById("todayLabel").textContent = new Date().toLocaleDateString("it-IT", {day:"numeric",month:"long",year:"numeric"});
-        document.querySelectorAll(".nav-item[data-view]").forEach(button => button.addEventListener("click", () => setView(button.dataset.view)));
+        document.querySelectorAll(".nav-item[data-view]").forEach(button => button.addEventListener("click", () => {
+            if (button.dataset.view === "scenes") {
+                const expanded = button.getAttribute("aria-expanded") === "true";
+                setView("scenes", {keepNavigation:true});
+                document.getElementById("sceneSubmenu").hidden = expanded;
+                button.setAttribute("aria-expanded", String(!expanded));
+            } else setView(button.dataset.view);
+        }));
         document.querySelectorAll("[data-filter]").forEach(button => button.addEventListener("click", () => {
             activeDeviceFilter = button.dataset.filter;
             document.querySelectorAll("[data-filter]").forEach(tab => {
