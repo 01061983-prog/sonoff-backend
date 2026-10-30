@@ -513,6 +513,29 @@ async function runCloudScene(context, run, scene, accessToken) {
       transaction.set(context.ref, { ...data, executions: { ...data.executions, [scene.id]: result } });
     });
   } catch { console.error("Impossibile registrare l’esito dello scenario", run.runId); }
+  return {status:failure?"failed":"succeeded",completed,message:failure?failure.message:"Comandi accettati da eWeLink."};
+}
+
+
+function programmingSceneSignature(scene){return crypto.createHash("sha256").update(JSON.stringify(cleanScene(scene))).digest("hex");}
+async function getProgrammingScene(req,id,workspaceId){
+  if(typeof id!=="string"||typeof workspaceId!=="string")throw cloudError(400,"invalid_scene","Scegli uno scenario sincronizzato.");
+  const context=await sceneContext({...req,query:{workspaceId},body:{}}),snapshot=await context.ref.get();
+  const stored=(workspaceData(snapshot).scenes||[]).find(scene=>scene.id===id);
+  if(!stored)throw cloudError(404,"scene_not_found","Scenario non più disponibile. Modifica la programmazione.");
+  const scene=cleanScene(stored);return {...scene,workspaceId:context.workspace.id,signature:programmingSceneSignature(scene)};
+}
+async function runProgrammingScene(schedule,credentials,actions){
+  const context=await sceneContext({cookies:{ewelink_access:credentials.accessToken},query:{workspaceId:schedule.workspaceId}});
+  const run=await getSceneDatabase().runTransaction(async transaction=>{
+    const snapshot=await transaction.get(context.ref),data=workspaceData(snapshot);
+    const scene=(data.scenes||[]).find(scene=>scene.id===schedule.sceneId);
+    if(!scene||programmingSceneSignature(scene)!==schedule.sceneSignature)throw cloudError(409,"scene_changed","Scenario modificato o eliminato: apri e salva di nuovo la programmazione.");
+    if(currentExecution(data))throw cloudError(409,"scene_busy","Uno scenario è già in esecuzione. Comando programmato non ripetuto.");
+    const run={runId:crypto.randomUUID(),sceneId:scene.id,status:"running",completed:0,total:actions.length,startedAt:Date.now(),expiresAt:Date.now()+120000};
+    transaction.set(context.ref,{...data,executions:{...(data.executions||{}),[scene.id]:run}});return run;
+  });
+  return runCloudScene(context,run,{id:schedule.sceneId,actions},credentials.accessToken);
 }
 
 app.post("/api/user-scenes/run", requireLogin, route(async (req, res) => {
@@ -581,7 +604,7 @@ app.post("/api/toggle-multi", requireLogin, route(async (req, res) => {
 // Programmazione autonoma: disabilitata finché non viene attivata su Render.
 // I token sono conservati soltanto dopo il consenso esplicito al primo salvataggio.
 if (process.env.EWELINK_PROGRAMMING_ENABLED === "true") {
-  programming = require("./programming")({db:getSceneDatabase, api, listDevices, appid:APPID, secret:APPSECRET, saveSession, region:new URL(API_BASE).hostname.split("-")[0]});
+  programming = require("./programming")({db:getSceneDatabase, api, listDevices, appid:APPID, secret:APPSECRET, saveSession, getScene:getProgrammingScene, runScene:runProgrammingScene, region:new URL(API_BASE).hostname.split("-")[0]});
   programming.start();
 }
 function requireProgramming() {

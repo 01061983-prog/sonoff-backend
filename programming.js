@@ -1,7 +1,7 @@
 'use strict';
 const crypto=require('crypto');
 const core=require('./programming-core');
-module.exports=function createProgramming({db,api,listDevices,appid,secret,saveSession,region='eu',now=Date.now}){
+module.exports=function createProgramming({db,api,listDevices,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now}){
  const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
  const encryptionKey=crypto.hkdfSync('sha256',Buffer.from(secret),Buffer.from(appid),Buffer.from('ewelink-programming-token-v1'),32);
  const accounts=()=>db().collection('ewelinkProgrammingAccounts'), schedules=()=>db().collection('ewelinkProgrammingSchedules'), aliases=()=>db().collection('ewelinkProgrammingSessions');
@@ -155,8 +155,25 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
   const ref=schedules().doc(id),records=await owned(owner);
   let clean=null;
   if(op==='save'){
-   const devices=await listDevices(req.cookies.ewelink_access),device=devices.find(d=>d.deviceid===req.body.schedule?.deviceId);
-   clean=core.validate(req.body.schedule,device,now());
+   const input=req.body.schedule,devices=await listDevices(req.cookies.ewelink_access);
+   if(input?.targetType==='scene'){
+    if(!getScene)throw error(503,'scene_unavailable','Programmazione scenari non disponibile.');
+    const scene=await getScene(req,input.sceneId,input.workspaceId);
+    const toggle=scene.mode==='toggle';
+    if(toggle?!['on','off'].includes(input.action):input.action!=='run')throw error(400,'invalid_schedule','Scegli accensione o spegnimento per gli interruttori, oppure esecuzione per gli scenari a comando.');
+    if(!toggle&&(input.end||input.endDate))throw error(400,'invalid_schedule','Uno scenario a comando non prevede uno spegnimento automatico.');
+    const targets=scene.actions.map(a=>{
+     const device=devices.find(d=>d.deviceid===a.deviceId),pulse=a.pulse===true||a.kind==='gate';
+     const target=core.validate({...input,deviceId:a.deviceId,outlets:a.kind==='gate'?[0]:a.outlets,action:pulse?'pulse':input.action==='run'?a.state:input.action},device,now());
+     return {deviceId:target.deviceId,kind:target.kind,outlets:target.outlets,action:target.action};
+    });
+    const first=scene.actions[0],firstDevice=devices.find(d=>d.deviceid===first.deviceId);
+    clean=core.validate({...input,deviceId:first.deviceId,outlets:targets[0].outlets,action:targets[0].action},firstDevice,now());
+    clean={...clean,targetType:'scene',kind:'scene',deviceId:null,outlets:[],deviceName:scene.name,name:typeof input.name==='string'&&input.name.trim()?input.name.trim():scene.name,action:input.action,sceneId:scene.id,workspaceId:scene.workspaceId,sceneSignature:scene.signature,targets};
+   }else{
+    clean=core.validate(input,devices.find(d=>d.deviceid===input?.deviceId),now());
+    clean.targetType='device';
+   }
    if(records.length>=100&&!records.some(s=>s.id===id))throw error(400,'limit','Puoi salvare fino a 100 programmazioni.');
    const account=await accounts().doc(owner).get();
    if((!account.exists||!automatic(account.data()))&&req.body.authorize!==true)throw error(400,'consent_required','Consenti l’esecuzione dei timer a webapp chiusa.');
@@ -175,6 +192,8 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    if(op==='delete'){t.delete(ref);return;}
    const next={...(old||{}),...(clean||{}),owner,version:(old?.version||0)+1,updatedAt:now(),createdAt:old?.createdAt||now()};
    if(op==='toggle')next.enabled=!old.enabled;
+   if(op==='save'&&!clean.endDate)delete next.endDate;
+   if(op==='save'&&next.kind!=='scene')for(const key of ['sceneId','workspaceId','sceneSignature','targets'])delete next[key];
    next.nextAt=core.nextEvent(next,now())?.at||core.NEVER;
    if(next.enabled&&next.nextAt===core.NEVER)throw error(400,'schedule_past','Gli orari sono già trascorsi. Modifica la programmazione.');
    t.set(ref,next);
@@ -191,14 +210,31 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
   });if(!claimed)return;
   const {s,claim,time}=claimed;let status='skipped',message='Nessun comando da inviare.';
   try{
-   const all=await owned(s.owner),p=core.plan(s,all,time);
-   message=p.reason;
-   if(p.event&&p.outlets.length){
-    const credentials=await access(s.owner,{scheduled:true}),devices=await listDevices(credentials.accessToken),device=devices.find(d=>d.deviceid===s.deviceId);
-    if(!device?.online)throw new Error('Dispositivo offline o non più autorizzato. Nessun reinvio automatico.');
-    if(s.kind==='multi'&&p.outlets.some(o=>!device.params.switches?.some(c=>c.outlet===o)))throw new Error('I canali del dispositivo sono cambiati. Controlla la programmazione.');
-    const params=s.kind==='multi'?{switches:p.outlets.map(outlet=>({outlet,switch:p.event.state}))}:{switch:p.event.state};
-    await api('/v2/device/thing/status',credentials.accessToken,{type:1,id:s.deviceId,params});status='succeeded';message=p.event.pulse?'Impulso accettato da eWeLink.':(p.event.state==='on'?'Accensione':'Spegnimento')+' accettato da eWeLink.';
+   const all=await owned(s.owner);
+   const expanded=all.flatMap(record=>record.kind==='scene'?(record.targets||[]).map((t,i)=>({...record,...t,id:record.id+':'+i,parentId:record.id})):[record]);
+   const targets=s.kind==='scene'?s.targets:[{deviceId:s.deviceId,kind:s.kind,outlets:s.outlets,action:s.action}];
+   const plans=targets.map((target,i)=>({target,p:core.plan({...s,...target,id:s.kind==='scene'?s.id+':'+i:s.id},expanded.filter(other=>other.parentId!==s.id),time)}));
+   const lateScene=s.kind==='scene'&&s.action==='run'&&time-s.nextAt>5*60000;
+   const active=lateScene?[]:plans.filter(({p})=>p.event&&p.outlets.length);
+   message=lateScene?'Scenario saltato: ritardo superiore a 5 minuti.':plans.find(({p})=>p.reason)?.p.reason||'Nessun comando necessario.';
+   if(active.length){
+    const credentials=await access(s.owner,{scheduled:true}),devices=await listDevices(credentials.accessToken);
+    const actions=active.map(({target,p})=>{
+     const device=devices.find(d=>d.deviceid===target.deviceId);
+     if(!device?.online)throw new Error('Dispositivo offline o non più autorizzato. Nessun comando inviato.');
+     if(target.kind==='multi'&&p.outlets.some(o=>!device.params.switches?.some(c=>c.outlet===o)))throw new Error('I canali del dispositivo sono cambiati. Controlla la programmazione.');
+     if(target.kind==='single'&&!['on','off'].includes(device.params.switch))throw new Error('Il dispositivo non espone più l’interruttore previsto.');
+     return {deviceId:target.deviceId,kind:target.kind,state:p.event.state,...(target.kind==='multi'?{outlets:p.outlets}:{}),...(p.event.pulse?{pulse:true}:{})};
+    });
+    if(s.kind==='scene'){
+     if(!runScene)throw new Error('Esecuzione scenari non disponibile.');
+     const result=await runScene(s,credentials,actions);
+     if(!result||result.status!=='succeeded')throw new Error('Scenario interrotto: '+(result?.completed||0)+'/'+actions.length+' comandi accettati. '+(result?.message||'Verifica l’esito.'));
+     status='succeeded';message='Scenario completato: '+result.completed+' comandi accettati da eWeLink.';
+    }else{
+     const action=actions[0],params=action.kind==='multi'?{switches:action.outlets.map(outlet=>({outlet,switch:action.state}))}:{switch:action.state};
+     await api('/v2/device/thing/status',credentials.accessToken,{type:1,id:action.deviceId,params});status='succeeded';message=action.pulse?'Impulso accettato da eWeLink.':(action.state==='on'?'Accensione':'Spegnimento')+' accettato da eWeLink.';
+    }
    }
   }catch(e){status='unknown';message=e.status===401?'Accesso scaduto: ricollega eWeLink.':String(e.message||'Esito non confermato.').slice(0,250);}
   await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data?.last?.id===claim)t.set(ref,{...data,last:{...data.last,status,message,finishedAt:now(),until:0}});});

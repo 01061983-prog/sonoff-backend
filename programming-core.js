@@ -19,7 +19,7 @@ function windows(s,from,to){
  const dates=[];
  if(s.repeat==='date')dates.push(s.date);
  else {for(let d=addDays(dateKey(from),-1),last=dateKey(to),i=0;d<=last&&i<370;d=addDays(d,1),i++)if(s.days.includes(new Date(d+'T12:00:00Z').getUTCDay()))dates.push(d);}
- return dates.map(date=>({start:localTime(date,s.start),end:s.end?localTime(addDays(date,s.end<=s.start?1:0),s.end,true):null})).filter(w=>w.start!==null&&(!s.end||w.end!==null));
+ return dates.map(date=>({start:localTime(date,s.start),end:s.end?localTime(s.repeat==='date'&&s.endDate?s.endDate:addDays(date,s.end<=s.start?1:0),s.end,true):null})).filter(w=>w.start!==null&&(!s.end||w.end!==null));
 }
 function events(s,from,to){
  return windows(s,from,to).flatMap(w=>[{at:w.start,state:s.action==='off'?'off':'on',pulse:s.action==='pulse'},...(w.end?[{at:w.end,state:'off',pulse:false}]:[])]).filter(e=>e.at>from&&e.at<=to).sort((a,b)=>a.at-b.at);
@@ -41,9 +41,10 @@ function validate(input,device,now=Date.now()){
  else if(!['on','off'].includes(device.params?.switch))err('Questo dispositivo non espone un interruttore programmabile.');
  const name=typeof input.name==='string'?input.name.trim():'';
  if(name.length>100)err('Nome troppo lungo.');
- const s={name:name||device.name||'Programmazione',deviceId:device.deviceid,deviceName:device.name||device.deviceid,kind:channels?'multi':'single',outlets,action:input.action,repeat:input.repeat,date:input.repeat==='date'?input.date:null,days:input.repeat==='weekly'?[...new Set(input.days||[])].sort():[],start:input.start,end,enabled:input.enabled!==false,timeZone:ZONE};
+ const s={name:name||device.name||'Programmazione',deviceId:device.deviceid,deviceName:device.name||device.deviceid,kind:channels?'multi':'single',outlets,action:input.action,repeat:input.repeat,date:input.repeat==='date'?input.date:null,days:input.repeat==='weekly'?[...new Set(input.days||[])].sort():[],start:input.start,end,...(input.repeat==='date'&&end&&input.endDate?{endDate:input.endDate}:{}),enabled:input.enabled!==false,timeZone:ZONE};
  if(s.repeat==='date'&&(!validDate(s.date)||localTime(s.date,s.start)===null))err('Data o orario non valido, anche rispetto al cambio dell’ora.');
- if(s.repeat==='date'&&s.end&&localTime(addDays(s.date,s.end<=s.start?1:0),s.end,true)===null)err('L’orario di spegnimento non esiste nel giorno scelto per il cambio dell’ora.');
+ if(s.endDate&&(!validDate(s.endDate)||s.endDate<s.date||s.endDate===s.date&&s.end<=s.start))err('La data e l’ora di fine devono essere successive all’inizio.');
+ if(s.repeat==='date'&&s.end&&localTime(s.endDate||addDays(s.date,s.end<=s.start?1:0),s.end,true)===null)err('L’orario di spegnimento non esiste nel giorno scelto per il cambio dell’ora.');
  if(s.repeat==='weekly'&&(!s.days.length||s.days.some(d=>!Number.isInteger(d)||d<0||d>6)))err('Seleziona almeno un giorno della settimana.');
  if(s.enabled&&!nextEvent(s,now))err('Tutti gli orari sono già trascorsi. Scegli una data futura.');
  return s;
