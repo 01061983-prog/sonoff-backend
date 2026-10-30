@@ -69,7 +69,8 @@ function validate(input,device,now=Date.now()){
  if(s.enabled&&!nextEvent(s,now))err('Tutti gli orari sono già trascorsi. Scegli una data futura.');
  return s;
 }
-function activeWindow(s,at){return s.enabled&&s.end&&windows(s,at-DAY,at).some(w=>w.start<=at&&w.end>at);}
+function currentWindow(s,at){return s.enabled&&s.action==='on'&&s.end?windows(s,at-DAY,at).find(w=>w.start<=at&&w.end>at)||null:null;}
+function activeWindow(s,at){return Boolean(currentWindow(s,at));}
 function plan(s,all,now){
  // Recupera al massimo l'ultimo giorno: nessuna vecchia accensione viene riprodotta.
  const due=events(s,Math.max(s.nextAt-1,now-DAY-1),now),last=due.at(-1);
@@ -79,4 +80,4 @@ function plan(s,all,now){
  const outlets=selected.filter(outlet=>last.state!=='off'||!all.some(other=>other.id!==s.id&&other.deviceId===s.deviceId&&activeWindow(other,now)&&(other.kind==='single'||other.outlets.includes(outlet))));
  return {event:last,outlets,reason:outlets.length?'':'Spegnimento evitato: un’altra fascia è ancora attiva.'};
 }
-module.exports={ZONE,NEVER,DAY,dateKey,addDays,localTime,validDate,solarTime,usesSolar,timeAt,windowFor,windows,events,nextEvent,validate,activeWindow,plan};
+module.exports={ZONE,NEVER,DAY,dateKey,addDays,localTime,validDate,solarTime,usesSolar,timeAt,windowFor,windows,events,nextEvent,validate,currentWindow,activeWindow,plan};

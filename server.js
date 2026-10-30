@@ -559,8 +559,11 @@ app.get("/api/user-scenes/events", requireLogin, route(async (req, res) => {
   res.on("close", () => { unsubscribe(); clearInterval(heartbeat); clearTimeout(maximum); });
 }));
 
+async function protectManualCommands(token,actions){
+  return programming?.protectManual?programming.protectManual(token,actions):{actions,protected:[],message:null};
+}
 async function runCloudScene(context, run, scene, accessToken) {
-  let completed = 0, failure = null;
+  let completed = 0, failure = null, protectionMessage = null;
   try {
     for(const action of scene.actions)await assertLinkedDeviceChannels(accessToken,action.deviceId,action.kind==="multi"?action.outlets:action.kind==="gate"?[0]:null);
     if (scene.mode === "toggle") {
@@ -575,7 +578,9 @@ async function runCloudScene(context, run, scene, accessToken) {
       const target = states.every(state=>state==="on") ? "off" : "on";
       scene = {...scene,actions:scene.actions.map(action=>({...action,state:target}))};
     }
-    for (const action of scene.actions) {
+    const guarded=await protectManualCommands(accessToken,scene.actions);
+    protectionMessage=guarded.message;
+    for (const action of guarded.actions) {
       const params = action.kind === "multi"
         ? { switches: action.outlets.map(outlet => ({ outlet, switch: action.state })) }
         : action.kind === "gate" || action.deviceId === GATE_ID
@@ -600,11 +605,11 @@ async function runCloudScene(context, run, scene, accessToken) {
       const data = workspaceData(snapshot);
       if (data.executions?.[scene.id]?.runId !== run.runId) return;
       const result = { ...run, status: failure ? "failed" : "succeeded", completed, finishedAt: Date.now(),
-        message: failure ? failure.message : "Comandi accettati da eWeLink." };
+        protectionMessage,message: failure ? failure.message : protectionMessage || "Comandi accettati da eWeLink." };
       transaction.set(context.ref, { ...data, executions: { ...data.executions, [scene.id]: result } });
     });
   } catch { console.error("Impossibile registrare l’esito dello scenario", run.runId); }
-  return {status:failure?"failed":"succeeded",completed,message:failure?failure.message:"Comandi accettati da eWeLink."};
+  return {status:failure?"failed":"succeeded",completed,message:failure?failure.message:protectionMessage||"Comandi accettati da eWeLink."};
 }
 
 
@@ -675,9 +680,11 @@ app.post("/api/toggle", requireLogin, route(async (req, res) => {
   // Il cancello è un dispositivo: type 1. Type 2 indicherebbe un gruppo.
   // L'eventuale modalità impulso resta configurata sul Sonoff.
   await assertLinkedDeviceChannels(req.cookies.ewelink_access,deviceId,null);
+  const guard=await protectManualCommands(req.cookies.ewelink_access,[{deviceId,kind:deviceId===GATE_ID?'gate':'single',state}]);
+  if(!guard.actions.length)return res.json({ok:true,sent:null,raw:null,protectionMessage:guard.message,protected:guard.protected});
   const sent = { type: 1, id: deviceId, params };
   const raw = await api("/v2/device/thing/status", req.cookies.ewelink_access, sent);
-  res.json({ ok: true, sent, raw });
+  res.json({ ok: true, sent, raw, protectionMessage:guard.message,protected:guard.protected });
 }));
 
 app.post("/api/toggle-multi", requireLogin, route(async (req, res) => {
@@ -688,10 +695,12 @@ app.post("/api/toggle-multi", requireLogin, route(async (req, res) => {
   }
   await assertNoSceneRunning(req);
   await assertLinkedDeviceChannels(req.cookies.ewelink_access,body.deviceId,body.outlets);
-  const switches = [...new Set(body.outlets)].map(outlet => ({ outlet, switch: body.state }));
+  const guard=await protectManualCommands(req.cookies.ewelink_access,[{deviceId:body.deviceId,kind:'multi',outlets:[...new Set(body.outlets)],state:body.state}]);
+  if(!guard.actions.length)return res.json({ok:true,sent:null,raw:null,protectionMessage:guard.message,protected:guard.protected});
+  const switches = guard.actions[0].outlets.map(outlet => ({ outlet, switch: body.state }));
   const sent = { type: 1, id: body.deviceId, params: { switches } };
   const raw = await api("/v2/device/thing/status", req.cookies.ewelink_access, sent);
-  res.json({ ok: true, sent, raw });
+  res.json({ ok: true, sent, raw, protectionMessage:guard.message,protected:guard.protected });
 }));
 
 // Programmazione autonoma: disabilitata finché non viene attivata su Render.

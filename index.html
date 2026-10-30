@@ -76,7 +76,7 @@
         <div class="editor-footer"><button type="button" class="secondary-button" onclick="cancelProgramming()">Annulla</button><button type="submit" id="saveProgrammingBtn" class="primary-button"><span data-icon="check"></span>Salva programmazione</button></div>
       </div>
     </form>
-    <div id="programmingList" class="programming-list"></div>
+    <p class="page-note">Le fasce attive mantengono accese le proprie luci anche durante uno spegnimento manuale dalla plancia. Se salvi o riattivi una fascia già iniziata, le luci si accendono subito; impulsi e cancelli sono esclusi. Le programmazioni singole completate spariscono dall’elenco, mentre gli esiti incerti restano visibili.</p><div id="programmingList" class="programming-list"></div>
     <details class="programming-help"><summary>Come funzionano le programmazioni</summary><p>I timer funzionano anche con la webapp chiusa. Ogni fascia invia un comando esplicito: i comandi manuali restano validi fino al prossimo orario programmato.</p><p>Le fasce dello stesso account sullo stesso canale possono sovrapporsi: una fascia non spegne la luce mentre un’altra la richiede accesa.</p><p>In caso di interruzione, le accensioni in ritardo di oltre 5 minuti vengono saltate. Gli spegnimenti possono essere recuperati entro 24 ore. Non vengono ripetuti comandi dall’esito incerto. Serve che server, eWeLink e dispositivo siano disponibili.</p><p>Nel cambio all’ora solare, per gli orari ripetuti si usa la prima occorrenza per l’accensione e l’ultima per lo spegnimento finale; un orario settimanale inesistente nel cambio all’ora legale viene saltato.</p></details>
     <button id="disconnectProgrammingBtn" class="secondary-button" hidden onclick="disconnectProgramming()">Disattiva tutti i timer e scollega l’esecuzione automatica</button>
   </section>
@@ -213,12 +213,12 @@
         if (commandBusy || activeCloudExecution() || devicesLoading || !devicesFresh) return;
         commandBusy = true;
         updateControlLocks();
-        let error = null;
-        try { await apiRequest(path, body); }
+        let error = null, result = null;
+        try { result = await apiRequest(path, body); }
         catch (err) { error = err; }
         const refreshed = await loadDevices();
         setMessage(error ? "Comando non confermato: " + error.message : refreshed
-            ? "Comando accettato. Stato aggiornato dal server."
+            ? result?.protectionMessage || "Comando accettato. Stato aggiornato dal server."
             : "Comando accettato, ma stato non verificato: ricarica i dispositivi.", error || !refreshed ? "error" : "");
         commandBusy = false;
         updateControlLocks();
@@ -888,7 +888,7 @@
         const label = running ? "Comando in esecuzione…" : expired ? "Esito da verificare" : pulseConfirmed ? "Impulso inviato" : pulse
             ? state === false ? "Relè a riposo" : state === true ? "Relè attivo" : "Impulso · stato non rilevato"
             : state === true ? "Acceso" : state === false ? "Spento" : "Stato misto o non rilevato";
-        const lastResult = !running && run?.status === "succeeded" && pulse ? "Ultimo impulso inviato" : !running && run?.status === "failed" ? "Comando non completato · verifica l’esito" : "";
+        const lastResult = !running && run?.status === "succeeded" && pulse ? "Ultimo impulso inviato" : !running && run?.status === "failed" ? "Comando non completato · verifica l’esito" : run?.status === "succeeded" ? run.protectionMessage || "" : "";
         tile.className = "scenario-unit";
         tile.innerHTML = `<button type="button" class="scenario-pad scene-run state-${status}" data-scene-id="${escapeHtml(scene.id)}" aria-busy="${running}" aria-label="${escapeHtml((running ? "In esecuzione: " : "Esegui scenario: ") + scene.name + ". " + label)}" onclick="runUserScene(${jsArg(scene.id)})"><span class="pad-top"><span class="pad-icon">${icon(running ? "refresh" : pulse ? "gate" : turnsOff ? "moon" : "sun")}</span><span class="pad-dot"></span></span><span class="pad-name">${escapeHtml(scene.name)}</span><span class="pad-type">${pulse ? "COMANDO A IMPULSO" : turnsOff ? "SPEGNIMENTO" : "SCENARIO"} · ${scene.actions.length} ${scene.actions.length === 1 ? "AZIONE" : "AZIONI"}</span><span class="pad-state">${running ? '<span class="pad-spinner"></span>' : ""}${label}</span>${lastResult ? `<span class="pad-result">${escapeHtml(lastResult)}</span>` : ""}</button>${manage ? `<div class="pad-management"><button onclick="startSceneEdit(${jsArg(scene.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteScene(${jsArg(scene.id)})">Elimina</button></div>` : ""}`;
         return tile;
