@@ -40,7 +40,7 @@ const refreshJobs = new Map();
 let programming = null;
 
 function clearSession(res) {
-  for (const name of ["ewelink_access", "ewelink_refresh", "ewelink_expires"]) {
+  for (const name of ["ewelink_access", "ewelink_refresh", "ewelink_expires", "ewelink_session"]) {
     res.clearCookie(name, COOKIE_OPTIONS);
   }
 }
@@ -95,13 +95,13 @@ async function renewSession(req, res) {
 function requireLogin(req, res, next) {
   if (programming && !req.programmingChecked) {
     req.programmingChecked = true;
-    return programming.restoreSession(req, res).then(() => requireLogin(req, res, next)).catch(error => failure(res, error));
+    return programming.restoreSession(req, res).then(() => requireLogin(req, res, next)).catch(error => failure(res, error, req));
   }
   const expiry = Number(req.cookies.ewelink_expires);
   if (req.cookies.ewelink_access && (!expiry || expiry > Date.now() + 60000)) return next();
-  return renewSession(req, res).then(() => next()).catch(error => failure(res, error));
+  return renewSession(req, res).then(() => next()).catch(error => failure(res, error, req));
 }
-function failure(res, error) {
+function failure(res, error, req) {
   if (error.code === "not_authenticated") {
     // Conserva il refresh token: /login potrà tentare un rinnovo senza chiedere credenziali.
     res.clearCookie("ewelink_access", COOKIE_OPTIONS);
@@ -109,10 +109,30 @@ function failure(res, error) {
   }
   return res.status(error.status || 502).json({
     ok: false, error: error.code || "upstream_error", msg: error.message,
-    providerError: error.providerError
+    providerError: error.providerError,
+    canResume: error.code === "not_authenticated" && Boolean(req?.browserSession)
   });
 }
-const route = fn => (req, res) => Promise.resolve().then(() => fn(req, res)).catch(e => failure(res, e));
+const route = fn => async (req, res) => {
+  try { return await fn(req, res); }
+  catch (error) {
+    if (programming && req.browserSession && error.code === "not_authenticated" && !res.headersSent) {
+      const used = req.cookies.ewelink_access;
+      try {
+        await programming.restoreSession(req, res);
+        if (used !== req.cookies.ewelink_access) {
+          // Ripete solo letture: mai un comando, neppure dopo una nuova autorizzazione.
+          if (req.method === "GET" && req.path?.startsWith("/api/")) return await fn(req, res);
+          error = cloudError(409, "session_updated", "Collegamento aggiornato da un altro dispositivo. Aggiorna lo stato prima di riprovare il comando.");
+        }
+      } catch (recoveryError) { error = recoveryError; }
+      if (error.code === "not_authenticated") {
+        try { await programming.markAuthenticationRequired(req); } catch {}
+      }
+    }
+    return failure(res, error, req);
+  }
+};
 
 // Spazia le richieste verso eWeLink. Nessun reinvio automatico dei comandi.
 let queue = Promise.resolve();
@@ -183,7 +203,13 @@ app.get("/app/", (_req, res) => res.redirect(HOME));
 app.get("/", (_req, res) => res.json({ ok: true, message: "Backend Sonoff OAuth attivo" }));
 
 app.get("/login", route(async (req, res) => {
-  if (programming) await programming.restoreSession(req, res);
+  if (programming) {
+    try { await programming.restoreSession(req, res); }
+    catch (error) {
+      if (error.code !== "not_authenticated") throw error;
+      for (const name of ["ewelink_access", "ewelink_refresh", "ewelink_expires"]) delete req.cookies[name];
+    }
+  }
   const expiry = Number(req.cookies.ewelink_expires);
   if (req.cookies.ewelink_access && expiry > Date.now() + 60000) {
     return res.redirect(returnUrl(req.query.returnUrl));
@@ -223,13 +249,15 @@ app.get("/oauth/callback", route(async (req, res) => {
   const body = { code: req.query.code, redirectUrl: REDIRECT_URL, grantType: "authorization_code" };
   const data = await api("/v2/user/oauth/token", null, body, "Sign " + sign(JSON.stringify(body)));
   saveSession(req, res, data.data || {});
+  if (programming) await programming.connectBrowser(req, res);
   res.redirect(returnUrl(pending.returnUrl));
 }));
 
-app.post("/logout", (_req, res) => {
+app.post("/logout", route(async (req, res) => {
+  if (programming) await programming.logoutBrowser(req);
   clearSession(res);
   res.json({ ok: true });
-});
+}));
 
 async function families(token) {
   const response = await api("/v2/family", token);
@@ -266,6 +294,7 @@ async function listDevices(token, homes) {
   // Restituisce solo dispositivi reali: non inventa stati o dispositivi online.
   return [...devices.values()];
 }
+app.get("/api/session", requireLogin, (_req, res) => res.json({ok:true}));
 app.get("/api/devices", requireLogin, route(async (req, res) => {
   res.json({ ok: true, devices: await listDevices(req.cookies.ewelink_access) });
 }));
