@@ -3,6 +3,7 @@ const crypto=require('crypto');
 const core=require('./programming-core');
 module.exports=function createProgramming({db,api,listDevices,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch,isImpulseDevice=id=>id==='1000ac81a0'}){
  const astronomy=require('./astronomy')({db,fetch:solarFetch,now});
+ const recovery=require('./programming-recovery')({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,api,runScene,getScene,completedOnce});
  const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
  const encryptionKey=crypto.hkdfSync('sha256',Buffer.from(secret),Buffer.from(appid),Buffer.from('ewelink-programming-token-v1'),32);
  const accounts=()=>db().collection('ewelinkProgrammingAccounts'), schedules=()=>db().collection('ewelinkProgrammingSchedules'), aliases=()=>db().collection('ewelinkProgrammingSessions');
@@ -152,7 +153,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
   });return {ok:true,deviceId:verified.id,name:verified.name};
  }
  const expandedSchedules=records=>records.flatMap(record=>record.kind==='scene'?(record.targets||[]).map((target,i)=>({...record,...target,id:record.id+':'+i,parentId:record.id})):[record]);
- function completedOnce(s){return s.repeat==='date'&&s.nextAt===core.NEVER&&(s.last?.status==='succeeded'||s.last?.status==='skipped'&&s.last.message?.startsWith('Spegnimento evitato:'));}
+ function completedOnce(s){return s.repeat==='date'&&!s.recoveryAt&&s.nextAt===core.NEVER&&(s.last?.status==='succeeded'||s.last?.status==='skipped'&&s.last.message?.startsWith('Spegnimento evitato:'));}
  function automaticActivation(s,time){
   if(s.action!=='on'||!s.end||!s.enabled)return null;
   const targets=s.kind==='scene'?s.targets:[s];
@@ -199,7 +200,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
   const owner=await identity(req),op=req.body?.op;
   if(op==='connect'){if(req.body.authorize!==true)throw error(400,'consent_required','Consenti l’esecuzione dei timer a webapp chiusa.');await remember(req);return list(req);}
   if(op==='disconnect'){
-   const records=await owned(owner);for(const s of records){const ref=schedules().doc(s.id);await db().runTransaction(async t=>{const doc=await t.get(ref);if(doc.data()?.last?.status==='claimed'&&doc.data().last.until>now())throw error(409,'schedule_busy','Un comando programmato è già in corso.');t.set(ref,{...doc.data(),enabled:false,nextAt:core.NEVER,solarRefreshAt:core.NEVER,version:doc.data().version+1});});}
+   const records=await owned(owner);for(const s of records){const ref=schedules().doc(s.id);await db().runTransaction(async t=>{const doc=await t.get(ref);if(doc.data()?.last?.status==='claimed'&&doc.data().last.until>now())throw error(409,'schedule_busy','Un comando programmato è già in corso.');const next={...doc.data(),enabled:false,nextAt:core.NEVER,solarRefreshAt:core.NEVER,version:doc.data().version+1};delete next.recoveryAt;delete next.recovery;t.set(ref,next);});}
    const ref=accounts().doc(owner);
    await db().runTransaction(async t=>{
     const doc=await t.get(ref),data=doc.data()||{},keepBrowser=(data.browserUntil||0)>now();
@@ -248,7 +249,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    if(old?.last?.status==='claimed'&&old.last.until>now())throw error(409,'schedule_busy','Un comando è già in corso. Attendi il suo esito.');
    if(op==='delete'){t.delete(ref);return;}
    const next={...(old||{}),...(clean||{}),owner,version:(old?.version||0)+1,updatedAt:now(),createdAt:old?.createdAt||now()};
-   delete next.activation;delete next.archivedAt;
+   delete next.activation;delete next.archivedAt;delete next.recoveryAt;delete next.recovery;
    if(op==='toggle'){delete next.solarPendingAt;next.enabled=!old.enabled;next.solarRefreshAt=next.enabled&&core.usesSolar(next)&&next.repeat==='weekly'?now()+7*core.DAY:core.NEVER;if(clean?.solar)delete next.solarError;}
    if(op==='save'&&!clean.endDate)delete next.endDate;
    if(op==='save'){
@@ -279,10 +280,10 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    await db().runTransaction(async t=>{const snap=await t.get(ref),current=snap.data();if(current?.version===s.version&&core.usesSolar(current))t.set(ref,{...current,solarRefreshAt:now()+5*60000,solarError:'Aggiornamento astronomico non disponibile. Uso gli orari già salvati; senza dati validi i comandi vengono sospesi.'});});
   }
  }
- async function ensureSolar(owner,due){
+ async function ensureSolar(owner,due,lookback=1){
   const targets=s=>s.kind==='scene'?(s.targets||[]):[s];
   const relevant=s=>s.id===due.id||targets(s).some(a=>targets(due).some(b=>a.deviceId===b.deviceId&&(a.kind==='single'||b.kind==='single'||(a.outlets||[]).some(o=>(b.outlets||[]).includes(o)))));
-  const records=await owned(owner),today=core.dateKey(now()),from=core.addDays(today,-1),to=core.addDays(today,9);
+  const records=await owned(owner),today=core.dateKey(now()),from=core.addDays(today,-lookback),to=core.addDays(today,9);
   for(const s of records)if(relevant(s)&&s.enabled&&core.usesSolar(s)&&s.repeat==='weekly'&&(!s.solar?.days?.[from]||!s.solar?.days?.[to])&&(!s.solarError||s.solarRefreshAt<=now()))await refreshSolar(s);
   const fresh=await owned(owner);
   for(const s of fresh)if(relevant(s)&&s.enabled&&core.usesSolar(s)&&s.repeat==='weekly')for(let date=from;date<=core.addDays(today,1);date=core.addDays(date,1))if(!s.solar?.days?.[date])throw error(503,'astronomy_unavailable','Orari astronomici mancanti: nessun comando inviato.');
@@ -290,7 +291,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
  async function execute(ref){
   const before=await ref.get();
   if(!before.exists||!before.data().enabled||before.data().nextAt>now())return;
-  if(before.data()?.owner)try{await ensureSolar(before.data().owner,{...before.data(),id:ref.id});}
+  if(before.data()?.owner)try{await ensureSolar(before.data().owner,{...before.data(),id:ref.id});if(recovery.eligible(before.data()))await recovery.prepare(before.data().owner);}
   catch{
    // Back off this item without occupying the first due slots forever, and
    // retain the original event for the normal late-command recovery rules.
@@ -305,7 +306,11 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    // Avanza prima dell'invio: dopo un arresto non ripete un impulso già tentato.
    const nextAt=core.nextEvent(s,time)?.at||core.NEVER;
    const next={...s,nextAt};delete next.activation;
-   t.set(ref,{...next,last:{id:claim,status:'claimed',at:time,scheduledAt:s.nextAt,until:time+180000,message:'Comando in esecuzione.'}});return {s,claim,time};
+   if(recovery.eligible(s)){
+    const event=s.activation?{at:s.activation.requestedAt,state:'on'}:core.events(s,s.repeat==='date'?0:time-8*core.DAY,time).filter(e=>e.at>=(s.createdAt||0)).at(-1);
+    await recovery.claimIntent(t,s,event,claim);next.recoveryAt=time+180000;next.recovery={since:s.nextAt,message:'Verifica dello stato programmato in caso di interruzione.'};
+   }
+   t.set(ref,{...next,last:{id:claim,status:'claimed',at:time,scheduledAt:s.nextAt,until:time+180000,scheduleVersion:s.version,message:'Comando in esecuzione.'}});return {s,claim,time};
   });if(!claimed)return;
   const {s,claim,time}=claimed;let status='skipped',message='Nessun comando da inviare.';
   try{
@@ -335,23 +340,25 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
     if(!actions.length){status='succeeded';message='La fascia è attiva: le luci risultano già accese.';}
     else if(s.kind==='scene'){
      if(!runScene)throw new Error('Esecuzione scenari non disponibile.');
-     const result=await runScene(s,credentials,actions);
+     await recovery.renew(ref,claim,s);const result=await runScene(s,credentials,actions);
      if(!result||result.status!=='succeeded')throw new Error('Scenario interrotto: '+(result?.completed||0)+'/'+actions.length+' comandi accettati. '+(result?.message||'Verifica l’esito.'));
      status='succeeded';message='Scenario completato: '+result.completed+' comandi accettati da eWeLink.';
     }else{
      const action=actions[0],params=action.kind==='multi'?{switches:action.outlets.map(outlet=>({outlet,switch:action.state}))}:{switch:action.state};
-     await api('/v2/device/thing/status',credentials.accessToken,{type:1,id:action.deviceId,params});status='succeeded';message=action.pulse?'Impulso accettato da eWeLink.':(action.state==='on'?'Accensione':'Spegnimento')+' accettato da eWeLink.';
+     await recovery.renew(ref,claim,s);await api('/v2/device/thing/status',credentials.accessToken,{type:1,id:action.deviceId,params});status='succeeded';message=action.pulse?'Impulso accettato da eWeLink.':(action.state==='on'?'Accensione':'Spegnimento')+' accettato da eWeLink.';
     }
    }
   }catch(e){status='unknown';message=e.status===401?'Accesso scaduto: ricollega eWeLink.':String(e.message||'Esito non confermato.').slice(0,250);}
-  await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data?.last?.id===claim){const next={...data,last:{...data.last,status,message,finishedAt:now(),until:0}};if(completedOnce(next)){t.set(db().collection('ewelinkProgrammingHistory').doc(hash(next.owner+':'+ref.id)),{...next,id:ref.id,archivedAt:now(),enabled:false});t.delete(ref);}else t.set(ref,next);}});
+  await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data?.last?.id===claim){const next={...data,last:{...data.last,status,message,finishedAt:now(),until:0}};const success=status==='succeeded'||status==='skipped'&&message.startsWith('Spegnimento evitato:');await recovery.finishIntent(t,s,claim,success);if(recovery.eligible(s)){if(success){delete next.recoveryAt;delete next.recovery;}else{next.recoveryAt=now()+60000;next.recovery={since:s.nextAt,message:'Ripristino automatico in attesa di connessione e stato verificabili.'};}}if(completedOnce(next)){t.set(db().collection('ewelinkProgrammingHistory').doc(hash(next.owner+':'+ref.id)),{...next,id:ref.id,archivedAt:now(),enabled:false});t.delete(ref);}else t.set(ref,next);}});
  }
  let busy=false,timer=null;
  async function tick(){
   if(busy)return;busy=true;
   try{
+   await recovery.adoptLegacy();
    const refresh=await schedules().where('solarRefreshAt','<=',now()).limit(5).get();for(const doc of refresh.docs)if(doc.data().enabled&&core.usesSolar(doc.data()))await refreshSolar({...doc.data(),id:doc.id});
    const due=await schedules().where('nextAt','<=',now()).limit(20).get();for(const doc of due.docs)try{await execute(doc.ref);}catch{console.error('Programmazione temporaneamente sospesa: dati necessari non disponibili.');}
+   const pending=await schedules().where('recoveryAt','<=',now()).limit(20).get();for(const doc of pending.docs)try{await recovery.run(doc.ref);}catch{console.error('Ripristino temporaneamente in attesa: nessun comando non verificato.');}
    // Mantiene valida l'autorizzazione anche per prenotazioni lontane nel tempo.
    const renewals=await accounts().where('renewAt','<=',now()).limit(5).get();
    for(const doc of renewals.docs){

@@ -58,7 +58,7 @@ module.exports=function createAstronomy({db,fetch:request=globalThis.fetch,now=D
   const clean={...input};delete clean.solar;
   if(!core.usesSolar(clean))return clean;
   if(clean.repeat==='date'&&(!core.validDate(clean.date)||clean.endDate&&!core.validDate(clean.endDate)))throw Object.assign(new Error('Data non valida.'),{status:400,code:'invalid_schedule'});
-  const today=core.dateKey(now()),from=core.addDays(clean.repeat==='date'?clean.date:today,-1),to=core.addDays(clean.repeat==='date'?(clean.endDate||clean.date):today,clean.repeat==='date'?1:40);
+  const today=core.dateKey(now()),from=core.addDays(clean.repeat==='date'?clean.date:today,clean.repeat==='date'?-1:-8),to=core.addDays(clean.repeat==='date'?(clean.endDate||clean.date):today,clean.repeat==='date'?1:40);
   clean.solar=await calendar(clean.location,from,to);return clean;
  }
  return {prepare,calendar,location,PAVIA};

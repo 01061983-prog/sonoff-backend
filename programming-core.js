@@ -66,7 +66,7 @@ function validate(input,device,now=Date.now()){
   if(w.end<=w.start)err('La data e l’ora di fine devono essere successive all’inizio.');
  }
  if(s.repeat==='weekly'&&(!s.days.length||s.days.some(d=>!Number.isInteger(d)||d<0||d>6)))err('Seleziona almeno un giorno della settimana.');
- if(s.enabled&&!nextEvent(s,now))err('Tutti gli orari sono già trascorsi. Scegli una data futura.');
+ if(s.enabled&&!nextEvent(s,now))err('Questa data non ha più comandi futuri. Scegli una nuova data oppure la ripetizione Ogni giorno.');
  return s;
 }
 function currentWindow(s,at){return s.enabled&&s.action==='on'&&s.end?windows(s,at-DAY,at).find(w=>w.start<=at&&w.end>at)||null:null;}
