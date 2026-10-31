@@ -79,3 +79,5 @@ body[data-view="scenes"] #settingsView{padding-top:8px}body[data-view="scenes"] 
 
 /* Risultati immediati, selezionabili anche senza aprire i menu nativi. */
 .location-search-results{display:flex;flex-direction:column;max-height:220px;overflow-y:auto;border:1px solid #b9d7c7;border-radius:12px;background:#fff;margin-top:6px;box-shadow:0 5px 14px #214c3612}.location-search-results[hidden]{display:none}.location-search-results button{flex-shrink:0;width:100%;min-height:46px;padding:12px 14px;border:0;border-bottom:1px solid #e2eee7;border-radius:0;background:#fff;color:#234d37;font:inherit;font-size:14px;text-align:left;white-space:normal;overflow-wrap:anywhere;box-shadow:none}.location-search-results button:last-child{border-bottom:0}.location-search-results button:hover,.location-search-results button:focus-visible{background:#e6f4ec;color:#095d38;outline:2px solid #14805a;outline-offset:-2px}
+
+.programming-badge.is-warning,.programming-result.is-warning{background:#fff0d9;color:#84500a}.programming-card-top{flex-wrap:wrap}

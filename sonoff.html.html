@@ -1281,16 +1281,27 @@
         }catch(error){if(epoch===solarPreviewEpoch)output.textContent=error.message;}
     }
     const isDailyProgramming = schedule => schedule?.repeat==='weekly'&&Array.isArray(schedule.days)&&[0,1,2,3,4,5,6].every(day=>schedule.days.includes(day));
+    function programmingOutcome(schedule,next){
+        const last=schedule.last,running=last?.status==='claimed'&&Number(last.until)>Date.now();
+        const attention=Boolean(last&&(['unknown','failed'].includes(last.status)||last.status==='claimed'&&!running));
+        let message=String(last?.message||'');
+        message=message.replace(/控制失败/g,'Comando non riuscito: eWeLink non ha confermato l’esecuzione. Verifica il dispositivo.');
+        if(/[\u3400-\u9fff]/.test(message))message='eWeLink ha restituito un errore. L’esecuzione non è confermata: verifica lo stato del dispositivo.';
+        if(last?.status==='claimed'&&!running)message='Esito non confermato dopo l’interruzione del comando. Verifica il dispositivo; nessun reinvio automatico.';
+        const label=!schedule.enabled?'Sospesa':running?'In esecuzione':attention?'Da verificare':next?'Attiva':last?.status==='skipped'?'Non eseguita':'Conclusa';
+        return {label,attention,message,note:attention&&!next?'La programmazione resta visibile perché l’esecuzione non è confermata. Questo comando non verrà ripetuto automaticamente.':''};
+    }
     function renderProgramming(){
         const data=programmingData;
-        programmingElement('Status').textContent=data.connectionError|| (data.connected?'Le tue programmazioni sono sincronizzate. Si eseguono anche con la webapp chiusa.':'Crea la prima programmazione per collegare l’esecuzione automatica al tuo account.');
+        programmingElement('Status').textContent=data.connectionError|| (data.connected?'Le tue programmazioni sono sincronizzate. Si eseguono a webapp chiusa, ma il dispositivo deve essere collegato a Internet.':'Crea la prima programmazione per collegare l’esecuzione automatica al tuo account.');
         document.getElementById('disconnectProgrammingBtn').hidden=!data.connected;
         programmingElement('List').innerHTML=data.schedules.length?data.schedules.map(s=>{
             const when=s.repeat==='date'?new Date(s.date+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'}):isDailyProgramming(s)?'Ogni giorno':s.days.map(d=>['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d]).join(' · ');
             const time=s.end?`Dalle ${s.start} alle ${s.end}${s.endDate&&s.endDate!==s.date?' del '+new Date(s.endDate+'T12:00:00').toLocaleDateString('it-IT'):!s.endDate&&s.end<=s.start?' del giorno successivo':''}`:`${s.action==='off'?'Spegni':s.action==='pulse'?'Impulso':s.action==='run'?'Esegui scenario':'Accendi'} alle ${s.start}`;
             const description=s.solar?`${s.end?'Accendi':s.action==='off'?'Spegni':s.action==='pulse'?'Impulso':'Esegui'} ${programmingTimeLabel(s.start)}${s.end?'; spegni '+programmingTimeLabel(s.end)+' alla prima occorrenza successiva':''} · ${s.solar.location.name}`:time;
             const next=s.enabled&&s.nextAt<8640000000000000?new Date(s.nextAt).toLocaleString('it-IT',{timeZone:'Europe/Rome',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):null;
-            return `<article class="programming-card"><div class="programming-card-top"><h2>${escapeHtml(s.name)}</h2><span class="programming-badge ${s.enabled?'is-enabled':''}">${!s.enabled?'Sospesa':next?'Attiva':'Conclusa'}</span></div><p class="programming-device">${s.kind==='scene'?'Scenario · ':''}${escapeHtml(s.deviceName)}${s.kind==='multi'?' · '+s.outlets.map(o=>'CH '+(o+1)).join(', '):''}</p><p class="programming-time">${escapeHtml(s.action==='on'&&s.start==='sunset'&&s.end==='sunrise'?'Crepuscolare automatico · '+description:description)}</p>${s.solarError?`<p class="programming-validation" role="status">${escapeHtml(s.solarError)}</p>`:''}<p>${escapeHtml(when)}</p>${next?`<p class="page-note">Prossimo comando: ${escapeHtml(next)}</p>`:''}${s.last?`<p class="programming-result" role="status">${escapeHtml(s.last.message)}</p>`:''}<div class="scene-actions"><button onclick="editProgramming(${jsArg(s.id)})">Modifica</button><button onclick="changeProgramming('toggle',${jsArg(s.id)})">${s.enabled?'Sospendi':'Riattiva'}</button><button class="btn-ghost-danger" onclick="changeProgramming('delete',${jsArg(s.id)})">Elimina</button></div></article>`;
+            const outcome=programmingOutcome(s,next);
+            return `<article class="programming-card"><div class="programming-card-top"><h2>${escapeHtml(s.name)}</h2><span class="programming-badge ${outcome.attention?'is-warning':s.enabled?'is-enabled':''}">${escapeHtml(outcome.label)}</span></div><p class="programming-device">${s.kind==='scene'?'Scenario · ':''}${escapeHtml(s.deviceName)}${s.kind==='multi'?' · '+s.outlets.map(o=>'CH '+(o+1)).join(', '):''}</p><p class="programming-time">${escapeHtml(s.action==='on'&&s.start==='sunset'&&s.end==='sunrise'?'Crepuscolare automatico · '+description:description)}</p>${s.solarError?`<p class="programming-validation" role="status">${escapeHtml(s.solarError)}</p>`:''}<p>${escapeHtml(when)}</p>${next?`<p class="page-note">Prossimo comando: ${escapeHtml(next)}</p>`:''}${s.last?`<p class="programming-result ${outcome.attention?'is-warning':''}" role="status">${escapeHtml(outcome.message)}</p>${outcome.note?`<p class="page-note">${escapeHtml(outcome.note)}</p>`:''}`:''}<div class="scene-actions"><button onclick="editProgramming(${jsArg(s.id)})">Modifica</button><button onclick="changeProgramming('toggle',${jsArg(s.id)})">${s.enabled?'Sospendi':'Riattiva'}</button><button class="btn-ghost-danger" onclick="changeProgramming('delete',${jsArg(s.id)})">Elimina</button></div></article>`;
         }).join(''):'<div class="empty-state"><h3>Nessuna programmazione</h3><p>Scegli un dispositivo e imposta il primo orario.</p></div>';
     }
     function editProgramming(id){
