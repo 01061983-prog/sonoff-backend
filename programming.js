@@ -250,11 +250,12 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    if(op==='delete'){t.delete(ref);return;}
    const next={...(old||{}),...(clean||{}),owner,version:(old?.version||0)+1,updatedAt:now(),createdAt:old?.createdAt||now()};
    delete next.activation;delete next.archivedAt;delete next.recoveryAt;delete next.recovery;
-   if(op==='toggle'){delete next.solarPendingAt;next.enabled=!old.enabled;next.solarRefreshAt=next.enabled&&core.usesSolar(next)&&next.repeat==='weekly'?now()+7*core.DAY:core.NEVER;if(clean?.solar)delete next.solarError;}
+   if(op==='toggle'){delete next.solarPendingAt;next.enabled=!old.enabled;next.solarRefreshAt=next.enabled&&core.usesSolar(next)&&next.repeat!=='date'?now()+7*core.DAY:core.NEVER;if(clean?.solar)delete next.solarError;}
    if(op==='save'&&!clean.endDate)delete next.endDate;
    if(op==='save'){
+    for(const key of ['startDate','intervalDays','durationMode','durationWeeks','until'])if(!(key in clean))delete next[key];
     if(!core.usesSolar(clean))delete next.solar;
-    delete next.solarError;delete next.solarPendingAt;next.solarRefreshAt=clean.enabled&&core.usesSolar(clean)&&clean.repeat==='weekly'?now()+7*core.DAY:core.NEVER;
+    delete next.solarError;delete next.solarPendingAt;next.solarRefreshAt=clean.enabled&&core.usesSolar(clean)&&clean.repeat!=='date'?now()+7*core.DAY:core.NEVER;
    }
    if(op==='save'&&next.kind!=='scene')for(const key of ['sceneId','workspaceId','sceneSignature','targets'])delete next[key];
    next.nextAt=core.nextEvent(next,now())?.at||core.NEVER;
@@ -283,10 +284,11 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
  async function ensureSolar(owner,due,lookback=1){
   const targets=s=>s.kind==='scene'?(s.targets||[]):[s];
   const relevant=s=>s.id===due.id||targets(s).some(a=>targets(due).some(b=>a.deviceId===b.deviceId&&(a.kind==='single'||b.kind==='single'||(a.outlets||[]).some(o=>(b.outlets||[]).includes(o)))));
-  const records=await owned(owner),today=core.dateKey(now()),from=core.addDays(today,-lookback),to=core.addDays(today,9);
-  for(const s of records)if(relevant(s)&&s.enabled&&core.usesSolar(s)&&s.repeat==='weekly'&&(!s.solar?.days?.[from]||!s.solar?.days?.[to])&&(!s.solarError||s.solarRefreshAt<=now()))await refreshSolar(s);
+  const records=await owned(owner),time=now();
+  const required=s=>core.datesFor(s,time-Math.max(lookback,(s.intervalDays||0)+2)*core.DAY,time+9*core.DAY).flatMap(d=>[d,core.addDays(d,1)]);
+  for(const s of records)if(relevant(s)&&s.enabled&&core.usesSolar(s)&&s.repeat!=='date'&&required(s).some(d=>!s.solar?.days?.[d])&&(!s.solarError||s.solarRefreshAt<=time))await refreshSolar(s);
   const fresh=await owned(owner);
-  for(const s of fresh)if(relevant(s)&&s.enabled&&core.usesSolar(s)&&s.repeat==='weekly')for(let date=from;date<=core.addDays(today,1);date=core.addDays(date,1))if(!s.solar?.days?.[date])throw error(503,'astronomy_unavailable','Orari astronomici mancanti: nessun comando inviato.');
+  for(const s of fresh)if(relevant(s)&&s.enabled&&core.usesSolar(s)&&s.repeat!=='date'&&required(s).some(d=>!s.solar?.days?.[d]))throw error(503,'astronomy_unavailable','Orari astronomici mancanti: nessun comando inviato.');
  }
  async function execute(ref){
   const before=await ref.get();

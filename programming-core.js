@@ -27,21 +27,36 @@ function windowFor(s,date){
  }
  return {start,end};
 }
-function windows(s,from,to){
+function datesFor(s,from,to){
  const dates=[];
- if(s.repeat==='date')dates.push(s.date);
- else {for(let d=addDays(dateKey(from),-1),last=dateKey(to),i=0;d<=last&&i<370;d=addDays(d,1),i++)if(s.days.includes(new Date(d+'T12:00:00Z').getUTCDay()))dates.push(d);}
- return dates.map(date=>windowFor(s,date)).filter(w=>w.start!==null&&(!s.end||w.end!==null&&w.end>w.start));
+ if(s.repeat==='date')return [s.date];
+ let first=addDays(dateKey(from),-1),last=dateKey(to);
+ if(s.startDate&&first<s.startDate)first=s.startDate;
+ if(s.until&&last>s.until)last=s.until;
+ for(let d=first,i=0;d<=last&&i<740;d=addDays(d,1),i++){
+  const match=s.repeat==='interval'?Number.isInteger(s.intervalDays)&&s.intervalDays>0&&validDate(s.startDate)&&(Date.parse(d+'T12:00:00Z')-Date.parse(s.startDate+'T12:00:00Z'))/DAY%s.intervalDays===0:(s.days||[]).includes(new Date(d+'T12:00:00Z').getUTCDay());
+  if(match)dates.push(d);
+ }
+ return dates;
+}
+function windows(s,from,to){
+ return datesFor(s,from,to).map(date=>windowFor(s,date)).filter(w=>w.start!==null&&(!s.end||w.end!==null&&w.end>w.start));
 }
 function events(s,from,to){
  return windows(s,from,to).flatMap(w=>[{at:w.start,state:s.action==='off'?'off':'on',pulse:s.action==='pulse'},...(w.end?[{at:w.end,state:'off',pulse:false}]:[])]).filter(e=>e.at>from&&e.at<=to).sort((a,b)=>a.at-b.at);
 }
-function nextEvent(s,after){if(!s.enabled)return null;return events(s,after,after+9*DAY).find(e=>e.at>after)|| (s.repeat==='date' ? events(s,after,NEVER-1).find(e=>e.at>after):null)||null;}
+function nextEvent(s,after){
+ if(!s.enabled)return null;
+ if(s.repeat==='date')return events(s,after,NEVER-1).find(e=>e.at>after)||null;
+ const anchor=s.startDate&&validDate(s.startDate)?localTime(s.startDate,'00:00'):after;
+ const through=Math.max(after,anchor||after)+(s.repeat==='interval'?Math.max(9,s.intervalDays+2):9)*DAY;
+ return events(s,after,through).find(e=>e.at>after)||null;
+}
 function validate(input,device,now=Date.now()){
  const err=message=>{throw Object.assign(new Error(message),{status:400,code:'invalid_schedule'});};
  if(!input||!device||input.deviceId!==device.deviceid)err('Seleziona un dispositivo del tuo account.');
  if(!['on','off','pulse'].includes(input.action))err('Scegli accensione, spegnimento o impulso.');
- if(!['date','weekly'].includes(input.repeat))err('Scegli una data o i giorni della settimana.');
+ if(!['date','weekly','interval'].includes(input.repeat))err('Scegli una data o i giorni della settimana.');
  if(!solarTime(input.start)&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.start||''))err('Indica un orario valido oppure alba o tramonto.');
  const end=input.end||null;
  if(end&&((!solarTime(end)&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(end))||input.action!=='on'||end===input.start))err('Lo spegnimento facoltativo deve avere un orario diverso dall’accensione.');
@@ -54,6 +69,26 @@ function validate(input,device,now=Date.now()){
  const name=typeof input.name==='string'?input.name.trim():'';
  if(name.length>100)err('Nome troppo lungo.');
  const s={name:name||device.name||'Programmazione',deviceId:device.deviceid,deviceName:device.name||device.deviceid,kind:channels?'multi':'single',outlets,action:input.action,repeat:input.repeat,date:input.repeat==='date'?input.date:null,days:input.repeat==='weekly'?[...new Set(input.days||[])].sort():[],start:input.start,end,...(input.repeat==='date'&&end&&input.endDate?{endDate:input.endDate}:{}),enabled:input.enabled!==false,timeZone:ZONE};
+ if(s.repeat!=='date'){
+  if(input.startDate!==undefined&&!validDate(input.startDate))err('Scegli una data di inizio valida per la ripetizione.');
+  if(input.startDate)s.startDate=input.startDate;
+  if(s.repeat==='interval'){
+   if(!s.startDate||!Number.isInteger(input.intervalDays)||input.intervalDays<1||input.intervalDays>365)err('Indica ogni quanti giorni ripetere: un numero intero da 1 a 365 e una data di inizio.');
+   s.intervalDays=input.intervalDays;
+  }
+  const duration=input.durationMode||(input.until?'date':'none');
+  if(!['none','date','weeks','month'].includes(duration))err('Scegli la durata della ripetizione.');
+  s.durationMode=duration;
+  if(duration!=='none'){
+   if(!s.startDate)err('Scegli la data da cui far partire la ripetizione.');
+   if(duration==='weeks'){
+    if(!Number.isInteger(input.durationWeeks)||input.durationWeeks<1||input.durationWeeks>520)err('Indica un numero intero di settimane da 1 a 520.');
+    s.durationWeeks=input.durationWeeks;s.until=addDays(s.startDate,s.durationWeeks*7-1);
+   }else if(duration==='month')s.until=new Date(Date.UTC(Number(s.startDate.slice(0,4)),Number(s.startDate.slice(5,7)),0)).toISOString().slice(0,10);
+   else s.until=input.until;
+   if(!validDate(s.until)||s.until<s.startDate)err('La fine della ripetizione non può precedere la data di inizio.');
+  }
+ }
  if(usesSolar(s)){
   if(!input.solar?.days||!input.solar.location)err('Orari astronomici non disponibili. Verifica la località e riprova.');
   s.solar=input.solar;
@@ -80,4 +115,4 @@ function plan(s,all,now){
  const outlets=selected.filter(outlet=>last.state!=='off'||!all.some(other=>other.id!==s.id&&other.deviceId===s.deviceId&&activeWindow(other,now)&&(other.kind==='single'||other.outlets.includes(outlet))));
  return {event:last,outlets,reason:outlets.length?'':'Spegnimento evitato: un’altra fascia è ancora attiva.'};
 }
-module.exports={ZONE,NEVER,DAY,dateKey,addDays,localTime,validDate,solarTime,usesSolar,timeAt,windowFor,windows,events,nextEvent,validate,currentWindow,activeWindow,plan};
+module.exports={ZONE,NEVER,DAY,dateKey,addDays,localTime,validDate,solarTime,usesSolar,timeAt,windowFor,datesFor,windows,events,nextEvent,validate,currentWindow,activeWindow,plan};

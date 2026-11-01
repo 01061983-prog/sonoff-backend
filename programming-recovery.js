@@ -4,7 +4,7 @@ const targets=s=>s.kind==='scene'?(s.targets||[]):[s];
 const key=(deviceId,outlet)=>deviceId+':'+(outlet===null?'single':outlet);
 const channels=t=>t.kind==='multi'?t.outlets:[null];
 function latest(s,time){
- const from=s.repeat==='date'?0:time-8*core.DAY;
+ const from=s.repeat==='date'?0:time-Math.max(8,(s.intervalDays||0)+2)*core.DAY;
  return core.events(s,from,time).filter(e=>e.at>=(s.updatedAt||s.createdAt||0)).at(-1)||null;
 }
 module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,api,runScene,getScene,completedOnce}){

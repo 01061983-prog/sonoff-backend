@@ -58,8 +58,17 @@ module.exports=function createAstronomy({db,fetch:request=globalThis.fetch,now=D
   const clean={...input};delete clean.solar;
   if(!core.usesSolar(clean))return clean;
   if(clean.repeat==='date'&&(!core.validDate(clean.date)||clean.endDate&&!core.validDate(clean.endDate)))throw Object.assign(new Error('Data non valida.'),{status:400,code:'invalid_schedule'});
-  const today=core.dateKey(now()),from=core.addDays(clean.repeat==='date'?clean.date:today,clean.repeat==='date'?-1:-8),to=core.addDays(clean.repeat==='date'?(clean.endDate||clean.date):today,clean.repeat==='date'?1:40);
-  clean.solar=await calendar(clean.location,from,to);return clean;
+  const today=core.dateKey(now()),from=core.addDays(clean.repeat==='date'?clean.date:today,clean.repeat==='date'?-1:-9),to=core.addDays(clean.repeat==='date'?(clean.endDate||clean.date):today,clean.repeat==='date'?1:40);
+  clean.solar=await calendar(clean.location,from,to);
+  if(clean.repeat!=='date'&&core.validDate(clean.startDate)){
+   const step=clean.repeat==='interval'&&Number.isInteger(clean.intervalDays)&&clean.intervalDays>=1&&clean.intervalDays<=365?clean.intervalDays:7;
+   const elapsed=Math.floor((Date.parse(today+'T12:00:00Z')-Date.parse(clean.startDate+'T12:00:00Z'))/core.DAY);
+   const next=clean.repeat==='interval'?core.addDays(clean.startDate,Math.max(0,Math.ceil(elapsed/step))*step):clean.startDate;
+   for(const date of [next,core.addDays(next,-step)])if(date>=clean.startDate&&(!clean.until||date<=clean.until)&&!clean.solar.days[date]){
+    const extra=await calendar(clean.location,core.addDays(date,-1),core.addDays(date,8));Object.assign(clean.solar.days,extra.days);
+   }
+  }
+  return clean;
  }
  return {prepare,calendar,location,PAVIA};
 };
