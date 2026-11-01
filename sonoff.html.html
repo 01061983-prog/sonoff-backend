@@ -12,7 +12,8 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="app.css">
+  <script src="text-size.js?v=24.1"></script>
+  <link rel="stylesheet" href="app.css?v=24.1">
 </head>
 <body data-view="scenes">
 <a class="skip-link" href="#mainContent">Vai al contenuto</a>
@@ -28,6 +29,14 @@
     <button class="nav-item" data-view="programming" aria-label="Programmazione"><span data-icon="calendar"></span><span>Programmazione</span></button>
     <button class="nav-item" data-view="install" aria-label="La tua webapp"><span data-icon="download"></span><span>La tua webapp</span></button>
   </nav>
+  <details class="text-size-settings" id="textSizeSettings"><summary>Dimensione caratteri <span aria-hidden="true">Aa</span></summary>
+    <div class="text-size-content"><label for="textSizeRange">Grandezza del testo: <output id="textSizeValue" for="textSizeRange">100%</output></label>
+      <div class="text-size-controls"><button id="textSizeDecrease" type="button" aria-label="Riduci i caratteri">A−</button><input id="textSizeRange" type="range" min="100" max="200" step="25" value="100" aria-label="Dimensione dei caratteri"><button id="textSizeIncrease" type="button" aria-label="Ingrandisci i caratteri">A+</button></div>
+      <div class="text-size-preview" aria-label="Anteprima della dimensione dei caratteri"><span class="text-size-preview-label">Anteprima</span><strong class="text-size-preview-title">Luci del portico</strong><span class="text-size-preview-state">Acceso</span><p>Programmazione attiva fino all’alba.</p></div>
+      <button id="textSizeReset" type="button">Ripristina dimensione normale</button>
+      <p id="textSizeStatus" class="text-size-status" role="status">La scelta si salva automaticamente su questo dispositivo. Puoi usare una misura diversa su telefono e tablet.</p>
+    </div>
+  </details>
   <div class="drawer-commands"><button id="reloadBtn" class="icon-button" aria-label="Aggiorna lo stato dei dispositivi" title="Aggiorna dispositivi"><span data-icon="refresh"></span></button><span class="drawer-refresh-label">Aggiorna dispositivi</span></div>
   <div class="drawer-status"><div id="statusText" class="status" role="status"><span class="info">Connessione…</span></div><div class="info-strip scene-sync-strip"><span data-icon="wifi"></span><span id="sceneSyncText">Collegamento agli scenari condivisi…</span><button id="sceneMigrationBtn" class="secondary-button" hidden onclick="migrateLocalScenes()">Condividi scenari locali</button></div></div>
   <div class="sidebar-bottom"><div class="sidebar-note"><span data-icon="sparkles"></span><p>Un gesto, tutto pronto.<small>I tuoi spazi, a portata di mano.</small></p></div><button id="logoutBtn" class="logout-button" aria-label="Esci dall’account"><span data-icon="logout"></span><span>Esci dall’account</span></button><div class="workspace"><span class="workspace-avatar">SL</span><div>Oratorio San Luigi<small>Plancia di controllo</small></div><span class="workspace-dot" aria-hidden="true"></span></div></div>
