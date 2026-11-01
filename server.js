@@ -292,9 +292,9 @@ async function readLinkedDevice(token,id,workspaceId){
   });
   return {deviceid:id,name:d.name||id,online:d.online===true,params:{switches},familyId:workspaceId,itemType:found.itemType,uiid:2,linkedById:true};
 }
-async function assertLinkedDeviceChannels(token,id,outlets){
+async function assertLinkedDeviceChannels(token,id,outlets,registry){
   if(!programming?.linkedDevices)return;
-  const entry=(await programming.linkedDevices(token)).find(d=>d.id===id);
+  const entry=(registry||await programming.linkedDevices(token)).find(d=>d.id===id);
   if(entry&&(!Array.isArray(outlets)||!outlets.length||outlets.some(o=>![0,1].includes(o))))throw cloudError(400,"invalid_linked_channels","Per questo dispositivo scegli soltanto Canale 1 o Canale 2.");
 }
 app.post("/api/linked-devices",requireLogin,route(async(req,res)=>{
@@ -307,7 +307,7 @@ app.post("/api/linked-devices",requireLogin,route(async(req,res)=>{
   res.json({...result,channels:2});
 }));
 
-async function listDevices(token, homes, {includeOwnership = false} = {}) {
+async function listDevices(token, homes, {includeOwnership = false, deviceIds = null, linkedRegistry} = {}) {
   homes = homes || await families(token);
   const devices = new Map();
   for (const home of homes) {
@@ -337,8 +337,8 @@ async function listDevices(token, homes, {includeOwnership = false} = {}) {
   }
   const warnings=[];
   if(!includeOwnership&&programming?.linkedDevices){
-    const linked=await programming.linkedDevices(token);
-    for(const entry of linked.filter(d=>homes.some(h=>h.id===d.workspaceId))){
+    const linked=linkedRegistry||await programming.linkedDevices(token);
+    for(const entry of linked.filter(d=>homes.some(h=>h.id===d.workspaceId)&&(!deviceIds||deviceIds.includes(d.id)))){
       try{devices.set(entry.id,await readLinkedDevice(token,entry.id,entry.workspaceId));}
       catch(error){
         if(error.code==="not_authenticated")throw error;
@@ -565,9 +565,10 @@ async function protectManualCommands(token,actions){
 async function runCloudScene(context, run, scene, accessToken) {
   let completed = 0, failure = null, protectionMessage = null;
   try {
-    for(const action of scene.actions)await assertLinkedDeviceChannels(accessToken,action.deviceId,action.kind==="multi"?action.outlets:action.kind==="gate"?[0]:null);
+    const linkedRegistry=programming?.linkedDevices?await programming.linkedDevices(accessToken):[];
+    for(const action of scene.actions)await assertLinkedDeviceChannels(accessToken,action.deviceId,action.kind==="multi"?action.outlets:action.kind==="gate"?[0]:null,linkedRegistry);
     if (scene.mode === "toggle") {
-      const devices = await listDevices(accessToken, [context.workspace]);
+      const devices = await listDevices(accessToken, [context.workspace], {deviceIds:scene.actions.map(action=>action.deviceId),linkedRegistry});
       const states = scene.actions.flatMap(action => {
         const device = devices.find(device => device.deviceid === action.deviceId);
         if (!device?.online) throw new Error("Dispositivo non disponibile. Nessun comando inviato.");
