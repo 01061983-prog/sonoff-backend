@@ -135,3 +135,5 @@ body.scenes-paged .notification:empty{display:none}
 body.scenes-paged .notification:not(:empty){flex:0 0 auto;max-height:15dvh;overflow:auto;margin:2px 0 8px}
 body.scenes-paged .auth-panel,body.scenes-paged .offline-banner{flex-shrink:0}
 body.scenes-paged #scenesList>.empty-state{grid-column:1/-1;grid-row:1/-1}
+/* Unico indicatore: l'icona dello scenario resta ferma. */
+.state-running .pad-icon .icon{animation:none}

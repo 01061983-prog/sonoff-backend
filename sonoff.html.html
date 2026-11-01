@@ -12,9 +12,9 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <script src="text-size.js?v=26.1"></script>
-  <script src="scene-pages.js?v=26.1"></script>
-  <link rel="stylesheet" href="app.css?v=26.1">
+  <script src="text-size.js?v=27"></script>
+  <script src="scene-pages.js?v=27"></script>
+  <link rel="stylesheet" href="app.css?v=27">
 </head>
 <body data-view="scenes">
 <a class="skip-link" href="#mainContent">Vai al contenuto</a>
@@ -138,6 +138,7 @@
     let commandBusy = false;
     let localDeviceCommand = null;
     let devicesLoading = false;
+    let devicesReadSerial = 0;
     let devicesFresh = false;
 
     // SCENARI DEFAULT PORTICO
@@ -305,6 +306,7 @@
         cloudScenes = null;
         sceneWorkspace = null;
         cloudExecutions = {};
+        sceneConfirmations.clear();
         sceneSyncMode = "local";
         currentDevices = [];
         devicesFresh = false;
@@ -318,6 +320,7 @@
     async function loadDevices() {
         if (devicesLoading) return false;
         devicesLoading = true;
+        const readSerial=++devicesReadSerial;
         devicesFresh = false;
         updateControlLocks();
         renderDashboard();
@@ -422,6 +425,10 @@
             return false;
         } finally {
             devicesLoading = false;
+            let verifiedScene=false;
+            for(const [id,pending] of sceneConfirmations)if(readSerial>=pending.after){sceneConfirmations.delete(id);verifiedScene=true;}
+            if(verifiedScene)renderScenes();
+            if(sceneConfirmations.size&&!commandBusy)void Promise.resolve().then(()=>loadDevices());
             if (devicesFresh) lastSyncTime = new Date();
             renderDashboard();
             updateControlLocks();
@@ -710,7 +717,7 @@
                 if (cloudExecutions[sceneId]?.runId !== data.run.runId || cloudExecutions[sceneId]?.status === "running") cloudExecutions[sceneId] = data.run;
                 setMessage("Scenario avviato. Il comando è visibile su tutti i dispositivi.", "");
             } catch(error) { setMessage(error.message,"error"); await syncScenes(); }
-            finally { localRunningScene = null; commandBusy = false; renderScenes(); }
+            finally { localRunningScene = null; commandBusy = false; renderScenes(); if(sceneConfirmations.size&&!devicesLoading)void loadDevices(); }
             return;
         }
         localRunningScene = sceneId;
@@ -777,17 +784,18 @@
     let sceneReconnect = null;
     let cloudExecutions = {};
     let localRunningScene = null;
+    const sceneConfirmations = new Map();
     const localPulseFeedback = new Map();
     let sceneEditVersion = 0;
     let sceneSaveBusy = false;
     let sceneManageMode = false;
 
     function activeCloudExecution() {
-        return Object.values(cloudExecutions).find(run => run.status === "running" && run.expiresAt > Date.now());
+        return Object.values(cloudExecutions).find(run => run.status === "running" && run.expiresAt > Date.now()) || (sceneConfirmations.size ? {status:"verifying"} : null);
     }
     function runningScene(sceneId) {
         const run = cloudExecutions[sceneId];
-        return localRunningScene === sceneId || Boolean(run?.status === "running" && run.expiresAt > Date.now());
+        return sceneConfirmations.has(sceneId) || localRunningScene === sceneId || Boolean(run?.status === "running" && run.expiresAt > Date.now());
     }
     function localSceneList() {
         try {
@@ -816,12 +824,16 @@
         sceneWorkspace = data.workspace;
         cloudExecutions = data.executions || {};
         sceneSyncMode = "live";
+        for(const [id,run] of Object.entries(cloudExecutions)){
+            if(run.status==='succeeded'&&cloudScenes.some(s=>s.id===id&&!s.actions.some(a=>a.kind==='gate'||a.pulse===true))&&(previousExecutions[id]?.status==='running'||localRunningScene===id)&&sceneConfirmations.get(id)?.runId!==run.runId)
+                sceneConfirmations.set(id,{runId:run.runId,after:devicesReadSerial+1});
+        }
         if (!migrationScenes().length) {
             try { localStorage.setItem("ewelink_cloud_migrated_" + sceneWorkspace.id, "1"); } catch {}
         }
         renderScenes();
         updateSyncLabel();
-        const completed = Object.entries(cloudExecutions).some(([id, run]) => previousExecutions[id]?.status === "running" && run.status !== "running");
+        const completed = sceneConfirmations.size>0 || Object.entries(cloudExecutions).some(([id, run]) => previousExecutions[id]?.status === "running" && run.status !== "running");
         if (completed && !devicesLoading && !commandBusy) {
             void loadDevices();
         }
@@ -916,7 +928,7 @@
             : state === true ? "Acceso" : state === false ? "Spento" : "Stato misto o non rilevato";
         const lastResult = !running && run?.status === "succeeded" && pulse ? "Ultimo impulso inviato" : !running && run?.status === "failed" ? "Comando non completato · verifica l’esito" : run?.status === "succeeded" ? run.protectionMessage || "" : "";
         tile.className = "scenario-unit";
-        tile.innerHTML = `<button type="button" class="scenario-pad scene-run state-${status}" data-scene-id="${escapeHtml(scene.id)}" aria-busy="${running}" aria-label="${escapeHtml((running ? "In esecuzione: " : "Esegui scenario: ") + scene.name + ". " + label)}" onclick="runUserScene(${jsArg(scene.id)})"><span class="pad-top"><span class="pad-icon">${icon(running ? "refresh" : pulse ? "gate" : turnsOff ? "moon" : "sun")}</span>${running ? '<span class="pad-spinner" aria-hidden="true"></span>' : '<span class="pad-dot"></span>'}</span><span class="pad-name">${escapeHtml(scene.name)}</span><span class="pad-type">${pulse ? "COMANDO A IMPULSO" : turnsOff ? "SPEGNIMENTO" : "SCENARIO"} · ${scene.actions.length} ${scene.actions.length === 1 ? "AZIONE" : "AZIONI"}</span><span class="pad-state">${label}</span>${lastResult ? `<span class="pad-result">${escapeHtml(lastResult)}</span>` : ""}</button>${manage ? `<div class="pad-management"><button onclick="startSceneEdit(${jsArg(scene.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteScene(${jsArg(scene.id)})">Elimina</button></div>` : ""}`;
+        tile.innerHTML = `<button type="button" class="scenario-pad scene-run state-${status}" data-scene-id="${escapeHtml(scene.id)}" aria-busy="${running}" aria-label="${escapeHtml((running ? "In esecuzione: " : "Esegui scenario: ") + scene.name + ". " + label)}" onclick="runUserScene(${jsArg(scene.id)})"><span class="pad-top"><span class="pad-icon">${icon(pulse ? "gate" : turnsOff ? "moon" : "sun")}</span>${running ? '<span class="pad-spinner" aria-hidden="true"></span>' : '<span class="pad-dot"></span>'}</span><span class="pad-name">${escapeHtml(scene.name)}</span><span class="pad-type">${pulse ? "COMANDO A IMPULSO" : turnsOff ? "SPEGNIMENTO" : "SCENARIO"} · ${scene.actions.length} ${scene.actions.length === 1 ? "AZIONE" : "AZIONI"}</span><span class="pad-state">${label}</span>${lastResult ? `<span class="pad-result">${escapeHtml(lastResult)}</span>` : ""}</button>${manage ? `<div class="pad-management"><button onclick="startSceneEdit(${jsArg(scene.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteScene(${jsArg(scene.id)})">Elimina</button></div>` : ""}`;
         return tile;
     }
 
