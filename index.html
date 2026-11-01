@@ -12,8 +12,8 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <script src="text-size.js?v=24.1"></script>
-  <link rel="stylesheet" href="app.css?v=24.1">
+  <script src="text-size.js?v=25"></script>
+  <link rel="stylesheet" href="app.css?v=25">
 </head>
 <body data-view="scenes">
 <a class="skip-link" href="#mainContent">Vai al contenuto</a>
@@ -135,6 +135,7 @@
     let resumableSession = false;
     let sessionCheckBusy = false;
     let commandBusy = false;
+    let localDeviceCommand = null;
     let devicesLoading = false;
     let devicesFresh = false;
 
@@ -207,12 +208,13 @@
         document.querySelectorAll("#devicesTable input, #devicesTable button, .scene-tile, .scene-run, [data-device-command]").forEach(el => {
             el.disabled = commandBusy || Boolean(activeCloudExecution()) || devicesLoading || !devicesFresh || navigator.onLine === false || el.dataset.offline === "true" || (el.classList.contains("scene-run") && (sceneSyncMode === "loading" || Boolean(cloudScenes && sceneSyncMode !== "live")));
             if (el.dataset.sceneId && runningScene(el.dataset.sceneId)) el.disabled = true;
+            el.classList.toggle('command-wait-lock',el.disabled&&Boolean(commandBusy||activeCloudExecution()||devicesLoading)&&Boolean(currentDevices.length)&&el.dataset.offline!=="true"&&!authRequired&&navigator.onLine!==false);
         });
         reloadBtn.disabled = commandBusy || devicesLoading;
     }
 
     function sceneState(scene) {
-        if (!devicesFresh || !scene.actions?.length) return null;
+        if ((!devicesFresh && !devicesLoading) || !scene.actions?.length) return null;
         const states = scene.actions.map(action => {
             const dev = currentDevices.find(d => d.deviceid === action.deviceId);
             if (!dev?.online) return null;
@@ -231,6 +233,8 @@
     async function performCommand(path, body) {
         if (commandBusy || activeCloudExecution() || devicesLoading || !devicesFresh) return;
         commandBusy = true;
+        localDeviceCommand = {deviceId:body.deviceId,outlets:body.outlets||null};
+        renderDeviceCards();
         updateControlLocks();
         let error = null, result = null;
         try { result = await apiRequest(path, body); }
@@ -240,6 +244,8 @@
             ? result?.protectionMessage || "Comando accettato. Stato aggiornato dal server."
             : "Comando accettato, ma stato non verificato: ricarica i dispositivi.", error || !refreshed ? "error" : "");
         commandBusy = false;
+        localDeviceCommand = null;
+        renderDeviceCards();
         updateControlLocks();
     }
 
@@ -909,7 +915,7 @@
             : state === true ? "Acceso" : state === false ? "Spento" : "Stato misto o non rilevato";
         const lastResult = !running && run?.status === "succeeded" && pulse ? "Ultimo impulso inviato" : !running && run?.status === "failed" ? "Comando non completato · verifica l’esito" : run?.status === "succeeded" ? run.protectionMessage || "" : "";
         tile.className = "scenario-unit";
-        tile.innerHTML = `<button type="button" class="scenario-pad scene-run state-${status}" data-scene-id="${escapeHtml(scene.id)}" aria-busy="${running}" aria-label="${escapeHtml((running ? "In esecuzione: " : "Esegui scenario: ") + scene.name + ". " + label)}" onclick="runUserScene(${jsArg(scene.id)})"><span class="pad-top"><span class="pad-icon">${icon(running ? "refresh" : pulse ? "gate" : turnsOff ? "moon" : "sun")}</span><span class="pad-dot"></span></span><span class="pad-name">${escapeHtml(scene.name)}</span><span class="pad-type">${pulse ? "COMANDO A IMPULSO" : turnsOff ? "SPEGNIMENTO" : "SCENARIO"} · ${scene.actions.length} ${scene.actions.length === 1 ? "AZIONE" : "AZIONI"}</span><span class="pad-state">${running ? '<span class="pad-spinner"></span>' : ""}${label}</span>${lastResult ? `<span class="pad-result">${escapeHtml(lastResult)}</span>` : ""}</button>${manage ? `<div class="pad-management"><button onclick="startSceneEdit(${jsArg(scene.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteScene(${jsArg(scene.id)})">Elimina</button></div>` : ""}`;
+        tile.innerHTML = `<button type="button" class="scenario-pad scene-run state-${status}" data-scene-id="${escapeHtml(scene.id)}" aria-busy="${running}" aria-label="${escapeHtml((running ? "In esecuzione: " : "Esegui scenario: ") + scene.name + ". " + label)}" onclick="runUserScene(${jsArg(scene.id)})"><span class="pad-top"><span class="pad-icon">${icon(running ? "refresh" : pulse ? "gate" : turnsOff ? "moon" : "sun")}</span>${running ? '<span class="pad-spinner" aria-hidden="true"></span>' : '<span class="pad-dot"></span>'}</span><span class="pad-name">${escapeHtml(scene.name)}</span><span class="pad-type">${pulse ? "COMANDO A IMPULSO" : turnsOff ? "SPEGNIMENTO" : "SCENARIO"} · ${scene.actions.length} ${scene.actions.length === 1 ? "AZIONE" : "AZIONI"}</span><span class="pad-state">${label}</span>${lastResult ? `<span class="pad-result">${escapeHtml(lastResult)}</span>` : ""}</button>${manage ? `<div class="pad-management"><button onclick="startSceneEdit(${jsArg(scene.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteScene(${jsArg(scene.id)})">Elimina</button></div>` : ""}`;
         return tile;
     }
 
@@ -988,18 +994,20 @@
         const gate = dev.deviceid === "1000ac81a0";
         const multi = Array.isArray(dev.params?.switches);
         const on = deviceOn(dev);
-        const known = devicesFresh && dev.online;
+        const known = (devicesFresh || devicesLoading) && dev.online;
+        const pending = localDeviceCommand?.deviceId===dev.deviceid;
+        const spinner = '<span class="device-command-spinner" aria-hidden="true"></span>';
         let controls = '<p class="unsupported">Comando non disponibile per questo modello.</p>';
         const attributes = `data-device-command data-offline="${!dev.online}"`;
         if (gate) {
-            controls = `<button class="gate-button" ${attributes} onclick="toggleDevice(${jsArg(dev.deviceid)}, true)">${icon("gate")} Apri cancello ${icon("arrow-right")}</button>`;
+            controls = `<button class="gate-button" ${attributes} aria-busy="${pending}" onclick="toggleDevice(${jsArg(dev.deviceid)}, true)">${pending?spinner:icon("gate")} ${pending?"In esecuzione…":"Apri cancello"} ${icon("arrow-right")}</button>`;
         } else if (dev.params?.switch !== undefined) {
-            controls = `<div class="device-control"><span>${known ? on ? "Acceso" : "Spento" : "Stato non verificato"}</span><button class="toggle-button ${known && on ? "is-on" : ""}" role="switch" aria-checked="${known && on}" aria-label="${escapeHtml(dev.name || "Dispositivo")}" ${attributes} onclick="toggleDevice(${jsArg(dev.deviceid)}, ${!on})"><span></span></button></div>`;
+            controls = `<div class="device-control"><span>${pending?"In esecuzione…":known ? on ? "Acceso" : "Spento" : "Stato non verificato"}</span><button class="toggle-button ${known && on ? "is-on" : ""}" role="switch" aria-checked="${known && on}" aria-label="${escapeHtml(dev.name || "Dispositivo")}" ${attributes} aria-busy="${pending}" onclick="toggleDevice(${jsArg(dev.deviceid)}, ${!on})"><span>${pending?spinner:""}</span></button></div>`;
         } else if (multi) {
             const channels = dev.params.switches.filter(channel => Number.isInteger(channel.outlet) && channel.outlet >= 0);
-            controls = `<div class="channel-controls">${channels.map(channel => `<button class="channel-button ${known && channel.switch === "on" ? "is-on" : ""}" ${attributes} aria-pressed="${known && channel.switch === "on"}" aria-label="${escapeHtml(dev.name || "Dispositivo")}, canale ${channel.outlet + 1}" onclick="toggleMulti(${jsArg(dev.deviceid)}, [${channel.outlet}], ${channel.switch !== "on"})"><span>CH ${channel.outlet + 1}</span>${icon("power")}</button>`).join("")}</div>`;
+            controls = `<div class="channel-controls">${channels.map(channel => `<button class="channel-button ${known && channel.switch === "on" ? "is-on" : ""}" ${attributes} aria-busy="${pending&&(!localDeviceCommand.outlets||localDeviceCommand.outlets.includes(channel.outlet))}" aria-pressed="${known && channel.switch === "on"}" aria-label="${escapeHtml(dev.name || "Dispositivo")}, canale ${channel.outlet + 1}" onclick="toggleMulti(${jsArg(dev.deviceid)}, [${channel.outlet}], ${channel.switch !== "on"})"><span>CH ${channel.outlet + 1}</span>${pending&&(!localDeviceCommand.outlets||localDeviceCommand.outlets.includes(channel.outlet))?spinner:icon("power")}</button>`).join("")}</div>`;
         }
-        return `<article class="device-card ${known && on ? "device-on" : ""}"><div class="device-card-top"><span class="device-icon ${gate ? "gate-icon" : ""}">${icon(gate ? "gate" : "bulb")}</span><span class="connection-chip ${known ? "online" : "offline"}"><i></i>${!devicesFresh ? "Da aggiornare" : dev.online ? "Online" : "Offline"}</span></div><h3>${escapeHtml(dev.name || "Senza nome")}</h3><p class="device-kind">${gate ? "Accesso · posizione non rilevata" : multi ? "Interruttore multicanale" : "Interruttore"}</p><div class="device-card-controls">${controls}</div></article>`;
+        return `<article class="device-card ${known && on ? "device-on" : ""}"><div class="device-card-top"><span class="device-icon ${gate ? "gate-icon" : ""}">${icon(gate ? "gate" : "bulb")}</span><span class="connection-chip ${known ? "online" : "offline"}"><i></i>${!devicesFresh&&!devicesLoading ? "Da aggiornare" : dev.online ? "Online" : "Offline"}</span></div><h3>${escapeHtml(dev.name || "Senza nome")}</h3><p class="device-kind">${gate ? "Accesso · posizione non rilevata" : multi ? "Interruttore multicanale" : "Interruttore"}</p><div class="device-card-controls">${controls}</div></article>`;
     }
     function renderDeviceCards() {
         const search = document.getElementById("deviceSearch").value.trim().toLocaleLowerCase("it");

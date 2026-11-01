@@ -105,3 +105,12 @@ html:not([data-text-size="100"]) .page-heading>*{min-width:0;max-width:100%}
 html:not([data-text-size="100"]) .editor-heading>h2{min-width:0;flex:1}
 html:not([data-text-size="100"]) .editor-heading>.icon-button{flex-shrink:0}
 .text-size-preview-state{font-size:.75rem}
+
+/* Attesa locale: nessuna attenuazione collettiva durante comandi e letture. */
+.scenario-pad.command-wait-lock:disabled:not(.state-running),[data-device-command].command-wait-lock:disabled{opacity:1}
+.pad-top>.pad-spinner{width:26px;height:26px;border-width:3px;margin:0;flex-shrink:0;align-self:center}
+.device-command-spinner{display:inline-block;flex:0 0 auto;width:20px;height:20px;border:3px solid currentColor;border-right-color:transparent;border-radius:50%;animation:pad-spin .8s linear infinite}
+.toggle-button>span .device-command-spinner{position:static;width:17px;height:17px;margin:1px;border-width:2px;background:transparent;box-shadow:none;transform:none;color:#147d5a}
+@media(prefers-reduced-motion:reduce){.pad-spinner,.device-command-spinner{animation:none}}
+
+.channel-button[aria-busy="true"],.gate-button[aria-busy="true"]{background:#205fc4;color:white;border-color:#205fc4}
