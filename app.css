@@ -114,3 +114,24 @@ html:not([data-text-size="100"]) .editor-heading>.icon-button{flex-shrink:0}
 @media(prefers-reduced-motion:reduce){.pad-spinner,.device-command-spinner{animation:none}}
 
 .channel-button[aria-busy="true"],.gate-button[aria-busy="true"]{background:#205fc4;color:white;border-color:#205fc4}
+
+/* La plancia scenari riempie lo schermo e cambia pagina, senza scorrere. */
+body.scenes-paged{height:100dvh;overflow:hidden}
+body.scenes-paged .main-content{height:100dvh;min-height:0;max-width:none;display:flex;flex-direction:column;overflow:hidden;padding-bottom:max(12px,env(safe-area-inset-bottom))}
+body.scenes-paged .topbar{position:relative;flex:0 0 64px;height:64px;min-height:64px}
+body.scenes-paged #settingsView{display:flex!important;flex:1;min-height:0;flex-direction:column;padding-top:4px;overflow:hidden}
+body.scenes-paged #scenesList{flex:1;min-height:0;display:grid;grid-template-columns:repeat(var(--scene-cols,2),minmax(0,1fr));grid-template-rows:repeat(var(--scene-rows,3),minmax(0,1fr));gap:14px;margin:0;padding:2px 2px 10px;align-content:stretch}
+body.scenes-paged .scenario-unit{min-width:0;min-height:0;display:flex}
+body.scenes-paged #scenesList .scenario-pad{aspect-ratio:auto;width:100%;height:100%;min-height:0!important;padding:14px;overflow:hidden;border-radius:18px;flex:1}
+body.scenes-paged #scenesList .pad-top{margin:0 0 auto;flex-shrink:0}
+body.scenes-paged #scenesList .pad-icon{width:32px;height:32px}
+body.scenes-paged #scenesList .pad-name{margin-top:10px;overflow-wrap:anywhere;line-height:1.2}
+body.scenes-paged #scenesList .pad-type{display:none}
+body.scenes-paged #scenesList .pad-state{margin-top:10px;line-height:1.3}
+body.scenes-paged #scenesList .pad-result{margin-top:6px;line-height:1.25}
+.scene-pagination{flex:0 0 auto;min-height:48px;display:flex;align-items:center;justify-content:center;gap:16px;padding:4px 0;font-size:.875rem}
+.scene-pagination button{width:52px;min-height:44px;padding:0;font-size:1.75rem;line-height:1}
+body.scenes-paged .notification:empty{display:none}
+body.scenes-paged .notification:not(:empty){flex:0 0 auto;max-height:15dvh;overflow:auto;margin:2px 0 8px}
+body.scenes-paged .auth-panel,body.scenes-paged .offline-banner{flex-shrink:0}
+body.scenes-paged #scenesList>.empty-state{grid-column:1/-1;grid-row:1/-1}
