@@ -553,7 +553,7 @@ app.get("/api/user-scenes/events", requireLogin, route(async (req, res) => {
     send("sync-error", { message: "Connessione Firebase interrotta. Riprova l’aggiornamento." });
     res.end();
   });
-  const heartbeat = setInterval(() => { if (!res.writableEnded) res.write(": keepalive\n\n"); }, 20000);
+  const heartbeat = setInterval(() => { if (!res.writableEnded) send("heartbeat", {}); }, 20000);
   // Una nuova connessione verifica periodicamente che l'account sia ancora autenticato.
   const maximum = setTimeout(() => res.end(), 15 * 60 * 1000);
   res.on("close", () => { unsubscribe(); clearInterval(heartbeat); clearTimeout(maximum); });

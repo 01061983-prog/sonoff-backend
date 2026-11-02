@@ -12,9 +12,9 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <script src="text-size.js?v=28"></script>
-  <script src="scene-pages.js?v=28"></script>
-  <link rel="stylesheet" href="app.css?v=28">
+  <script src="text-size.js?v=29"></script>
+  <script src="scene-pages.js?v=29"></script>
+  <link rel="stylesheet" href="app.css?v=29">
   <style>
     #startupScreen{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:28px;background:#f6f8f6;color:#24382f;text-align:center;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:auto}
     #startupScreen[hidden]{display:none}body.app-starting>main{visibility:hidden}
@@ -51,6 +51,7 @@
     </div>
   </details>
   <div class="drawer-commands"><button id="reloadBtn" class="icon-button" aria-label="Aggiorna lo stato dei dispositivi" title="Aggiorna dispositivi"><span data-icon="refresh"></span></button><span class="drawer-refresh-label">Aggiorna dispositivi</span></div>
+  <button id="reloadAppBtn" type="button" class="secondary-button">Ricarica la webapp</button><p id="connectionStatus" class="page-note" role="status" aria-live="polite"></p>
   <div class="drawer-status"><div id="statusText" class="status" role="status"><span class="info">Connessione…</span></div><div class="info-strip scene-sync-strip"><span data-icon="wifi"></span><span id="sceneSyncText">Collegamento agli scenari condivisi…</span><button id="sceneMigrationBtn" class="secondary-button" hidden onclick="migrateLocalScenes()">Condividi scenari locali</button></div></div>
   <div class="sidebar-bottom"><div class="sidebar-note"><span data-icon="sparkles"></span><p>Un gesto, tutto pronto.<small>I tuoi spazi, a portata di mano.</small></p></div><button id="logoutBtn" class="logout-button" aria-label="Esci dall’account"><span data-icon="logout"></span><span>Esci dall’account</span></button><div class="workspace"><span class="workspace-avatar">SL</span><div>Oratorio San Luigi<small>Plancia di controllo</small></div><span class="workspace-dot" aria-hidden="true"></span></div></div>
 </aside></dialog>
@@ -179,7 +180,7 @@
     async function apiRequest(path, body) {
         if (navigator.onLine === false) throw new Error("Sei offline. Riconnettiti prima di inviare comandi.");
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 60000);
+        const timeout = setTimeout(() => controller.abort(), body === undefined ? 15000 : 60000);
         try {
             const response = await fetch(BACKEND_URL + path, {
                 method: body === undefined ? "GET" : "POST",
@@ -211,8 +212,9 @@
             }
             return data;
         } catch (error) {
+            if (!error.auth && (error.name === "AbortError" || error instanceof TypeError || [502,503,504].includes(error.status))) requestConnectionRecovery();
             if (error.name === "AbortError") {
-                throw new Error("Tempo scaduto: esito del comando non confermato. Ricarica i dispositivi prima di riprovare.");
+                throw new Error(body === undefined ? "Connessione lenta o interrotta. Riconnessione automatica in corso." : "Tempo scaduto: esito del comando non confermato. Attendi la verifica degli stati prima di riprovare.");
             }
             throw error;
         } finally { clearTimeout(timeout); }
@@ -277,7 +279,7 @@
     }
 
     reloadBtn.addEventListener("click", () => {
-        loadDevices();
+        requestConnectionRecovery(0);
     });
 
     settingsBtn.addEventListener("click", () => setView("scenes"));
@@ -868,7 +870,10 @@
     function openSceneStream() {
         if (typeof EventSource === "undefined" || !sceneWorkspace || sceneStream || document.visibilityState === "hidden") return;
         sceneStream = new EventSource(BACKEND_URL + "/api/user-scenes/events?workspaceId=" + encodeURIComponent(sceneWorkspace.id), {withCredentials: true});
+        sceneLastHeartbeat = Date.now();
+        sceneStream.addEventListener("heartbeat", () => { sceneLastHeartbeat = Date.now(); });
         sceneStream.addEventListener("scenes", event => {
+            sceneLastHeartbeat = Date.now();
             try { acceptCloudScenes(JSON.parse(event.data)); }
             catch { updateSyncLabel("Aggiornamento scenari non valido. Premi Aggiorna."); }
         });
@@ -877,6 +882,7 @@
             sceneSyncMode = "error";
             updateSyncLabel();
             updateControlLocks();
+            requestConnectionRecovery(2000);
         });
         sceneStream.onerror = () => {
             closeSceneStream();
@@ -884,7 +890,7 @@
             updateSyncLabel();
             updateControlLocks();
             if (!authRequired && navigator.onLine !== false && document.visibilityState !== "hidden") {
-                sceneReconnect = setTimeout(() => { sceneReconnect = null; void syncScenes(); }, 5000);
+                requestConnectionRecovery(2000);
             }
         };
     }
@@ -1185,19 +1191,7 @@
             document.getElementById("installedLabel").hidden = false;
         });
         if (window.matchMedia("(display-mode: standalone)").matches || navigator.standalone) document.getElementById("installedLabel").hidden = false;
-        window.addEventListener("offline", () => {
-            closeSceneStream();
-            if (cloudScenes) sceneSyncMode = "error";
-            devicesFresh = false;
-            setStatus("Sei offline", "err");
-            renderScenes();
-            renderDashboard();
-        });
-        window.addEventListener("online", () => { if (!authRequired && !commandBusy && !devicesLoading) loadDevices(); });
-        document.addEventListener("visibilitychange", () => {
-            if (document.visibilityState === "hidden") closeSceneStream();
-            if (document.visibilityState === "visible" && !authRequired && !commandBusy && !devicesLoading && sceneEditorEl.style.display !== "block" && navigator.onLine !== false) loadDevices();
-        });
+        initConnectionRecovery();
         if ("serviceWorker" in navigator && window.location.protocol !== "file:") {
             navigator.serviceWorker.register("./sw.js").catch(() => {
                 document.getElementById("installedLabel").textContent = "Installazione offline non disponibile; la plancia funziona nel browser.";
@@ -1206,6 +1200,102 @@
         }
         renderDashboard();
     }
+
+    // CONNECTION RECOVERY: probes and read-only refreshes; never replay a command.
+    let connectionInitialized = false;
+    let connectionPending = false, connectionTimer = null, connectionProbeBusy = false;
+    let connectionRetry = 0, connectionEpoch = 0, sceneLastHeartbeat = 0;
+    function connectionNotice(text) {
+        const node = document.getElementById('connectionStatus');
+        if (node) node.textContent = text;
+    }
+    function requestConnectionRecovery(delay = 800) {
+        connectionPending = true;
+        connectionEpoch++;
+        if (!connectionInitialized) return;
+        connectionNotice('Riconnessione in corso… Gli eventuali comandi non vengono ripetuti.');
+        if (connectionTimer !== null) clearTimeout(connectionTimer);
+        connectionTimer = setTimeout(() => { connectionTimer = null; void checkConnection(); }, delay);
+    }
+    async function checkConnection() {
+        if (document.visibilityState === 'hidden' || connectionProbeBusy) return;
+        connectionProbeBusy = true;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const epoch = connectionEpoch;
+        try {
+            // The public health endpoint does not query eWeLink or Firestore.
+            const response = await fetch(BACKEND_URL + '/', {cache:'no-store',credentials:'omit',signal:controller.signal});
+            const data = await response.json();
+            if (!response.ok || data.ok !== true) throw new Error('Server non raggiungibile');
+            clearTimeout(timeout);
+            if (!connectionPending) return;
+            if (authRequired) {
+                connectionPending = false;
+                connectionNotice('Connessione disponibile. Accedi per collegare il tuo account.');
+                return;
+            }
+            if (commandBusy || devicesLoading || sceneSyncTask || programmingBusy || sceneEditorEl.style.display === 'block' || !programmingElement('Form').hidden) return;
+            closeSceneStream();
+            const loaded = await loadDevices();
+            if (loaded && epoch === connectionEpoch) {
+                connectionPending = false;
+                connectionRetry = 0;
+                connectionNotice('Connessione ripristinata. Stati aggiornati.');
+                if (document.body.dataset.view === 'programming') await loadProgramming();
+            }
+        } catch {
+            connectionPending = true;
+            closeSceneStream();
+            if (cloudScenes) sceneSyncMode = 'error';
+            devicesFresh = false;
+            renderScenes();
+            renderDashboard();
+            updateControlLocks();
+            connectionNotice('Collegamento interrotto. Riprovo automaticamente appena la rete torna disponibile.');
+            setStatus('Riconnessione in corso…', 'info');
+        } finally {
+            clearTimeout(timeout);
+            connectionProbeBusy = false;
+            if (connectionPending && !authRequired && document.visibilityState !== 'hidden' && connectionTimer === null) {
+                const delay = [2000,5000,10000,20000,30000][Math.min(connectionRetry++,4)];
+                connectionTimer = setTimeout(() => { connectionTimer = null; void checkConnection(); }, delay);
+            }
+        }
+    }
+    function initConnectionRecovery() {
+        connectionInitialized = true;
+        window.addEventListener('offline', () => {
+            closeSceneStream();
+            if (cloudScenes) sceneSyncMode = 'error';
+            devicesFresh = false;
+            renderScenes(); renderDashboard(); updateControlLocks();
+            requestConnectionRecovery();
+        });
+        window.addEventListener('online', () => requestConnectionRecovery());
+        window.addEventListener('pageshow', event => { if (event.persisted) requestConnectionRecovery(); });
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                closeSceneStream();
+                connectionPending = true;
+                if (connectionTimer !== null) { clearTimeout(connectionTimer); connectionTimer = null; }
+            } else requestConnectionRecovery();
+        });
+        navigator.connection?.addEventListener?.('change', () => requestConnectionRecovery());
+        // Also detects silent Wi-Fi/mobile transitions on Safari (no Network Information API).
+        setInterval(() => {
+            if (document.visibilityState === 'hidden' || connectionProbeBusy || connectionTimer !== null) return;
+            if (!authRequired && sceneStream && Date.now() - sceneLastHeartbeat > 45000) requestConnectionRecovery(0);
+            else void checkConnection();
+        }, 15000);
+        document.getElementById('reloadAppBtn').addEventListener('click', () => {
+            if (commandBusy || activeCloudExecution()) { connectionNotice('Attendi la conclusione del comando prima di ricaricare.'); return; }
+            const editing = sceneEditorEl.style.display === 'block' || !programmingElement('Form').hidden;
+            if (editing && !window.confirm('Ricaricando perderai le modifiche non salvate. Vuoi continuare?')) return;
+            window.location.reload();
+        });
+    }
+    // END CONNECTION RECOVERY
 
     let programmingData = {schedules:[],connected:false};
     let programmingEditing = null, programmingEpoch = 0, programmingBusy = false;
