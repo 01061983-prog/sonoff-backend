@@ -116,25 +116,43 @@ html:not([data-text-size="100"]) .editor-heading>.icon-button{flex-shrink:0}
 .channel-button[aria-busy="true"],.gate-button[aria-busy="true"]{background:#205fc4;color:white;border-color:#205fc4}
 
 /* La plancia scenari riempie lo schermo e cambia pagina, senza scorrere. */
-body.scenes-paged{height:100dvh;overflow:hidden}
-body.scenes-paged .main-content{height:100dvh;min-height:0;max-width:none;display:flex;flex-direction:column;overflow:hidden;padding-bottom:max(12px,env(safe-area-inset-bottom))}
-body.scenes-paged .topbar{position:relative;flex:0 0 64px;height:64px;min-height:64px}
+body.scenes-paged,
+
+/* La plancia scenari riempie lo schermo e cambia pagina, senza scorrere. */
+body.rooms-paged{height:100dvh;overflow:hidden}
+body.scenes-paged .main-content,
+body.rooms-paged .main-content{height:100dvh;min-height:0;max-width:none;display:flex;flex-direction:column;overflow:hidden;padding-bottom:max(12px,env(safe-area-inset-bottom))}
+body.scenes-paged .topbar,
+body.rooms-paged .topbar{position:relative;flex:0 0 64px;height:64px;min-height:64px}
 body.scenes-paged #settingsView{display:flex!important;flex:1;min-height:0;flex-direction:column;padding-top:4px;overflow:hidden}
-body.scenes-paged #scenesList{flex:1;min-height:0;display:grid;grid-template-columns:repeat(var(--scene-cols,2),minmax(0,1fr));grid-template-rows:repeat(var(--scene-rows,3),minmax(0,1fr));gap:14px;margin:0;padding:2px 2px 10px;align-content:stretch}
-body.scenes-paged .scenario-unit{min-width:0;min-height:0;display:flex}
-body.scenes-paged #scenesList .scenario-pad{aspect-ratio:auto;width:100%;height:100%;min-height:0!important;padding:14px;overflow:hidden;border-radius:18px;flex:1}
-body.scenes-paged #scenesList .pad-top{margin:0 0 auto;flex-shrink:0}
-body.scenes-paged #scenesList .pad-icon{width:32px;height:32px}
-body.scenes-paged #scenesList .pad-name{margin-top:10px;overflow-wrap:anywhere;line-height:1.2}
-body.scenes-paged #scenesList .pad-type{display:none}
-body.scenes-paged #scenesList .pad-state{margin-top:10px;line-height:1.3}
-body.scenes-paged #scenesList .pad-result{margin-top:6px;line-height:1.25}
+body.scenes-paged #scenesList,
+body.rooms-paged :is(#roomsList,#roomMembers){flex:1;min-height:0;display:grid;grid-template-columns:repeat(var(--scene-cols,2),minmax(0,1fr));grid-template-rows:repeat(var(--scene-rows,3),minmax(0,1fr));gap:14px;margin:0;padding:2px 2px 10px;align-content:stretch}
+body.scenes-paged .scenario-unit,
+body.rooms-paged .scenario-unit{min-width:0;min-height:0;display:flex}
+body.scenes-paged #scenesList .scenario-pad,
+body.rooms-paged :is(#roomsList,#roomMembers) .scenario-pad{aspect-ratio:auto;width:100%;height:100%;min-height:0!important;padding:14px;overflow:hidden;border-radius:18px;flex:1}
+body.scenes-paged #scenesList .pad-top,
+body.rooms-paged :is(#roomsList,#roomMembers) .pad-top{margin:0 0 auto;flex-shrink:0}
+body.scenes-paged #scenesList .pad-icon,
+body.rooms-paged :is(#roomsList,#roomMembers) .pad-icon{width:32px;height:32px}
+body.scenes-paged #scenesList .pad-name,
+body.rooms-paged :is(#roomsList,#roomMembers) .pad-name{margin-top:10px;overflow-wrap:anywhere;line-height:1.2}
+body.scenes-paged #scenesList .pad-type,
+body.rooms-paged :is(#roomsList,#roomMembers) .pad-type{display:none}
+body.scenes-paged #scenesList .pad-state,
+body.rooms-paged :is(#roomsList,#roomMembers) .pad-state{margin-top:10px;line-height:1.3}
+body.scenes-paged #scenesList .pad-result,
+body.rooms-paged :is(#roomsList,#roomMembers) .pad-result{margin-top:6px;line-height:1.25}
 .scene-pagination{flex:0 0 auto;min-height:48px;display:flex;align-items:center;justify-content:center;gap:16px;padding:4px 0;font-size:.875rem}
 .scene-pagination button{width:52px;min-height:44px;padding:0;font-size:1.75rem;line-height:1}
-body.scenes-paged .notification:empty{display:none}
-body.scenes-paged .notification:not(:empty){flex:0 0 auto;max-height:15dvh;overflow:auto;margin:2px 0 8px}
-body.scenes-paged .auth-panel,body.scenes-paged .offline-banner{flex-shrink:0}
-body.scenes-paged #scenesList>.empty-state{grid-column:1/-1;grid-row:1/-1}
+body.scenes-paged .notification:empty,
+body.rooms-paged .notification:empty{display:none}
+body.scenes-paged .notification:not(:empty),
+body.rooms-paged .notification:not(:empty){flex:0 0 auto;max-height:15dvh;overflow:auto;margin:2px 0 8px}
+body.scenes-paged .auth-panel,body.scenes-paged .offline-banner,
+body.rooms-paged .auth-panel,body.rooms-paged .offline-banner{flex-shrink:0}
+body.scenes-paged #scenesList>.empty-state,
+body.rooms-paged :is(#roomsList,#roomMembers)>.empty-state{grid-column:1/-1;grid-row:1/-1}
 /* Unico indicatore: l'icona dello scenario resta ferma. */
 .state-running .pad-icon .icon{animation:none}
 
@@ -188,3 +206,22 @@ html,button,a,input,select,textarea{touch-action:manipulation}
 .control-dialog .editor-footer{flex-wrap:wrap}.control-dialog .editor-footer button{min-height:44px;font-size:0.875rem}
 @media(max-width:700px){.device-primary.scenario-pad{min-height:210px}.control-dialog{padding:18px}.room-members{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.room-members>.scenario-unit>.scenario-pad{min-height:230px;padding:14px}.room-members .device-primary.scenario-pad{padding:14px}.room-members .pad-name{font-size:1rem}}
 @media(max-width:380px){.room-members{grid-template-columns:1fr}}
+
+/* v33: stanza e scenari condividono griglia, spazi e dimensioni a tutto schermo. */
+body.rooms-paged #roomsView{display:flex!important;flex:1;min-height:0;flex-direction:column;padding-top:4px;overflow:hidden}
+body.rooms-paged #roomsView>.page-heading,body.rooms-paged #roomsStatus,body.rooms-paged .room-toolbar,body.rooms-paged .app-footer,body.rooms-paged .notification:not(.error){display:none}
+body.rooms-paged #roomDetail:not([hidden]){display:flex;flex:1;min-height:0;flex-direction:column;overflow:hidden}
+body.rooms-paged #roomsList[hidden],body.rooms-paged #roomDetail[hidden]{display:none!important}
+body.rooms-paged .room-folder{padding:0;border:0;background:transparent;margin:0}
+body.rooms-paged .room-open{--pad-edge:#435367;--pad-shadow:#34495e28;background:linear-gradient(145deg,#7b899d,#536176);color:#fff;border-color:#718096}
+body.rooms-paged .room-open .pad-icon .icon{color:inherit}
+body.rooms-paged .room-open .pad-top{width:100%;display:flex;justify-content:space-between}
+body.rooms-paged .room-device-unit{position:relative}
+body.rooms-paged .room-device-unit>.device-tile{width:100%;height:100%;min-height:0;margin:0;gap:0}
+body.rooms-paged .room-device-unit .device-primary{flex:1}
+body.rooms-paged .device-channel-options{position:absolute;top:14px;right:14px;width:36px;min-height:32px;height:32px;margin:0;padding:0;border:0;border-radius:10px;font-size:0;background:#ffffff26;color:#fff;z-index:1}
+body.rooms-paged .device-channel-options::after{content:'⋯';font-size:1.5rem;line-height:1}
+body.rooms-paged .device-primary:has(+.device-channel-options) .pad-dot{visibility:hidden}
+body.rooms-paged .device-primary[aria-busy="true"]+.device-channel-options{display:none}
+body.rooms-paged .room-missing{padding:20px;border-radius:18px;background:var(--bg-soft);border:1px solid var(--border-soft);align-items:center}
+body.rooms-paged :is(#roomsList,#roomMembers)>:not(.scenario-unit){grid-column:1/-1;grid-row:1/-1;align-self:center;text-align:center}

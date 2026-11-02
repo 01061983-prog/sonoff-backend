@@ -12,9 +12,9 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <script src="text-size.js?v=32"></script>
-  <script src="scene-pages.js?v=32"></script>
-  <link rel="stylesheet" href="app.css?v=32">
+  <script src="text-size.js?v=33"></script>
+  <script src="scene-pages.js?v=33"></script>
+  <link rel="stylesheet" href="app.css?v=33">
   <style>
     #startupScreen{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:28px;background:#f6f8f6;color:#24382f;text-align:center;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:auto}
     #startupScreen[hidden]{display:none}body.app-starting>main{visibility:hidden}
@@ -40,7 +40,7 @@
     <button id="sceneNavBtn" class="nav-item active" data-view="scenes" aria-label="Scenari" aria-current="page" aria-controls="sceneSubmenu" aria-expanded="false"><span data-icon="layers"></span><span>Scenari</span><span class="submenu-chevron" aria-hidden="true">⌄</span></button>
     <div id="sceneSubmenu" class="scene-submenu" hidden><button class="submenu-item" onclick="showScenarioBoard()">Apri scenari</button><button id="sceneManageBtn" class="submenu-item" onclick="setSceneManageMode()">Modifica scenari</button><button id="newSceneBtn" class="submenu-item"><span data-icon="plus"></span><span>Aggiungi scenario</span></button></div>
     <button id="roomsNavBtn" class="nav-item" data-view="rooms" aria-label="Stanze" aria-controls="roomsSubmenu" aria-expanded="false"><span data-icon="building"></span><span>Stanze</span><span class="submenu-chevron" aria-hidden="true">⌄</span></button>
-    <div id="roomsSubmenu" class="scene-submenu" hidden><button class="submenu-item" onclick="openRooms()">Apri stanze</button><button class="submenu-item" onclick="editRoom(null)">Crea nuova stanza</button><button class="submenu-item" onclick="manageRooms()">Modifica o elimina stanze</button></div>
+    <div id="roomsSubmenu" class="scene-submenu" hidden><button class="submenu-item" onclick="openRooms()">Apri stanze</button><button id="editCurrentRoomBtn" class="submenu-item" onclick="editRoom(selectedRoomId)" hidden>Modifica stanza aperta</button><button class="submenu-item" onclick="editRoom(null)">Crea nuova stanza</button><button class="submenu-item" onclick="manageRooms()">Modifica o elimina stanze</button></div>
     <button class="nav-item" data-view="programming" aria-label="Programmazione"><span data-icon="calendar"></span><span>Programmazione</span></button>
     <button class="nav-item" data-view="install" aria-label="La tua webapp"><span data-icon="download"></span><span>La tua webapp</span></button>
   </nav>
@@ -70,7 +70,7 @@
     <section class="dashboard-section"><div class="section-heading"><div><h2>I tuoi dispositivi</h2><p>Le cose importanti, sempre a portata di mano.</p></div><button class="text-button" onclick="setView('devices')">Vedi tutti <span data-icon="arrow-right"></span></button></div><div id="homeDevicesGrid" class="devices-grid"></div></section>
     <div class="sync-footer"><span data-icon="shield"></span><span>Collegamento al tuo account eWeLink</span><span id="lastSync">In attesa del primo aggiornamento</span></div>
   </section>
-  <section id="devicesView" class="view" style="display:none" aria-labelledby="devicesHeading"><div class="page-heading"><div><p class="eyebrow">LUCI E ACCESSI</p><h1 id="devicesHeading">I tuoi dispositivi<span class="green-dot">.</span></h1><p class="heading-sub">Controlla gli ambienti, uno alla volta.</p></div></div><details class="technical-details"><summary>Collega un dispositivo mancante tramite ID</summary><p class="page-note">Per dispositivi compatibili a due canali, come New Smart G2, leggibili da eWeLink ma assenti dall’elenco automatico. Il collegamento è condiviso soltanto tra i tuoi dispositivi dello stesso account.</p><form id="linkDeviceForm" class="device-toolbar"><label class="search-box">ID eWeLink<input id="linkDeviceId" name="deviceId" required pattern="[0-9A-Fa-f]{10}" maxlength="10" placeholder="ID di 10 caratteri" autocomplete="off"></label><button id="linkDeviceBtn" type="submit" class="primary-button">Collega dispositivo</button><p id="linkDeviceStatus" role="status"></p></form></details><div class="device-toolbar"><label class="search-box"><span data-icon="search"></span><input type="search" id="deviceSearch" placeholder="Cerca un dispositivo…" aria-label="Cerca un dispositivo"></label><div class="filter-tabs" aria-label="Filtra dispositivi"><button data-filter="all" class="selected" aria-pressed="true">Tutti</button><button data-filter="online" aria-pressed="false">Online</button><button data-filter="offline" aria-pressed="false">Non in linea</button></div></div><div id="allDevicesGrid" class="devices-grid"></div><details class="technical-details"><summary>Dettagli tecnici dei dispositivi</summary><div class="table-wrap"><table id="devicesTable"><thead><tr><th>Dispositivo</th><th>ID</th><th>Connessione</th><th>Stato</th><th>Comando</th></tr></thead><tbody><tr><td colspan="5">Caricamento…</td></tr></tbody></table></div></details><p class="page-note">Gli stati si aggiornano all’apertura della pagina e dopo ogni comando. Usa il pulsante Aggiorna per una nuova lettura.</p></section>
+  <section id="devicesView" class="view" style="display:none" aria-labelledby="devicesHeading"><div class="page-heading"><div><p class="eyebrow">LUCI E ACCESSI</p><h1 id="devicesHeading">I tuoi dispositivi<span class="green-dot">.</span></h1><p class="heading-sub">Controlla gli ambienti, uno alla volta.</p></div></div><details class="technical-details"><summary>Collega un dispositivo mancante tramite ID</summary><p class="page-note">Per dispositivi compatibili a due canali, come New Smart G2, leggibili da eWeLink ma assenti dall’elenco automatico. Il collegamento è condiviso soltanto tra i tuoi dispositivi dello stesso account.</p><form id="linkDeviceForm" class="device-toolbar"><label class="search-box">ID eWeLink<input id="linkDeviceId" name="deviceId" required pattern="[0-9A-Fa-f]{10}" maxlength="10" placeholder="ID di 10 caratteri" autocomplete="off"></label><button id="linkDeviceBtn" type="submit" class="primary-button">Collega dispositivo</button><p id="linkDeviceStatus" role="status"></p></form></details><div class="device-toolbar"><label class="search-box"><span data-icon="search"></span><input type="search" id="deviceSearch" placeholder="Cerca un dispositivo…" aria-label="Cerca un dispositivo"></label><div class="filter-tabs" aria-label="Filtra dispositivi"><button data-filter="all" class="selected" aria-pressed="true">Tutti</button><button data-filter="online" aria-pressed="false">Online</button><button data-filter="offline" aria-pressed="false">Non in linea</button></div></div><div id="allDevicesGrid" class="devices-grid"></div><details class="technical-details"><summary>Dettagli tecnici dei dispositivi</summary><div class="table-wrap"><table id="devicesTable"><thead><tr><th>Dispositivo</th><th>ID</th><th>Connessione</th><th>Stato</th><th>Comando</th></tr></thead><tbody><tr><td colspan="5">Caricamento…</td></tr></tbody></table></div></details><p class="page-note">Gli stati si aggiornano automaticamente mentre la plancia è aperta, all’apertura e dopo ogni comando. Puoi anche usare Aggiorna per una lettura immediata.</p></section>
   <section id="settingsView" class="view" aria-labelledby="scenesHeading"><div class="page-heading"><div><p class="eyebrow">PICCOLI GESTI, GRANDI COMODITÀ</p><h1 id="scenesHeading">Scenari<span class="green-dot">.</span></h1><p class="heading-sub">Combina più azioni in un unico pulsante.</p></div></div><div id="scenesList" class="scenes-grid-settings"></div><div id="sceneEditor" class="scene-editor" style="display:none"><div class="editor-heading"><div><p class="eyebrow">PERSONALIZZA</p><h2 id="editorTitle">Crea uno scenario</h2></div><button class="icon-button" onclick="cancelSceneEdit()" aria-label="Chiudi editor"><span data-icon="close"></span></button></div><div class="form-grid"><div class="form-row"><label for="sceneName">Nome scenario</label><input id="sceneName" type="text" maxlength="100" placeholder="Es. Serata in oratorio"></div><div class="form-row"><label for="sceneType">Esecuzione</label><select id="sceneType"><option value="manuale">Manuale · con un tocco</option><option value="crepuscolare" disabled>Crepuscolare · non disponibile</option></select></div></div><h3 class="editor-subtitle">Scegli dispositivi e azioni</h3><p class="page-note">Per cancello e relè con autoritorno già configurato scegli “Impulso”. Il colore indica lo stato del relè, non la posizione del cancello.</p><div id="sceneDevicesList" class="devices-list"></div><div class="editor-footer"><button class="secondary-button" onclick="cancelSceneEdit()">Annulla</button><button class="primary-button" onclick="saveScene()"><span data-icon="check"></span>Salva scenario</button></div></div></section>
 
   <section id="roomsView" class="view" style="display:none" aria-labelledby="roomsHeading">
@@ -361,6 +361,85 @@
         const splash=document.getElementById('startupScreen');splash.hidden=true;splash.setAttribute('aria-busy','false');
         document.getElementById('mainContent').inert=false;document.body?.classList?.remove?.('app-starting');
     }
+    function applyDeviceSnapshot(data) {
+    if (!Array.isArray(data.devices)) throw new Error("Elenco dispositivi non valido dal server.");
+    devicesFresh = true;
+    authRequired = false;
+    document.getElementById("authPanel").hidden = true;
+    const devices = Array.isArray(data.devices) ? data.devices : [];
+    currentDevices = devices;
+    if(Array.isArray(data.warnings)&&data.warnings.length)setMessage(data.warnings.join(" "),"error");
+
+    if (!devices.length) {
+        setStatus("Nessun dispositivo trovato", "ok");
+        tbody.innerHTML = '<tr><td colspan="5" class="msg">Nessun dispositivo associato all’account.</td></tr>';
+        if (editingSceneId === null && sceneEditorEl.style.display !== "block") buildSceneDevicesList();
+        renderScenes();
+        return;
+    }
+
+    setStatus("Dispositivi caricati", "ok");
+    tbody.innerHTML = "";
+
+    devices.forEach(d => {
+        const tr = document.createElement("tr");
+
+        const online = d.online
+            ? '<span class="pill pill-online">Online</span>'
+            : '<span class="pill pill-offline">Offline</span>';
+
+        let stateHtml = "—";
+        let controlHtml = "—";
+
+        if (d.deviceid === "1000ac81a0") {
+            stateHtml = "Posizione non rilevata";
+            controlHtml = `<button data-device-command data-offline="${!d.online}" onclick="toggleDevice(${jsArg(d.deviceid)}, true)">Apri cancello</button>`;
+        } else if (d.params && typeof d.params.switch !== "undefined") {
+            const isOn = d.params.switch === "on";
+            stateHtml = isOn
+                ? '<span class="text-on">ON</span>'
+                : '<span class="text-off">OFF</span>';
+
+            controlHtml = `
+                <label class="switch">
+                    <input type="checkbox" data-device-command data-offline="${!d.online}" aria-label="${escapeHtml(d.name || "Dispositivo")}" ${isOn ? "checked" : ""} 
+                           onchange="toggleDevice(${jsArg(d.deviceid)}, this.checked)">
+                    <span class="slider"></span>
+                </label>
+            `;
+        } else if (d.params && Array.isArray(d.params.switches)) {
+            stateHtml = d.params.switches
+                .map((s, i) => `CH${Number(s.outlet) + 1}: ${s.switch === "on" ? "ON" : "OFF"}`)
+                .join(" · ");
+
+            const outlets = d.params.switches.map(channel => channel.outlet);
+
+            controlHtml = `
+                <button class="scene-btn" data-device-command data-offline="${!d.online}"
+                    onclick="toggleMulti(${jsArg(d.deviceid)}, ${escapeHtml(JSON.stringify(outlets))}, true)">
+                    Tutti ON
+                </button>
+                <button class="scene-btn" data-device-command data-offline="${!d.online}"
+                    onclick="toggleMulti(${jsArg(d.deviceid)}, ${escapeHtml(JSON.stringify(outlets))}, false)">
+                    Tutti OFF
+                </button>
+            `;
+        }
+
+        tr.innerHTML = `
+            <td data-label="Dispositivo">${escapeHtml(d.name || "Senza nome")}</td>
+            <td data-label="ID"><span class="device-id">${escapeHtml(d.deviceid)}</span></td>
+            <td data-label="Connessione">${online}</td>
+            <td data-label="Stato">${stateHtml}</td>
+            <td data-label="Comando">${controlHtml}</td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+
+    if (sceneEditorEl.style.display !== "block") buildSceneDevicesList();
+    renderScenes();
+    }
     async function loadDevices() {
         if (devicesLoading) return false;
         devicesLoading = true;
@@ -379,84 +458,7 @@
             catch (error) {
                 throw error;
             }
-            if (!Array.isArray(data.devices)) throw new Error("Elenco dispositivi non valido dal server.");
-            devicesFresh = true;
-            authRequired = false;
-            document.getElementById("authPanel").hidden = true;
-            const devices = Array.isArray(data.devices) ? data.devices : [];
-            currentDevices = devices;
-            if(Array.isArray(data.warnings)&&data.warnings.length)setMessage(data.warnings.join(" "),"error");
-
-            if (!devices.length) {
-                setStatus("Nessun dispositivo trovato", "ok");
-                tbody.innerHTML = '<tr><td colspan="5" class="msg">Nessun dispositivo associato all’account.</td></tr>';
-                if (editingSceneId === null && sceneEditorEl.style.display !== "block") buildSceneDevicesList();
-                renderScenes();
-                if (!commandBusy) await syncScenes();
-                return true;
-            }
-
-            setStatus("Dispositivi caricati", "ok");
-            tbody.innerHTML = "";
-
-            devices.forEach(d => {
-                const tr = document.createElement("tr");
-
-                const online = d.online
-                    ? '<span class="pill pill-online">Online</span>'
-                    : '<span class="pill pill-offline">Offline</span>';
-
-                let stateHtml = "—";
-                let controlHtml = "—";
-
-                if (d.deviceid === "1000ac81a0") {
-                    stateHtml = "Posizione non rilevata";
-                    controlHtml = `<button data-device-command data-offline="${!d.online}" onclick="toggleDevice(${jsArg(d.deviceid)}, true)">Apri cancello</button>`;
-                } else if (d.params && typeof d.params.switch !== "undefined") {
-                    const isOn = d.params.switch === "on";
-                    stateHtml = isOn
-                        ? '<span class="text-on">ON</span>'
-                        : '<span class="text-off">OFF</span>';
-
-                    controlHtml = `
-                        <label class="switch">
-                            <input type="checkbox" data-device-command data-offline="${!d.online}" aria-label="${escapeHtml(d.name || "Dispositivo")}" ${isOn ? "checked" : ""} 
-                                   onchange="toggleDevice(${jsArg(d.deviceid)}, this.checked)">
-                            <span class="slider"></span>
-                        </label>
-                    `;
-                } else if (d.params && Array.isArray(d.params.switches)) {
-                    stateHtml = d.params.switches
-                        .map((s, i) => `CH${Number(s.outlet) + 1}: ${s.switch === "on" ? "ON" : "OFF"}`)
-                        .join(" · ");
-
-                    const outlets = d.params.switches.map(channel => channel.outlet);
-
-                    controlHtml = `
-                        <button class="scene-btn" data-device-command data-offline="${!d.online}"
-                            onclick="toggleMulti(${jsArg(d.deviceid)}, ${escapeHtml(JSON.stringify(outlets))}, true)">
-                            Tutti ON
-                        </button>
-                        <button class="scene-btn" data-device-command data-offline="${!d.online}"
-                            onclick="toggleMulti(${jsArg(d.deviceid)}, ${escapeHtml(JSON.stringify(outlets))}, false)">
-                            Tutti OFF
-                        </button>
-                    `;
-                }
-
-                tr.innerHTML = `
-                    <td data-label="Dispositivo">${escapeHtml(d.name || "Senza nome")}</td>
-                    <td data-label="ID"><span class="device-id">${escapeHtml(d.deviceid)}</span></td>
-                    <td data-label="Connessione">${online}</td>
-                    <td data-label="Stato">${stateHtml}</td>
-                    <td data-label="Comando">${controlHtml}</td>
-                `;
-
-                tbody.appendChild(tr);
-            });
-
-            if (sceneEditorEl.style.display !== "block") buildSceneDevicesList();
-            renderScenes();
+            applyDeviceSnapshot(data);
             startupStatus("Dispositivi caricati. Sincronizzo gli scenari…");
             if (!commandBusy) await syncScenes();
             return true;
@@ -1024,6 +1026,7 @@
         const detail = running && availability.offline ? "Un dispositivo non in linea" : !running && !unavailable && pulse && state === null ? "Stato del relè non disponibile" : "";
         const lastResult = !running && run?.status === "succeeded" && pulse ? "Ultimo impulso inviato" : !running && run?.status === "failed" ? "Comando non completato · verifica l’esito" : run?.status === "succeeded" ? run.protectionMessage || "" : "";
         tile.className = "scenario-unit";
+        tile.dataset.boardKey = 'scene:' + scene.id;
         tile.innerHTML = `<button type="button" class="scenario-pad scene-run state-${status}" data-scene-id="${escapeHtml(scene.id)}" data-offline="${unavailable}" ${unavailable ? 'disabled' : ''} aria-busy="${running}" aria-label="${escapeHtml((running ? "In esecuzione: " : "Esegui scenario: ") + scene.name + ". " + label + (running ? " " + percent + "%" : ""))}" onclick="runUserScene(${jsArg(scene.id)})"><span class="pad-top"><span class="pad-icon">${icon(pulse ? "gate" : turnsOff ? "moon" : "sun")}</span>${progress}</span><span class="pad-name">${escapeHtml(scene.name)}</span><span class="pad-type">${pulse ? "COMANDO A IMPULSO" : turnsOff ? "SPEGNIMENTO" : "SCENARIO"} · ${scene.actions.length} ${scene.actions.length === 1 ? "AZIONE" : "AZIONI"}</span><span class="pad-state">${label}</span>${detail ? `<span class="pad-result">${detail}</span>` : ""}${lastResult ? `<span class="pad-result">${escapeHtml(lastResult)}</span>` : ""}</button>${manage ? `<div class="pad-management"><button onclick="startSceneEdit(${jsArg(scene.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteScene(${jsArg(scene.id)})">Elimina</button></div>` : ""}`;
         return tile;
     }
@@ -1263,6 +1266,7 @@
         });
         if (window.matchMedia("(display-mode: standalone)").matches || navigator.standalone) document.getElementById("installedLabel").hidden = false;
         initConnectionRecovery();
+        initLiveDeviceStatus();
         if ("serviceWorker" in navigator && window.location.protocol !== "file:") {
             navigator.serviceWorker.register("./sw.js").catch(() => {
                 document.getElementById("installedLabel").textContent = "Installazione offline non disponibile; la plancia funziona nel browser.";
@@ -1285,9 +1289,12 @@
         const ready=sceneSyncMode==='live'&&!authRequired;
         document.getElementById('roomsStatus').textContent=ready?'Stanze sincronizzate tra i dispositivi collegati alla stessa casa eWeLink.':'Attendi la connessione per creare o modificare le stanze.';
         const room=cloudRooms.find(room=>room.id===selectedRoomId);
+        document.getElementById('roomsView').dataset.management=String(roomsManaging);
+        document.getElementById('roomsView').dataset.room=room?.id||'';
+        document.getElementById('editCurrentRoomBtn').hidden=!room;
         list.hidden=Boolean(room);detail.hidden=!room;
         if (!room) {
-            list.innerHTML=cloudRooms.length?cloudRooms.map(room=>`<article class="room-folder"><button type="button" class="room-open" onclick="openRoom(${jsArg(room.id)})">${icon('building')}<strong>${escapeHtml(room.name)}</strong><span>${room.members.length} ${room.members.length===1?'elemento':'elementi'}</span><span>Apri stanza →</span></button>${roomsManaging?`<div class="room-folder-actions"><button class="secondary-button" onclick="editRoom(${jsArg(room.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteRoom(${jsArg(room.id)})">Elimina</button></div>`:''}</article>`).join(''):'<div class="empty-state"><h2>Nessuna stanza</h2><p>Crea una stanza e scegli gli scenari o i dispositivi da raccogliere.</p></div>';
+            list.innerHTML=cloudRooms.length?cloudRooms.map(room=>`<article class="room-folder scenario-unit" data-board-key="room:${escapeHtml(room.id)}"><button type="button" class="room-open scenario-pad" onclick="openRoom(${jsArg(room.id)})"><span class="pad-top"><span class="pad-icon">${icon('building')}</span><span class="pad-dot"></span></span><span class="pad-name">${escapeHtml(room.name)}</span><span class="pad-state">${room.members.length} ${room.members.length===1?'elemento':'elementi'}</span><span class="pad-result">Apri stanza →</span></button>${roomsManaging?`<div class="room-folder-actions"><button class="secondary-button" onclick="editRoom(${jsArg(room.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteRoom(${jsArg(room.id)})">Elimina</button></div>`:''}</article>`).join(''):'<div class="empty-state"><h2>Nessuna stanza</h2><p>Crea una stanza e scegli gli scenari o i dispositivi da raccogliere.</p></div>';
             return;
         }
         document.getElementById('roomTitle').textContent=room.name;
@@ -1298,9 +1305,9 @@
                 if (scene) {members.appendChild(makeSceneTile(scene));continue;}
             } else if (member.kind==='device') {
                 const device=currentDevices.find(device=>device.deviceid===member.id);
-                if (device) {const wrapper=document.createElement('div');wrapper.innerHTML=deviceCard(device);members.appendChild(wrapper);continue;}
+                if (device) {const wrapper=document.createElement('div');wrapper.className='scenario-unit room-device-unit';wrapper.dataset.boardKey='device:'+device.deviceid;wrapper.innerHTML=deviceCard(device);members.appendChild(wrapper);continue;}
             }
-            const missing=document.createElement('p');missing.className='page-note';missing.textContent=(member.kind==='scene'?'Scenario':'Dispositivo')+' non disponibile. Puoi rimuoverlo con Modifica stanza.';members.appendChild(missing);
+            const missing=document.createElement('p');missing.className='scenario-unit room-missing';missing.dataset.boardKey=member.kind+':'+member.id;missing.textContent=(member.kind==='scene'?'Scenario':'Dispositivo')+' non disponibile. Puoi rimuoverlo con Modifica stanza.';members.appendChild(missing);
         }
         if (!room.members.length) members.innerHTML='<p class="page-note">La stanza è vuota. Premi Modifica stanza per aggiungere elementi.</p>';
         updateControlLocks();
@@ -1401,6 +1408,45 @@
             }
         });
     }
+
+    // LIVE DEVICE STATUS: no commands, no reload, no background work while hidden.
+    let backgroundDevicesBusy = false;
+    let lastBackgroundAttempt = 0;
+    async function refreshDeviceStatus() {
+        if (document.visibilityState === 'hidden' || navigator.onLine === false || authRequired || backgroundDevicesBusy ||
+            devicesLoading || commandBusy || activeCloudExecution() || sceneSyncTask || programmingBusy ||
+            sceneEditorEl.style.display === 'block' || !programmingElement('Form').hidden ||
+            document.getElementById('roomEditorDialog').open || document.getElementById('channelDialog').open || deviceGesture) return false;
+        const serial = devicesReadSerial;
+        backgroundDevicesBusy = true;
+        lastBackgroundAttempt = Date.now();
+        try {
+            const data = await apiRequest('/api/devices');
+            if (serial !== devicesReadSerial || commandBusy || devicesLoading || activeCloudExecution() || authRequired ||
+                document.visibilityState === 'hidden' || deviceGesture || sceneEditorEl.style.display === 'block' ||
+                !programmingElement('Form').hidden || document.getElementById('roomEditorDialog').open || document.getElementById('channelDialog').open) return false;
+            if (!Array.isArray(data.devices)) throw new Error('Elenco dispositivi non valido dal server.');
+            const changed = !devicesFresh || JSON.stringify(currentDevices) !== JSON.stringify(data.devices);
+            if (changed) {
+                applyDeviceSnapshot(data);
+                renderDashboard();
+                updateControlLocks();
+            }
+            lastSyncTime = new Date();
+            document.getElementById('lastSync').textContent = 'Ultima lettura · ' + lastSyncTime.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+            return true;
+        } catch (error) {
+            if (!error.auth) requestConnectionRecovery();
+            return false;
+        } finally { backgroundDevicesBusy = false; }
+    }
+    function initLiveDeviceStatus() {
+        setInterval(() => {
+            const latest = Math.max(lastSyncTime?.getTime() || 0,lastBackgroundAttempt);
+            if (Date.now() - latest >= 20000) void refreshDeviceStatus();
+        }, 5000);
+    }
+    // END LIVE DEVICE STATUS
 
     // CONNECTION RECOVERY: probes and read-only refreshes; never replay a command.
     let connectionInitialized = false;
