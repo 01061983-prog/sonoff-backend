@@ -1,7 +1,7 @@
 'use strict';
 const crypto=require('crypto');
 const core=require('./programming-core');
-module.exports=function createProgramming({db,api,listDevices,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch,isImpulseDevice=id=>id==='1000ac81a0'}){
+module.exports=function createProgramming({db,api,listDevices,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch,authorizeOwner=async()=>null,isImpulseDevice=id=>id==='1000ac81a0'}){
  const astronomy=require('./astronomy')({db,fetch:solarFetch,now});
  const recovery=require('./programming-recovery')({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,api,runScene,getScene,completedOnce});
  const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
@@ -118,6 +118,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
   });
  }
  async function access(owner,{scheduled=false}={}){
+  await authorizeOwner(owner);
   const ref=accounts().doc(owner),claim=crypto.randomUUID();
   const result=await db().runTransaction(async t=>{
    const snap=await t.get(ref),data=snap.exists?snap.data():{};

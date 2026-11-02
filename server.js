@@ -38,6 +38,8 @@ function returnUrl(value) {
 const DAY = 24 * 60 * 60 * 1000;
 const refreshJobs = new Map();
 let programming = null;
+let appAccounts = null;
+const APP_AUTH_ENABLED = process.env.EWELINK_APP_AUTH_ENABLED === "true";
 
 function clearSession(res) {
   for (const name of ["ewelink_access", "ewelink_refresh", "ewelink_expires", "ewelink_session"]) {
@@ -93,6 +95,7 @@ async function renewSession(req, res) {
 }
 
 function requireLogin(req, res, next) {
+  if (appAccounts) return appAccounts.provider(req).then(() => next()).catch(error => failure(res,error,req));
   if (programming && !req.programmingChecked) {
     req.programmingChecked = true;
     return programming.restoreSession(req, res).then(async () => {
@@ -119,7 +122,7 @@ function failure(res, error, req) {
 const route = fn => async (req, res) => {
   try { return await fn(req, res); }
   catch (error) {
-    if (programming && req.browserSession && error.code === "not_authenticated" && !res.headersSent) {
+    if (!appAccounts && programming && req.browserSession && error.code === "not_authenticated" && !res.headersSent) {
       const used = req.cookies.ewelink_access;
       try {
         await programming.restoreSession(req, res);
@@ -137,6 +140,16 @@ const route = fn => async (req, res) => {
   }
 };
 
+if(APP_AUTH_ENABLED){
+  if(process.env.EWELINK_PROGRAMMING_ENABLED!=="true")throw new Error("L’accesso webapp richiede l’archivio credenziali della programmazione.");
+  const adminEmail=String(process.env.EWELINK_APP_ADMIN_EMAIL||"").trim().toLowerCase();
+  if(!adminEmail)throw new Error("Impostare EWELINK_APP_ADMIN_EMAIL prima di attivare gli account.");
+  const webConfig=JSON.parse(process.env.FIREBASE_WEB_CONFIG||"{}");
+  if(!webConfig.apiKey||!webConfig.authDomain||webConfig.projectId!==process.env.FIREBASE_PROJECT_ID)throw new Error("Configurazione pubblica Firebase Auth mancante o non coerente.");
+  appAccounts=require('./app-accounts')({db:getSceneDatabase,auth:()=>{getSceneDatabase();return require('firebase-admin/auth').getAuth(require('firebase-admin/app').getApps().find(a=>a.name==='san-luigi-scenes'));},secret:APPSECRET,appid:APPID,adminEmail,origin:new URL(HOME).origin,webConfig,programming:()=>requireProgramming()});
+  appAccounts.install(app,route);
+}else app.get('/api/app/config',(_req,res)=>res.json({ok:true,enabled:false}));
+
 // Spazia le richieste verso eWeLink. Nessun reinvio automatico dei comandi.
 let queue = Promise.resolve();
 let lastRequest = 0;
@@ -148,6 +161,7 @@ async function api(path, token, body, authorization) {
   });
   queue = slot.catch(() => {});
   await slot;
+  if (appAccounts && body !== undefined && path === "/v2/device/thing/status") await appAccounts.tokenAllowed(token);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 60000);
   try {
@@ -186,7 +200,7 @@ app.use("/app", express.static(path.join(__dirname, "public"), { index: "index.h
 // Compatibilità con i file caricati accanto a server.js su GitHub.
 // Sono esposti soltanto gli asset elencati, mai il codice del backend.
 const WEBAPP_ASSETS = [
-  "index.html", "sonoff.html.html", "app.css", "text-size.js", "scene-pages.js", "manifest.webmanifest", "sw.js",
+  "index.html", "sonoff.html.html", "app.css", "text-size.js", "scene-pages.js", "account-auth.js", "account-auth.css", "manifest.webmanifest", "sw.js",
   "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png",
   "icons/icon-maskable.png", "icons/apple-touch-icon.png"
 ];
@@ -206,7 +220,16 @@ app.get("/app/", (_req, res) => res.redirect(HOME));
 app.get("/", (_req, res) => res.json({ ok: true, message: "Backend Sonoff OAuth attivo" }));
 
 app.get("/login", route(async (req, res) => {
-  if (programming) {
+  if (appAccounts) {
+    await appAccounts.session(req);
+    if(req.appImpersonating) throw cloudError(403,"app_link_owner","Il collegamento eWeLink deve essere completato dal titolare dell’account.");
+    if(req.appAccount.providerOwner){
+      try{await appAccounts.provider(req);return res.redirect(returnUrl(req.query.returnUrl));}
+      catch(error){if(error.code!=="not_authenticated")throw error;}
+    }
+    for(const name of ["ewelink_access","ewelink_refresh","ewelink_expires","ewelink_session"])delete req.cookies[name];
+  }
+  if (!appAccounts && programming) {
     try {
       await programming.restoreSession(req, res);
       if (!req.browserSession && req.cookies.ewelink_access && Number(req.cookies.ewelink_expires) > Date.now() + 60000) await programming.connectBrowser(req, res);
@@ -232,7 +255,8 @@ app.get("/login", route(async (req, res) => {
   const seq = Date.now().toString();
   const nonce = crypto.randomBytes(4).toString("hex");
   const state = crypto.randomBytes(24).toString("hex");
-  res.cookie("ewelink_oauth", JSON.stringify({ state, returnUrl: returnUrl(req.query.returnUrl) }), {
+  const pending = {state,returnUrl:returnUrl(req.query.returnUrl),...(appAccounts?{accountId:req.appAccount.id,actorUid:req.appActor.uid}: {})};
+  res.cookie("ewelink_oauth", appAccounts ? appAccounts.sealPending(pending) : JSON.stringify(pending), {
     httpOnly: true, secure: true, sameSite: "Lax", signed: false, maxAge: 600000, path: "/oauth/callback"
   });
   const query = new URLSearchParams({
@@ -244,7 +268,7 @@ app.get("/login", route(async (req, res) => {
 
 app.get("/oauth/callback", route(async (req, res) => {
   let pending;
-  try { pending = JSON.parse(req.cookies.ewelink_oauth || "null"); } catch {}
+  try { pending = appAccounts ? appAccounts.openPending(req.cookies.ewelink_oauth) : JSON.parse(req.cookies.ewelink_oauth || "null"); } catch {}
   res.clearCookie("ewelink_oauth", { httpOnly: true, secure: true, sameSite: "Lax", path: "/oauth/callback" });
   if (!pending || typeof req.query.state !== "string" || req.query.state !== pending.state) {
     return res.status(400).send("Accesso scaduto o non valido. Riapri la plancia e riprova.");
@@ -252,14 +276,17 @@ app.get("/oauth/callback", route(async (req, res) => {
   if (req.query.error || typeof req.query.code !== "string" || !req.query.code) {
     return res.status(400).send("Accesso eWeLink non completato. Riprova dalla plancia.");
   }
+  if(appAccounts){await appAccounts.session(req);if(req.appImpersonating||pending.accountId!==req.appAccount.id||pending.actorUid!==req.appActor.uid)throw cloudError(403,"app_oauth_account","Accesso eWeLink iniziato da un altro account. Riparti dalla tua plancia.");}
   const body = { code: req.query.code, redirectUrl: REDIRECT_URL, grantType: "authorization_code" };
   const data = await api("/v2/user/oauth/token", null, body, "Sign " + sign(JSON.stringify(body)));
   saveSession(req, res, data.data || {});
+  if(appAccounts){const owner=await programming.identity({cookies:{ewelink_access:req.cookies.ewelink_access}});await appAccounts.bind(req.appAccount,owner);}
   if (programming) await programming.connectBrowser(req, res, data.data);
   res.redirect(returnUrl(pending.returnUrl));
 }));
 
 app.post("/logout", route(async (req, res) => {
+  if(appAccounts)throw cloudError(409,"app_logout","Usa l’uscita dall’account della webapp.");
   if (programming) await programming.logoutBrowser(req);
   clearSession(res);
   res.json({ ok: true });
@@ -443,7 +470,9 @@ async function sceneContext(req) {
   const home = requested ? entry.homes.find(home => home.id === requested) : entry.homes[0];
   if (!home) throw cloudError(403, "workspace_forbidden", "La casa eWeLink richiesta non è accessibile a questo account.");
   const docId = crypto.createHash("sha256").update(APPID + ":" + home.id).digest("hex");
-  return { workspace: { id: home.id, name: home.name || "Oratorio" }, ref: getSceneDatabase().collection("sanLuigiScenarioWorkspaces").doc(docId) };
+  let ref=getSceneDatabase().collection("sanLuigiScenarioWorkspaces").doc(docId);
+  if(appAccounts)ref=await appAccounts.context(req,home,ref);
+  return { workspace: { id: home.id, name: home.name || "Oratorio" }, ref };
 }
 function cleanScene(scene) {
   if (!scene || typeof scene.id !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(scene.id) ||
@@ -597,11 +626,17 @@ app.get("/api/user-scenes/events", requireLogin, route(async (req, res) => {
   res.flushHeaders();
   let unsubscribe = () => {};
   const send = (name, payload) => { if (!res.writableEnded) res.write("event: " + name + "\ndata: " + JSON.stringify(payload) + "\n\n"); };
-  unsubscribe = context.ref.onSnapshot(snapshot => send("scenes", scenePayload(context, snapshot)), () => {
+  unsubscribe = context.ref.onSnapshot(async snapshot => {
+    try{if(appAccounts)await appAccounts.session(req);send("scenes",scenePayload(context,snapshot));}
+    catch{send("sync-error",{message:"Accesso alla plancia non più autorizzato."});res.end();}
+  }, () => {
     send("sync-error", { message: "Connessione Firebase interrotta. Riprova l’aggiornamento." });
     res.end();
   });
-  const heartbeat = setInterval(() => { if (!res.writableEnded) send("heartbeat", {}); }, 20000);
+  const heartbeat = setInterval(async () => {
+    try{if(appAccounts)await appAccounts.session(req);if(!res.writableEnded)send("heartbeat",{});}
+    catch{send("sync-error",{message:"Sessione terminata. Accedi nuovamente."});res.end();}
+  }, 20000);
   // Una nuova connessione verifica periodicamente che l'account sia ancora autenticato.
   const maximum = setTimeout(() => res.end(), 15 * 60 * 1000);
   res.on("close", () => { unsubscribe(); clearInterval(heartbeat); clearTimeout(maximum); });
@@ -755,7 +790,7 @@ app.post("/api/toggle-multi", requireLogin, route(async (req, res) => {
 // Programmazione autonoma: disabilitata finché non viene attivata su Render.
 // I token sono conservati soltanto dopo il consenso esplicito al primo salvataggio.
 if (process.env.EWELINK_PROGRAMMING_ENABLED === "true") {
-  programming = require("./programming")({db:getSceneDatabase, api, listDevices, appid:APPID, secret:APPSECRET, saveSession, solarFetch:fetch, getScene:getProgrammingScene, runScene:runProgrammingScene, region:new URL(API_BASE).hostname.split("-")[0]});
+  programming = require("./programming")({db:getSceneDatabase, api, listDevices, appid:APPID, secret:APPSECRET, saveSession, authorizeOwner:owner=>appAccounts?appAccounts.authorizeOwner(owner):null, solarFetch:fetch, getScene:getProgrammingScene, runScene:runProgrammingScene, region:new URL(API_BASE).hostname.split("-")[0]});
   programming.start();
 }
 function requireProgramming() {

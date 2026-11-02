@@ -12,9 +12,11 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <script src="text-size.js?v=33"></script>
-  <script src="scene-pages.js?v=33"></script>
-  <link rel="stylesheet" href="app.css?v=33">
+  <script src="account-auth.js?v=34"></script>
+  <link rel="stylesheet" href="account-auth.css?v=34">
+  <script src="text-size.js?v=34"></script>
+  <script src="scene-pages.js?v=34"></script>
+  <link rel="stylesheet" href="app.css?v=34">
   <style>
     #startupScreen{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:28px;background:#f6f8f6;color:#24382f;text-align:center;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:auto}
     #startupScreen[hidden]{display:none}body.app-starting>main{visibility:hidden}
@@ -205,18 +207,21 @@
                 cache: "no-store",
                 signal: controller.signal,
                 ...(body === undefined ? {} : {
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "application/json", ...(window.AppAccounts?.headers() || {}) },
                     body: JSON.stringify(body)
                 })
             });
             let data;
             try { data = await response.json(); }
             catch { throw new Error("Risposta non JSON dal server (HTTP " + response.status + ")."); }
+            if(window.AppAccounts?.handleError(data))throw Object.assign(new Error(data.msg),{auth:true});
             if (response.status === 401 || data?.error === "not_authenticated") {
                 resumableSession = data?.canResume === true;
                 const error = new Error("Sessione scaduta. Accedi nuovamente.");
                 error.auth = true;
-                showLoginRequired(data?.providerError === 401
+                showLoginRequired(window.AppAccounts?.state.enabled && !window.AppAccounts.state.account?.linked
+                    ? "Il tuo account è pronto. Collega eWeLink per vedere i tuoi dispositivi: questo passaggio serve soltanto al primo utilizzo."
+                    : data?.providerError === 401
                     ? "eWeLink non riconosce più questa sessione. Ricollega l’account solo quando vuoi riprendere il controllo."
                     : "Accedi per collegare questo browser. La pagina resta qui, senza riavviare automaticamente il login.");
                 throw error;
@@ -239,7 +244,7 @@
 
     function updateControlLocks() {
         document.querySelectorAll("#devicesTable input, #devicesTable button, .scene-tile, .scene-run, [data-device-command]").forEach(el => {
-            el.disabled = commandBusy || Boolean(activeCloudExecution()) || devicesLoading || !devicesFresh || navigator.onLine === false || el.dataset.offline === "true" || (el.classList.contains("scene-run") && (sceneSyncMode === "loading" || Boolean(cloudScenes && sceneSyncMode !== "live")));
+            el.disabled = Boolean(window.AppAccounts?.state.readOnly) || commandBusy || Boolean(activeCloudExecution()) || devicesLoading || !devicesFresh || navigator.onLine === false || el.dataset.offline === "true" || (el.classList.contains("scene-run") && (sceneSyncMode === "loading" || Boolean(cloudScenes && sceneSyncMode !== "live")));
             if (el.dataset.sceneId && runningScene(el.dataset.sceneId)) el.disabled = true;
             el.classList.toggle('command-wait-lock',el.disabled&&Boolean(commandBusy||activeCloudExecution()||devicesLoading)&&Boolean(currentDevices.length)&&el.dataset.offline!=="true"&&!authRequired&&navigator.onLine!==false);
         });
@@ -321,6 +326,7 @@
     }
     // LOGOUT
     async function logout() {
+        if(window.AppAccounts?.state.enabled)return window.AppAccounts.logout();
         resumableSession = false;
         clearProgramming();
         try {
@@ -493,7 +499,7 @@
     }
 
     // SCENARI PERSONALIZZATI (LOCALSTORAGE)
-    const SCENES_STORAGE_KEY = "ewelink_user_scenes_v2";
+    let SCENES_STORAGE_KEY = "ewelink_user_scenes_v2";
 
     function unifiedLocalScenes(scenes) {
         const on=scenes.find(scene=>scene.id==="default-portico-on"),off=scenes.find(scene=>scene.id==="default-portico-off");
@@ -530,7 +536,7 @@
 
     function ensureDefaultScenes() {
         try {
-            if (localStorage.getItem(SCENES_STORAGE_KEY) === null) saveUserScenes(DEFAULT_SCENES);
+            if (localStorage.getItem(SCENES_STORAGE_KEY) === null) saveUserScenes(window.AppAccounts?.state.enabled ? [] : DEFAULT_SCENES);
         } catch { setMessage("Archivio scenari non accessibile nel browser.", "error"); }
     }
 
@@ -866,6 +872,7 @@
         } catch { return []; }
     }
     function migrationScenes() {
+        if(window.AppAccounts?.state.enabled)return [];
         if (!sceneWorkspace) return [];
         try { if (localStorage.getItem("ewelink_cloud_migrated_" + sceneWorkspace.id)) return []; } catch {}
         const ids = new Set((cloudScenes || []).map(scene => scene.id));
@@ -1094,7 +1101,7 @@
             else button.removeAttribute("aria-current");
         });
         document.getElementById("pageLabel").textContent = VIEW_NAMES[name];
-        document.title = VIEW_NAMES[name] + " · eWeLink Oratorio";
+        document.title = VIEW_NAMES[name] + " · " + (window.AppAccounts?.state.account?.name || "eWeLink Oratorio");
         if (name === "rooms") renderRooms();
         if (name === "programming") void openProgramming();
         window.scrollTo({top: 0, behavior: "instant"});
@@ -1940,7 +1947,12 @@
         setInterval(()=>{if(document.body.dataset.view==='programming'&&document.visibilityState==='visible'&&!authRequired&&!programmingBusy&&programmingElement('Form').hidden)void loadProgramming();},30000);
     }
 
-    document.addEventListener("DOMContentLoaded", () => {
+    document.addEventListener("DOMContentLoaded", async () => {
+        if(window.AppAccounts){
+            const allowed=await window.AppAccounts.bootstrap(BACKEND_URL);
+            if(!allowed)return;
+            if(window.AppAccounts.state.enabled)SCENES_STORAGE_KEY="ewelink_private_scenes_"+window.AppAccounts.state.account.id;
+        }
         initApp();
         setTimeout(()=>{if(!startupComplete){startupStatus('La connessione sta richiedendo più tempo. Puoi attendere oppure aprire la plancia.');document.getElementById('startupContinue').hidden=false;}},12000);
         initProgramming();
