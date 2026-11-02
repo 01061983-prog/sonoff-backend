@@ -12,9 +12,9 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <script src="text-size.js?v=31"></script>
-  <script src="scene-pages.js?v=31"></script>
-  <link rel="stylesheet" href="app.css?v=31">
+  <script src="text-size.js?v=32"></script>
+  <script src="scene-pages.js?v=32"></script>
+  <link rel="stylesheet" href="app.css?v=32">
   <style>
     #startupScreen{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:28px;background:#f6f8f6;color:#24382f;text-align:center;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:auto}
     #startupScreen[hidden]{display:none}body.app-starting>main{visibility:hidden}
@@ -38,7 +38,9 @@
     <button class="nav-item" data-view="home" aria-label="Panoramica"><span data-icon="grid"></span><span>Panoramica</span></button>
     <button class="nav-item" data-view="devices" aria-label="Dispositivi"><span data-icon="bulb"></span><span>Dispositivi</span><span class="nav-count" id="navDeviceCount">—</span></button>
     <button id="sceneNavBtn" class="nav-item active" data-view="scenes" aria-label="Scenari" aria-current="page" aria-controls="sceneSubmenu" aria-expanded="false"><span data-icon="layers"></span><span>Scenari</span><span class="submenu-chevron" aria-hidden="true">⌄</span></button>
-    <div id="sceneSubmenu" class="scene-submenu" hidden><button id="sceneManageBtn" class="submenu-item" onclick="setSceneManageMode()">Modifica scenari</button><button id="newSceneBtn" class="submenu-item"><span data-icon="plus"></span><span>Aggiungi scenario</span></button></div>
+    <div id="sceneSubmenu" class="scene-submenu" hidden><button class="submenu-item" onclick="showScenarioBoard()">Apri scenari</button><button id="sceneManageBtn" class="submenu-item" onclick="setSceneManageMode()">Modifica scenari</button><button id="newSceneBtn" class="submenu-item"><span data-icon="plus"></span><span>Aggiungi scenario</span></button></div>
+    <button id="roomsNavBtn" class="nav-item" data-view="rooms" aria-label="Stanze" aria-controls="roomsSubmenu" aria-expanded="false"><span data-icon="building"></span><span>Stanze</span><span class="submenu-chevron" aria-hidden="true">⌄</span></button>
+    <div id="roomsSubmenu" class="scene-submenu" hidden><button class="submenu-item" onclick="openRooms()">Apri stanze</button><button class="submenu-item" onclick="editRoom(null)">Crea nuova stanza</button><button class="submenu-item" onclick="manageRooms()">Modifica o elimina stanze</button></div>
     <button class="nav-item" data-view="programming" aria-label="Programmazione"><span data-icon="calendar"></span><span>Programmazione</span></button>
     <button class="nav-item" data-view="install" aria-label="La tua webapp"><span data-icon="download"></span><span>La tua webapp</span></button>
   </nav>
@@ -70,6 +72,12 @@
   </section>
   <section id="devicesView" class="view" style="display:none" aria-labelledby="devicesHeading"><div class="page-heading"><div><p class="eyebrow">LUCI E ACCESSI</p><h1 id="devicesHeading">I tuoi dispositivi<span class="green-dot">.</span></h1><p class="heading-sub">Controlla gli ambienti, uno alla volta.</p></div></div><details class="technical-details"><summary>Collega un dispositivo mancante tramite ID</summary><p class="page-note">Per dispositivi compatibili a due canali, come New Smart G2, leggibili da eWeLink ma assenti dall’elenco automatico. Il collegamento è condiviso soltanto tra i tuoi dispositivi dello stesso account.</p><form id="linkDeviceForm" class="device-toolbar"><label class="search-box">ID eWeLink<input id="linkDeviceId" name="deviceId" required pattern="[0-9A-Fa-f]{10}" maxlength="10" placeholder="ID di 10 caratteri" autocomplete="off"></label><button id="linkDeviceBtn" type="submit" class="primary-button">Collega dispositivo</button><p id="linkDeviceStatus" role="status"></p></form></details><div class="device-toolbar"><label class="search-box"><span data-icon="search"></span><input type="search" id="deviceSearch" placeholder="Cerca un dispositivo…" aria-label="Cerca un dispositivo"></label><div class="filter-tabs" aria-label="Filtra dispositivi"><button data-filter="all" class="selected" aria-pressed="true">Tutti</button><button data-filter="online" aria-pressed="false">Online</button><button data-filter="offline" aria-pressed="false">Non in linea</button></div></div><div id="allDevicesGrid" class="devices-grid"></div><details class="technical-details"><summary>Dettagli tecnici dei dispositivi</summary><div class="table-wrap"><table id="devicesTable"><thead><tr><th>Dispositivo</th><th>ID</th><th>Connessione</th><th>Stato</th><th>Comando</th></tr></thead><tbody><tr><td colspan="5">Caricamento…</td></tr></tbody></table></div></details><p class="page-note">Gli stati si aggiornano all’apertura della pagina e dopo ogni comando. Usa il pulsante Aggiorna per una nuova lettura.</p></section>
   <section id="settingsView" class="view" aria-labelledby="scenesHeading"><div class="page-heading"><div><p class="eyebrow">PICCOLI GESTI, GRANDI COMODITÀ</p><h1 id="scenesHeading">Scenari<span class="green-dot">.</span></h1><p class="heading-sub">Combina più azioni in un unico pulsante.</p></div></div><div id="scenesList" class="scenes-grid-settings"></div><div id="sceneEditor" class="scene-editor" style="display:none"><div class="editor-heading"><div><p class="eyebrow">PERSONALIZZA</p><h2 id="editorTitle">Crea uno scenario</h2></div><button class="icon-button" onclick="cancelSceneEdit()" aria-label="Chiudi editor"><span data-icon="close"></span></button></div><div class="form-grid"><div class="form-row"><label for="sceneName">Nome scenario</label><input id="sceneName" type="text" maxlength="100" placeholder="Es. Serata in oratorio"></div><div class="form-row"><label for="sceneType">Esecuzione</label><select id="sceneType"><option value="manuale">Manuale · con un tocco</option><option value="crepuscolare" disabled>Crepuscolare · non disponibile</option></select></div></div><h3 class="editor-subtitle">Scegli dispositivi e azioni</h3><p class="page-note">Per cancello e relè con autoritorno già configurato scegli “Impulso”. Il colore indica lo stato del relè, non la posizione del cancello.</p><div id="sceneDevicesList" class="devices-list"></div><div class="editor-footer"><button class="secondary-button" onclick="cancelSceneEdit()">Annulla</button><button class="primary-button" onclick="saveScene()"><span data-icon="check"></span>Salva scenario</button></div></div></section>
+
+  <section id="roomsView" class="view" style="display:none" aria-labelledby="roomsHeading">
+    <div class="page-heading"><div><h1 id="roomsHeading">Stanze<span class="green-dot">.</span></h1><p class="heading-sub">Raccogli scenari e dispositivi nei tuoi spazi. Aprire una stanza non invia comandi.</p></div><button class="primary-button" onclick="editRoom(null)">Crea nuova stanza</button></div>
+    <p id="roomsStatus" class="page-note" role="status"></p><div id="roomsList" class="rooms-grid"></div>
+    <section id="roomDetail" hidden aria-labelledby="roomTitle"><div class="room-toolbar"><button class="secondary-button" onclick="openRooms()">Tutte le stanze</button><h2 id="roomTitle"></h2><button class="secondary-button" onclick="editRoom(selectedRoomId)">Modifica stanza</button></div><div id="roomMembers" class="room-members"></div></section>
+  </section>
 
   <section id="programmingView" class="view" style="display:none" aria-labelledby="programmingHeading">
     <div class="page-heading"><div><p class="eyebrow">IL TUO TEMPO, I TUOI SPAZI</p><h1 id="programmingHeading">Programmazione<span class="green-dot">.</span></h1><p class="heading-sub">Scegli uno scenario o un dispositivo, poi il giorno e l’orario. Lo spegnimento è facoltativo.</p></div><button id="newProgrammingBtn" class="primary-button" onclick="editProgramming(null)"><span data-icon="plus"></span>Nuova programmazione</button></div>
@@ -117,6 +125,8 @@
   <footer class="app-footer"><span>eWeLink Oratorio <span class="footer-separator">/</span> Uno spazio da vivere.</span><span>Plancia luci e accessi</span></footer>
 </main>
 <noscript><p>Attiva JavaScript nel browser per usare la plancia.</p></noscript>
+<dialog id="roomEditorDialog" class="control-dialog" aria-labelledby="roomEditorTitle"><form id="roomEditorForm"><div class="editor-heading"><h2 id="roomEditorTitle">Nuova stanza</h2><button type="button" class="icon-button" onclick="document.getElementById('roomEditorDialog').close()" aria-label="Chiudi stanza">×</button></div><label for="roomName">Nome della stanza</label><input id="roomName" required maxlength="80" placeholder="Es. Campetto, Salone, Esterno" autocomplete="off"><p class="page-note">Seleziona gli elementi da raccogliere. La stanza non li aziona insieme.</p><div id="roomChoices" class="room-choices"></div><p id="roomEditorError" class="msg error" role="alert"></p><div class="editor-footer"><button type="button" class="secondary-button" onclick="document.getElementById('roomEditorDialog').close()">Annulla</button><button id="roomSaveBtn" class="primary-button" type="submit">Salva stanza</button></div></form></dialog>
+<dialog id="channelDialog" class="control-dialog" aria-labelledby="channelDialogTitle"><div class="editor-heading"><h2 id="channelDialogTitle">Scegli canali</h2><button type="button" class="icon-button" onclick="document.getElementById('channelDialog').close()" aria-label="Chiudi canali">×</button></div><p class="page-note">Il tocco sul dispositivo usa tutti i canali. Qui puoi selezionare soltanto quelli che vuoi comandare.</p><div id="channelChoices" class="channel-choices"></div><p id="channelError" class="msg error" role="alert"></p><div class="editor-footer"><button type="button" data-device-command class="secondary-button" onclick="applyChannelSelection(false)">Spegni selezionati</button><button type="button" data-device-command class="primary-button" onclick="applyChannelSelection(true)">Accendi selezionati</button></div></dialog>
 <script>
 
     const BACKEND_URL = "https://sonoff-backend-k8sh.onrender.com";
@@ -327,6 +337,9 @@
 
         closeSceneStream();
         cloudScenes = null;
+        cloudRooms = []; selectedRoomId = null;
+        document.getElementById('roomEditorDialog').close?.();
+        document.getElementById('channelDialog').close?.();
         sceneWorkspace = null;
         cloudExecutions = {};
         sceneConfirmations.clear();
@@ -533,6 +546,7 @@
         }
         if (!scenes.length) scenesListEl.innerHTML = '<div class="empty-state">Nessuno scenario. Premi “Nuovo scenario” per creare il primo pulsante.</div>';
         updateSyncLabel();
+        renderRooms();
         updateControlLocks();
     }
 
@@ -818,6 +832,10 @@
         renderScenes();
     }
 
+    let cloudRooms = [], selectedRoomId = null, roomsManaging = false;
+    let editingRoom = null, roomSaveBusy = false, channelDeviceId = null;
+    let deviceGesture = null;
+    const deviceTapTimes = new Map(), deviceSuppressedClicks = new Map();
     let cloudScenes = null;
     let sceneWorkspace = null;
     let sceneSyncMode = "local";
@@ -863,6 +881,7 @@
         if (!Array.isArray(data.scenes) || !validImportedScenes(data.scenes) || !data.workspace?.id) throw new Error("Elenco scenari condivisi non valido.");
         const previousExecutions = cloudExecutions;
         cloudScenes = data.scenes;
+        cloudRooms = Array.isArray(data.rooms) ? data.rooms : [];
         sceneWorkspace = data.workspace;
         cloudExecutions = data.executions || {};
         sceneSyncMode = "live";
@@ -940,7 +959,7 @@
             const data = await apiRequest("/api/user-scenes", {...body,workspaceId:sceneWorkspace.id});
             acceptCloudScenes(data);
         } catch (error) {
-            if (error.code === "scene_conflict") await syncScenes();
+            if (["scene_conflict","room_conflict"].includes(error.code)) await syncScenes();
             throw error;
         }
     }
@@ -1044,7 +1063,7 @@
     let lastSyncTime = null;
     let activeDeviceFilter = "all";
     let installPrompt = null;
-    const VIEW_NAMES = { home: "Panoramica", devices: "Dispositivi", scenes: "Scenari", programming: "Programmazione", install: "La tua webapp" };
+    const VIEW_NAMES = { home: "Panoramica", devices: "Dispositivi", scenes: "Scenari", rooms:"Stanze", programming: "Programmazione", install: "La tua webapp" };
 
     function hydrateIcons() {
         document.querySelectorAll("[data-icon]").forEach(el => { el.innerHTML = icon(el.dataset.icon); });
@@ -1064,7 +1083,7 @@
         if (!VIEW_NAMES[name]) return;
         if (!keepNavigation) closeNavigation();
         document.body.dataset.view = name;
-        const views = { home: "homeView", devices: "devicesView", scenes: "settingsView", programming: "programmingView", install: "installView" };
+        const views = { home: "homeView", devices: "devicesView", scenes: "settingsView", rooms:"roomsView", programming: "programmingView", install: "installView" };
         for (const [key, id] of Object.entries(views)) document.getElementById(id).style.display = key === name ? "block" : "none";
         document.querySelectorAll(".nav-item[data-view]").forEach(button => {
             button.classList.toggle("active", button.dataset.view === name);
@@ -1073,6 +1092,7 @@
         });
         document.getElementById("pageLabel").textContent = VIEW_NAMES[name];
         document.title = VIEW_NAMES[name] + " · eWeLink Oratorio";
+        if (name === "rooms") renderRooms();
         if (name === "programming") void openProgramming();
         window.scrollTo({top: 0, behavior: "instant"});
     }
@@ -1080,27 +1100,20 @@
         if (dev.deviceid === "1000ac81a0") return false;
         return dev.params?.switch === "on" || dev.params?.switches?.some(channel => channel.switch === "on");
     }
+    function deviceChannels(dev) {
+        return [...new Set((dev.params?.switches || []).filter(channel=>Number.isInteger(channel.outlet) && channel.outlet>=0).map(channel=>channel.outlet))];
+    }
     function deviceCard(dev) {
-        const gate = dev.deviceid === "1000ac81a0";
-        const multi = Array.isArray(dev.params?.switches);
-        const on = deviceOn(dev);
-        const known = (devicesFresh || devicesLoading) && dev.online;
+        const gate = dev.deviceid === '1000ac81a0', channels = deviceChannels(dev), multi = channels.length > 0 && !gate;
+        const values = multi ? channels.map(outlet=>dev.params.switches.find(c=>c.outlet===outlet)?.switch) : [gate ? dev.params?.switches?.find(c=>c.outlet===0)?.switch ?? dev.params?.switch : dev.params?.switch];
+        const known = (devicesFresh || devicesLoading) && dev.online && values.every(value=>['on','off'].includes(value));
+        const allOn = known && values.every(value=>value==='on'), someOn = known && values.some(value=>value==='on');
         const pending = localDeviceCommand?.deviceId===dev.deviceid;
-        const done = deviceProgressDone.get(dev.deviceid);
-        const finished = done?.until > Date.now();
-        const progress = commandProgress(pending ? localDeviceCommand.percent : 100);
-        const showProgress = pending || finished;
-        let controls = '<p class="unsupported">Comando non disponibile per questo modello.</p>';
-        const attributes = `data-device-command data-offline="${!dev.online}"`;
-        if (gate) {
-            controls = `<button class="gate-button" ${attributes} aria-busy="${pending}" onclick="toggleDevice(${jsArg(dev.deviceid)}, true)">${showProgress?progress:icon("gate")} ${pending?"In esecuzione…":"Apri cancello"} ${icon("arrow-right")}</button>`;
-        } else if (dev.params?.switch !== undefined) {
-            controls = `<div class="device-control"><span>${showProgress?progress:known ? on ? "Acceso" : "Spento" : "Stato non verificato"}</span><button class="toggle-button ${known && on ? "is-on" : ""}" role="switch" aria-checked="${known && on}" aria-label="${escapeHtml(dev.name || "Dispositivo")}" ${attributes} aria-busy="${pending}" onclick="toggleDevice(${jsArg(dev.deviceid)}, ${!on})"><span></span></button></div>`;
-        } else if (multi) {
-            const channels = dev.params.switches.filter(channel => Number.isInteger(channel.outlet) && channel.outlet >= 0);
-            controls = `<div class="channel-controls">${channels.map(channel => `<button class="channel-button ${known && channel.switch === "on" ? "is-on" : ""}" ${attributes} aria-busy="${pending&&(!localDeviceCommand.outlets||localDeviceCommand.outlets.includes(channel.outlet))}" aria-pressed="${known && channel.switch === "on"}" aria-label="${escapeHtml(dev.name || "Dispositivo")}, canale ${channel.outlet + 1}" onclick="toggleMulti(${jsArg(dev.deviceid)}, [${channel.outlet}], ${channel.switch !== "on"})"><span>CH ${channel.outlet + 1}</span>${(pending&&(!localDeviceCommand.outlets||localDeviceCommand.outlets.includes(channel.outlet)))||(finished&&(!done.outlets||done.outlets.includes(channel.outlet)))?progress:icon("power")}</button>`).join("")}</div>`;
-        }
-        return `<article class="device-card ${known && on ? "device-on" : ""}"><div class="device-card-top"><span class="device-icon ${gate ? "gate-icon" : ""}">${icon(gate ? "gate" : "bulb")}</span><span class="connection-chip ${known ? "online" : "offline"}"><i></i>${!devicesFresh&&!devicesLoading ? "Da aggiornare" : dev.online ? "Online" : "Non in linea"}</span></div><h3>${escapeHtml(dev.name || "Senza nome")}</h3><p class="device-kind">${gate ? "Accesso · posizione non rilevata" : multi ? "Interruttore multicanale" : "Interruttore"}</p><div class="device-card-controls">${controls}</div></article>`;
+        const finished = deviceProgressDone.get(dev.deviceid)?.until > Date.now();
+        const state = pending ? 'running' : !dev.online ? 'offline' : !gate && someOn ? 'on' : 'off';
+        const label = pending ? 'Comando in esecuzione…' : !dev.online ? 'Non in linea' : gate ? 'Comando a impulso · a riposo' : !known ? 'Stato non disponibile' : allOn ? 'Acceso' : someOn ? 'Parzialmente acceso' : 'Spento';
+        const progress = pending || finished ? commandProgress(pending ? localDeviceCommand.percent : 100) : '<span class="pad-dot"></span>';
+        return `<article class="device-card device-tile"><button type="button" class="device-primary scenario-pad state-${state}" data-device-primary="${escapeHtml(dev.deviceid)}" data-device-command data-offline="${!dev.online}" ${!dev.online?'disabled':''} aria-busy="${pending}" aria-label="${escapeHtml(dev.name || 'Dispositivo')}. ${label}${multi ? '. Tocco: tutti i canali. Pressione prolungata: scegli canali.' : ''}" onclick="handleDeviceTap(event,${jsArg(dev.deviceid)})"><span class="pad-top"><span class="pad-icon">${icon(gate?'gate':'bulb')}</span>${progress}</span><span class="pad-name">${escapeHtml(dev.name || 'Dispositivo')}</span><span class="pad-state">${label}</span><span class="pad-result">${gate ? 'La posizione del cancello non è rilevata' : multi ? 'Tocco: tutti i canali' : 'Tocca per accendere o spegnere'}</span></button>${multi ? `<button type="button" class="device-channel-options secondary-button" onclick="openChannelPicker(${jsArg(dev.deviceid)})" aria-label="Scegli canali di ${escapeHtml(dev.name || 'Dispositivo')}">Scegli canali · tieni premuto</button>` : ''}</article>`;
     }
     function renderDeviceCards() {
         const search = document.getElementById("deviceSearch").value.trim().toLocaleLowerCase("it");
@@ -1109,6 +1122,7 @@
         document.getElementById("allDevicesGrid").innerHTML = filtered.length ? filtered.map(deviceCard).join("") : empty;
         const homeDevices = [...currentDevices].sort((a,b) => Number(b.deviceid === "1000ac81a0") - Number(a.deviceid === "1000ac81a0")).slice(0,4);
         document.getElementById("homeDevicesGrid").innerHTML = homeDevices.length ? homeDevices.map(deviceCard).join("") : empty;
+        renderRooms();
         updateControlLocks();
     }
     function renderDashboard() {
@@ -1205,6 +1219,8 @@
 
     function initApp() {
         hydrateIcons();
+        document.getElementById('roomEditorForm').addEventListener('submit',saveRoom);
+        initDeviceGestures();
         document.getElementById("menuBtn").addEventListener("click", openNavigation);
         document.getElementById("closeMenuBtn").addEventListener("click", closeNavigation);
         const navigation = document.getElementById("navigationDialog");
@@ -1217,9 +1233,12 @@
         document.querySelectorAll(".nav-item[data-view]").forEach(button => button.addEventListener("click", () => {
             if (button.dataset.view === "scenes") {
                 const expanded = button.getAttribute("aria-expanded") === "true";
-                setView("scenes", {keepNavigation:true});
                 document.getElementById("sceneSubmenu").hidden = expanded;
                 button.setAttribute("aria-expanded", String(!expanded));
+            } else if (button.dataset.view === 'rooms') {
+                const expanded = button.getAttribute('aria-expanded') === 'true';
+                document.getElementById('roomsSubmenu').hidden = expanded;
+                button.setAttribute('aria-expanded',String(!expanded));
             } else setView(button.dataset.view);
         }));
         document.querySelectorAll("[data-filter]").forEach(button => button.addEventListener("click", () => {
@@ -1251,6 +1270,136 @@
             });
         }
         renderDashboard();
+    }
+
+    function showScenarioBoard() {
+        if (sceneEditorEl.style.display === 'block' && !window.confirm('Tornare agli scenari senza salvare le modifiche?')) return;
+        cancelSceneEdit(); sceneManageMode = false; setView('scenes'); renderScenes();
+    }
+    function openRooms() { selectedRoomId=null; roomsManaging=false; setView('rooms'); }
+    function manageRooms() { selectedRoomId=null; roomsManaging=true; setView('rooms'); }
+    function openRoom(id) { selectedRoomId=id; roomsManaging=false; setView('rooms'); }
+    function renderRooms() {
+        const list=document.getElementById('roomsList'),detail=document.getElementById('roomDetail');
+        if (!list || !detail) return;
+        const ready=sceneSyncMode==='live'&&!authRequired;
+        document.getElementById('roomsStatus').textContent=ready?'Stanze sincronizzate tra i dispositivi collegati alla stessa casa eWeLink.':'Attendi la connessione per creare o modificare le stanze.';
+        const room=cloudRooms.find(room=>room.id===selectedRoomId);
+        list.hidden=Boolean(room);detail.hidden=!room;
+        if (!room) {
+            list.innerHTML=cloudRooms.length?cloudRooms.map(room=>`<article class="room-folder"><button type="button" class="room-open" onclick="openRoom(${jsArg(room.id)})">${icon('building')}<strong>${escapeHtml(room.name)}</strong><span>${room.members.length} ${room.members.length===1?'elemento':'elementi'}</span><span>Apri stanza →</span></button>${roomsManaging?`<div class="room-folder-actions"><button class="secondary-button" onclick="editRoom(${jsArg(room.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteRoom(${jsArg(room.id)})">Elimina</button></div>`:''}</article>`).join(''):'<div class="empty-state"><h2>Nessuna stanza</h2><p>Crea una stanza e scegli gli scenari o i dispositivi da raccogliere.</p></div>';
+            return;
+        }
+        document.getElementById('roomTitle').textContent=room.name;
+        const members=document.getElementById('roomMembers');members.innerHTML='';
+        for (const member of room.members) {
+            if (member.kind==='scene') {
+                const scene=loadUserScenes().find(scene=>scene.id===member.id);
+                if (scene) {members.appendChild(makeSceneTile(scene));continue;}
+            } else if (member.kind==='device') {
+                const device=currentDevices.find(device=>device.deviceid===member.id);
+                if (device) {const wrapper=document.createElement('div');wrapper.innerHTML=deviceCard(device);members.appendChild(wrapper);continue;}
+            }
+            const missing=document.createElement('p');missing.className='page-note';missing.textContent=(member.kind==='scene'?'Scenario':'Dispositivo')+' non disponibile. Puoi rimuoverlo con Modifica stanza.';members.appendChild(missing);
+        }
+        if (!room.members.length) members.innerHTML='<p class="page-note">La stanza è vuota. Premi Modifica stanza per aggiungere elementi.</p>';
+        updateControlLocks();
+    }
+    function editRoom(id) {
+        setView('rooms');
+        if (authRequired||sceneSyncMode!=='live'||!sceneWorkspace) {setMessage('Attendi la sincronizzazione prima di modificare le stanze.','error');return;}
+        const room=cloudRooms.find(room=>room.id===id);
+        editingRoom=room?{id:room.id,version:room.version}:{id:crypto.randomUUID(),version:0};
+        const selected=new Set((room?.members||[]).map(member=>member.kind+':'+member.id));
+        const choices=[];
+        for (const scene of loadUserScenes()) choices.push({key:'scene:'+scene.id,name:scene.name,kind:'Scenario'});
+        for (const device of currentDevices) choices.push({key:'device:'+device.deviceid,name:device.name||device.deviceid,kind:'Dispositivo'});
+        for (const key of selected) if (!choices.some(choice=>choice.key===key)) choices.push({key,name:'Elemento non più disponibile',kind:'Rimuovi per salvare'});
+        document.getElementById('roomEditorTitle').textContent=room?'Modifica stanza':'Nuova stanza';
+        document.getElementById('roomName').value=room?.name||'';
+        document.getElementById('roomChoices').innerHTML=choices.length?choices.map(choice=>`<label class="room-choice"><input type="checkbox" data-room-member="${escapeHtml(choice.key)}" ${selected.has(choice.key)?'checked':''}><span><strong>${escapeHtml(choice.name)}</strong><small>${choice.kind}</small></span></label>`).join(''):'<p>Nessun elemento disponibile al momento. Puoi salvare la stanza vuota.</p>';
+        document.getElementById('roomEditorError').textContent='';document.getElementById('roomSaveBtn').disabled=false;
+        document.getElementById('roomEditorDialog').showModal();document.getElementById('roomName').focus();
+    }
+    async function saveRoom(event) {
+        event.preventDefault();if(roomSaveBusy||!editingRoom)return;
+        const error=document.getElementById('roomEditorError'),name=document.getElementById('roomName').value.trim();
+        if(!name){error.textContent='Scrivi il nome della stanza.';return;}
+        if(authRequired||sceneSyncMode!=='live'){error.textContent='Connessione interrotta. Attendi il ripristino prima di salvare.';return;}
+        const members=[...document.querySelectorAll('[data-room-member]:checked')].map(input=>{const [kind,id]=input.dataset.roomMember.split(':');return {kind,id};});
+        roomSaveBusy=true;document.getElementById('roomSaveBtn').disabled=true;
+        try {await cloudSceneChange({op:'room-upsert',room:{id:editingRoom.id,name,members},expectedVersion:editingRoom.version});selectedRoomId=editingRoom.id;document.getElementById('roomEditorDialog').close();renderRooms();setMessage('Stanza salvata e sincronizzata.','');}
+        catch(err){error.textContent=err.message;}
+        finally{roomSaveBusy=false;document.getElementById('roomSaveBtn').disabled=false;}
+    }
+    async function deleteRoom(id) {
+        const room=cloudRooms.find(room=>room.id===id);if(!room)return;
+        if(!window.confirm('Eliminare la stanza «'+room.name+'»? Gli scenari e i dispositivi al suo interno restano disponibili.'))return;
+        try{await cloudSceneChange({op:'room-delete',id,expectedVersion:room.version});if(selectedRoomId===id)selectedRoomId=null;renderRooms();setMessage('Stanza eliminata. Scenari e dispositivi conservati.','');}
+        catch(err){setMessage(err.message,'error');}
+    }
+    function handleDeviceTap(event,id) {
+        event?.preventDefault();
+        if ((deviceSuppressedClicks.get(id)||0)>Date.now() || Date.now()-(deviceTapTimes.get(id)||0)<600) return;
+        if (commandBusy||activeCloudExecution()||devicesLoading||!devicesFresh||authRequired) return;
+        const device=currentDevices.find(device=>device.deviceid===id);
+        if(!device?.online){setMessage('Dispositivo non in linea.','error');return;}
+        deviceTapTimes.set(id,Date.now());
+        if(id==='1000ac81a0'){void toggleDevice(id,true);return;}
+        const channels=deviceChannels(device);
+        const values=channels.length?channels.map(outlet=>device.params.switches.find(channel=>channel.outlet===outlet)?.switch):[device.params?.switch];
+        if(values.some(value=>!['on','off'].includes(value))){setMessage('Stato del dispositivo non disponibile. Aggiorna prima di inviare un comando.','error');return;}
+        const turnOn=!values.every(value=>value==='on');
+        if(channels.length)void toggleMulti(id,channels,turnOn);else void toggleDevice(id,turnOn);
+    }
+    function openChannelPicker(id) {
+        const device=currentDevices.find(device=>device.deviceid===id),channels=device?deviceChannels(device):[];
+        if(!device||!channels.length||id==='1000ac81a0')return;
+        if(commandBusy||activeCloudExecution()){setMessage('Attendi la fine del comando.','error');return;}
+        channelDeviceId=id;
+        document.getElementById('channelDialogTitle').textContent=device.name+' · scegli canali';
+        document.getElementById('channelChoices').innerHTML=channels.map(outlet=>`<label class="room-choice"><input type="checkbox" data-channel-outlet="${outlet}" checked><span>CH ${outlet+1}</span></label>`).join('');
+        document.getElementById('channelError').textContent=device.online?'':'Dispositivo non in linea.';
+        document.getElementById('channelDialog').showModal();updateControlLocks();
+    }
+    async function applyChannelSelection(turnOn) {
+        const device=currentDevices.find(device=>device.deviceid===channelDeviceId),error=document.getElementById('channelError');
+        if(commandBusy||activeCloudExecution()||devicesLoading||!devicesFresh||!device?.online){error.textContent='Dispositivo non disponibile: attendi il collegamento e la fine dei comandi in corso.';return;}
+        const selected=[...document.querySelectorAll('[data-channel-outlet]:checked')].map(input=>Number(input.dataset.channelOutlet));
+        if(!selected.length){error.textContent='Seleziona almeno un canale.';return;}
+        const allowed=deviceChannels(device);
+        if(selected.some(outlet=>!allowed.includes(outlet))){error.textContent='I canali sono cambiati. Chiudi e riapri la selezione.';return;}
+        document.getElementById('channelDialog').close();await toggleMulti(device.deviceid,selected,turnOn);
+    }
+    function initDeviceGestures() {
+        document.addEventListener('pointerdown',event=>{
+            if(event.isPrimary===false){deviceGesture=null;return;}
+            const button=event.target.closest?.('[data-device-primary]');
+            if(!button||button.disabled||event.button!==0)return;
+            deviceGesture={id:button.dataset.devicePrimary,pointerId:event.pointerId,button,time:Date.now(),x:event.clientX,y:event.clientY,cancelled:false};
+        });
+        document.addEventListener('pointermove',event=>{
+            if(deviceGesture?.pointerId===event.pointerId&&Math.hypot(event.clientX-deviceGesture.x,event.clientY-deviceGesture.y)>10)deviceGesture.cancelled=true;
+        });
+        document.addEventListener('pointercancel',()=>{if(deviceGesture)deviceSuppressedClicks.set(deviceGesture.id,Date.now()+800);deviceGesture=null;});
+        document.addEventListener('pointerup',event=>{
+            const gesture=deviceGesture;if(!gesture||gesture.pointerId!==event.pointerId)return;deviceGesture=null;
+            const box=gesture.button.getBoundingClientRect();
+            const outside=event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom;
+            if(gesture.cancelled||outside){deviceSuppressedClicks.set(gesture.id,Date.now()+800);return;}
+            const device=currentDevices.find(device=>device.deviceid===gesture.id);
+            if(Date.now()-gesture.time>=550&&device&&deviceChannels(device).length&&gesture.id!=='1000ac81a0'){
+                deviceSuppressedClicks.set(gesture.id,Date.now()+800);event.preventDefault();openChannelPicker(gesture.id);
+            }
+        });
+        document.addEventListener('contextmenu',event=>{
+            const button=event.target.closest?.('[data-device-primary]');
+            const device=currentDevices.find(device=>device.deviceid===button?.dataset.devicePrimary);
+            if(device&&deviceChannels(device).length&&device.deviceid!=='1000ac81a0'){
+                event.preventDefault();deviceGesture=null;deviceSuppressedClicks.set(device.deviceid,Date.now()+800);
+                if(!document.getElementById('channelDialog').open)openChannelPicker(device.deviceid);
+            }
+        });
     }
 
     // CONNECTION RECOVERY: probes and read-only refreshes; never replay a command.

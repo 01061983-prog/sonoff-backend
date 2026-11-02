@@ -157,3 +157,34 @@ body.scenes-paged #scenesList>.empty-state{grid-column:1/-1;grid-row:1/-1}
 .scenario-pad .command-progress{min-width:64px;font-size:1.125rem}
 .device-control>.command-progress,.device-control>span>.command-progress{color:#205fc4}
 .channel-button .command-progress,.gate-button .command-progress{min-width:42px;font-size:0.75rem}
+/* v32: doppio tocco senza zoom; lo zoom a due dita rimane disponibile. */
+html,button,a,input,select,textarea{touch-action:manipulation}
+.device-primary{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
+.device-card.device-tile{padding:0;background:transparent;border:0;box-shadow:none;display:flex;flex-direction:column;gap:10px;min-width:0}
+.device-primary.scenario-pad{width:100%;min-height:235px;height:100%;aspect-ratio:auto;padding:18px;text-align:left;gap:12px;border-radius:20px;flex:1}
+.device-primary .pad-name{margin-top:auto;overflow-wrap:anywhere}
+.device-channel-options{width:100%;min-height:44px;white-space:normal;font-size:0.75rem}
+.control-dialog{border:1px solid var(--border-soft);border-radius:20px;padding:24px;width:min(620px,calc(100vw - 24px));max-height:calc(100dvh - 32px);overflow:auto;color:var(--text-main);background:white;box-shadow:0 20px 80px #14332940}
+.control-dialog::backdrop{background:#132c3a88}
+.control-dialog .editor-heading{gap:16px;align-items:flex-start;margin-bottom:20px}
+.control-dialog .editor-heading h2{font-size:1.3rem;overflow-wrap:anywhere}
+.control-dialog label{font-size:1rem}
+.control-dialog input[type="text"],.control-dialog input:not([type]){width:100%;min-height:48px;font-size:1rem;padding:12px;margin-top:8px;border:1px solid var(--border-soft);border-radius:10px}
+.room-choices,.channel-choices{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+.room-choice{display:flex;align-items:center;gap:12px;padding:13px;border:1px solid var(--border-soft);border-radius:10px;cursor:pointer;overflow-wrap:anywhere}
+.room-choice input{width:24px;height:24px;flex-shrink:0;accent-color:var(--accent)}
+.room-choice span{display:flex;flex-direction:column;gap:4px;min-width:0}
+.room-choice small{color:var(--text-soft);font-size:0.8125rem}
+.rooms-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:20px;margin:20px 0}
+.room-folder{border:1px solid var(--border-soft);border-radius:20px;background:white;padding:16px;min-width:0}
+.room-open{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:15px;width:100%;min-height:185px;padding:16px;border:0;background:var(--accent-soft);color:var(--text-main);border-radius:14px;font-size:1rem}
+.room-open strong{font-size:1.3rem;overflow-wrap:anywhere}.room-open .icon{color:var(--accent)}
+.room-folder-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+.room-toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:20px 0}
+.room-toolbar h2{flex:1;overflow-wrap:anywhere}
+.room-members{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:22px;padding-bottom:24px}
+.room-members>.scenario-unit>.scenario-pad{aspect-ratio:auto;min-height:260px;height:100%;padding:20px}
+.room-members .scenario-unit,.room-members>div{min-width:0}
+.control-dialog .editor-footer{flex-wrap:wrap}.control-dialog .editor-footer button{min-height:44px;font-size:0.875rem}
+@media(max-width:700px){.device-primary.scenario-pad{min-height:210px}.control-dialog{padding:18px}.room-members{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.room-members>.scenario-unit>.scenario-pad{min-height:230px;padding:14px}.room-members .device-primary.scenario-pad{padding:14px}.room-members .pad-name{font-size:1rem}}
+@media(max-width:380px){.room-members{grid-template-columns:1fr}}

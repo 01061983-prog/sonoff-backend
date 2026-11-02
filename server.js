@@ -484,7 +484,7 @@ function workspaceData(snapshot) {
 function scenePayload(context, snapshot) {
   const data = workspaceData(snapshot);
   return { ok: true, exists: snapshot.exists, workspace: context.workspace, revision: data.revision || 0,
-    scenes: data.scenes || [], executions: data.executions || {} };
+    scenes: data.scenes || [], executions: data.executions || {}, rooms: data.rooms || [] };
 }
 function currentExecution(data) {
   return Object.values(data.executions || {}).find(run => run.status === "running" && run.expiresAt > Date.now());
@@ -502,9 +502,57 @@ app.get("/api/user-scenes", requireLogin, route(async (req, res) => {
   res.json(scenePayload(context, await context.ref.get()));
 }));
 
+function cleanRoom(room) {
+  if (!room || typeof room.id !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(room.id) ||
+      typeof room.name !== "string" || !room.name.trim() || room.name.length > 80 ||
+      !Array.isArray(room.members) || room.members.length > 200) {
+    throw cloudError(400, "invalid_room", "Indica un nome per la stanza (massimo 80 caratteri) e al massimo 200 elementi.");
+  }
+  const seen = new Set();
+  const members = room.members.map(member => {
+    if (!member || !["scene", "device"].includes(member.kind) || typeof member.id !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(member.id))
+      throw cloudError(400, "invalid_room", "Elemento della stanza non valido.");
+    const key = member.kind + ":" + member.id;
+    if (seen.has(key)) throw cloudError(400, "invalid_room", "Un elemento è stato inserito due volte nella stanza.");
+    seen.add(key); return {kind:member.kind, id:member.id};
+  });
+  return {id:room.id, name:room.name.trim(), members};
+}
+async function changeRoom(context, body, req) {
+  const incoming = body.op === "room-upsert" ? cleanRoom(body.room) : null;
+  const id = incoming?.id || body.id;
+  if (typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(id) || !Number.isInteger(body.expectedVersion) || body.expectedVersion < 0)
+    throw cloudError(400,"invalid_room","Identificativo o versione della stanza non valido.");
+  let allowedDevices = new Set();
+  if (incoming?.members.some(member=>member.kind === "device")) {
+    const devices = await listDevices(req.cookies.ewelink_access,[context.workspace]);
+    allowedDevices = new Set(devices.map(device=>device.deviceid));
+  }
+  await getSceneDatabase().runTransaction(async transaction => {
+    const snapshot = await transaction.get(context.ref), data = workspaceData(snapshot);
+    if (!snapshot.exists) throw cloudError(409,"room_conflict","Attendi la sincronizzazione degli scenari prima di creare una stanza.");
+    if (currentExecution(data)) throw cloudError(409,"scene_busy","Attendi la fine del comando prima di modificare le stanze.");
+    const rooms = [...(data.rooms || [])], index = rooms.findIndex(room=>room.id === id);
+    const actualVersion = index < 0 ? 0 : rooms[index].version || 1;
+    if (actualVersion !== body.expectedVersion) throw cloudError(409,"room_conflict","Questa stanza è cambiata su un altro dispositivo. Riaprila prima di salvare.");
+    if (incoming) {
+      if (incoming.members.some(member=>member.kind === "scene" ? !(data.scenes || []).some(scene=>scene.id===member.id) : !allowedDevices.has(member.id)))
+        throw cloudError(400,"room_member_unavailable","Uno degli elementi non è più disponibile. Rimuovilo dalla stanza oppure aggiorna i dispositivi.");
+      const next = {...incoming,version:actualVersion+1,updatedAt:Date.now()};
+      if (index < 0) rooms.push(next); else rooms[index] = next;
+    } else if (index >= 0) rooms.splice(index,1);
+    if (rooms.length > 80 || Buffer.byteLength(JSON.stringify(rooms)) > 150000) throw cloudError(400,"room_limit","Limite stanze raggiunto: massimo 80 stanze.");
+    transaction.set(context.ref,{...data,rooms,revision:(data.revision||0)+1,updatedAt:Date.now()});
+  });
+}
+
 app.post("/api/user-scenes", requireLogin, route(async (req, res) => {
   const context = await sceneContext(req);
   const body = req.body || {};
+  if (["room-upsert","room-delete"].includes(body.op)) {
+    await changeRoom(context,body,req);
+    return res.json(scenePayload(context,await context.ref.get()));
+  }
   const validOps = ["init", "upsert", "delete", "import"];
   if (!validOps.includes(body.op)) throw cloudError(400, "invalid_operation", "Operazione scenario non valida.");
   let incoming;
