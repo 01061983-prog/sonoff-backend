@@ -31,6 +31,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
    if(!d||d.actor!==actor.uid||d.until<=now()||!await isAdmin(actor)||!desktop(req))throw fail(401,'app_actas_expired','Accesso amministratore scaduto. Torna alla gestione account.');
    req.appAccount=await read(d.target);req.appImpersonating=true;req.appReadOnly=req.appAccount.status!=='active';
   }
+  if(req.query?.accountContext&&req.query.accountContext!==req.appAccount.id)throw fail(409,'app_context_changed','La plancia aperta è cambiata. Ricarica la pagina.');
   if(active&&req.appAccount.status!=='active'&&!req.appImpersonating)throw fail(403,'app_pending','Account in attesa di ammissione da parte dell’amministratore.');
   return req.appAccount;
  }
@@ -84,6 +85,8 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
  async function authorizeOwner(owner){const a=await providerAccount(owner);if(a&&a.status!=='active')throw fail(403,'app_blocked','Account sospeso: comandi automatici bloccati.');return a;}
  async function provider(req){
   const a=await session(req);
+  const expected=req.headers?.['x-app-account']||req.query?.accountContext;
+  if((expected&&expected!==a.id)||(!['GET','HEAD'].includes(req.method)&&expected!==a.id))throw fail(409,'app_context_changed','La plancia aperta è cambiata. Ricarica la pagina prima di inviare comandi.');
   if(req.method!=='GET'&&req.method!=='HEAD'){csrf(req);if(req.appReadOnly)throw fail(403,'app_readonly','Questa plancia è consultabile soltanto: account non attivo.');}
   if(!a.providerOwner)throw fail(401,'not_authenticated','Collega eWeLink per la prima volta dalla tua plancia.');
   const c=await programming().access(a.providerOwner);req.programmingOwner=a.providerOwner;req.programmingChecked=true;

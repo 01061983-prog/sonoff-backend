@@ -204,6 +204,7 @@
             const response = await fetch(BACKEND_URL + path, {
                 method: body === undefined ? "GET" : "POST",
                 credentials: "include",
+                headers: window.AppAccounts?.headers() || {},
                 cache: "no-store",
                 signal: controller.signal,
                 ...(body === undefined ? {} : {
@@ -915,7 +916,7 @@
     }
     function openSceneStream() {
         if (typeof EventSource === "undefined" || !sceneWorkspace || sceneStream || document.visibilityState === "hidden") return;
-        sceneStream = new EventSource(BACKEND_URL + "/api/user-scenes/events?workspaceId=" + encodeURIComponent(sceneWorkspace.id), {withCredentials: true});
+        sceneStream = new EventSource(BACKEND_URL + "/api/user-scenes/events?workspaceId=" + encodeURIComponent(sceneWorkspace.id) + (window.AppAccounts?.state.enabled ? "&accountContext="+encodeURIComponent(window.AppAccounts.state.account.id) : ""), {withCredentials: true});
         sceneLastHeartbeat = Date.now();
         sceneStream.addEventListener("heartbeat", () => { sceneLastHeartbeat = Date.now(); });
         sceneStream.addEventListener("scenes", event => {
@@ -1171,7 +1172,7 @@
         sessionCheckBusy = true;
         const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 8000);
         try {
-            const response = await fetch(BACKEND_URL + "/api/session", {credentials:"include",cache:"no-store",signal:controller.signal});
+            const response = await fetch(BACKEND_URL + "/api/session", {credentials:"include",headers:window.AppAccounts?.headers()||{},cache:"no-store",signal:controller.signal});
             const data = await response.json();
             if (response.ok && data.ok === true) {
                 resumableSession = false;

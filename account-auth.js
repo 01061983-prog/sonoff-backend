@@ -96,5 +96,5 @@
    if(!$('accountGate'))mount();state.enabled=true;gate('Accesso non disponibile: '+translate(e));return ready;
   }
  }
- window.AppAccounts={state,bootstrap,logout,headers:()=>state.enabled?{'X-App-CSRF':state.csrf}:{},handleError:d=>{if(state.enabled&&['app_auth_required','app_blocked','app_pending','app_actas_expired'].includes(d?.error)){gate(d.msg);return true;}return false;}};
+ window.AppAccounts={state,bootstrap,logout,headers:()=>state.enabled?{'X-App-CSRF':state.csrf,'X-App-Account':state.account?.id||''}:{},handleError:d=>{if(state.enabled&&['app_auth_required','app_blocked','app_pending','app_actas_expired','app_context_changed'].includes(d?.error)){gate(d.msg);return true;}return false;}};
 })();
