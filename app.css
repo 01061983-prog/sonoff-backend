@@ -147,3 +147,13 @@ body.scenes-paged #scenesList>.empty-state{grid-column:1/-1;grid-row:1/-1}
 .channel-button[aria-busy="true"],.gate-button[aria-busy="true"]{background:#205fc4;border-color:#205fc4;color:#fff}
 .toggle-button:not(.is-on):before{background:#bc2737}
 .toggle-button[aria-busy="true"]:before{background:#205fc4}
+
+/* v31: offline grigio, avanzamento misurato senza rotelle. */
+.scenario-pad.state-offline,.scenario-pad.state-offline:disabled{--pad-edge:#435367;--pad-shadow:#34495e28;background:linear-gradient(145deg,#7b899d,#536176);border-color:#718096;color:#fff;opacity:1}
+.command-progress{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-width:52px;max-width:100%;flex-shrink:0;font-variant-numeric:tabular-nums;line-height:1.1;font-size:0.875rem;color:inherit}
+.command-progress strong{font-size:inherit;font-weight:800}
+.command-progress-track{display:block;width:100%;height:5px;border-radius:8px;background:#ffffff50;overflow:hidden}
+.command-progress-track i{display:block;width:var(--command-progress);height:100%;background:currentColor;border-radius:inherit}
+.scenario-pad .command-progress{min-width:64px;font-size:1.125rem}
+.device-control>.command-progress,.device-control>span>.command-progress{color:#205fc4}
+.channel-button .command-progress,.gate-button .command-progress{min-width:42px;font-size:0.75rem}

@@ -12,9 +12,9 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <script src="text-size.js?v=30"></script>
-  <script src="scene-pages.js?v=30"></script>
-  <link rel="stylesheet" href="app.css?v=30">
+  <script src="text-size.js?v=31"></script>
+  <script src="scene-pages.js?v=31"></script>
+  <link rel="stylesheet" href="app.css?v=31">
   <style>
     #startupScreen{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:28px;background:#f6f8f6;color:#24382f;text-align:center;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:auto}
     #startupScreen[hidden]{display:none}body.app-starting>main{visibility:hidden}
@@ -150,6 +150,13 @@
     let sessionCheckBusy = false;
     let commandBusy = false;
     let localDeviceCommand = null;
+    const sceneProgressDone = new Map();
+    const deviceProgressDone = new Map();
+    const localSceneProgress = new Map();
+    function commandProgress(percent, label = 'Avanzamento comando') {
+        const value = Math.max(0, Math.min(100, Math.floor(Number(percent) || 0)));
+        return `<span class="command-progress" role="progressbar" aria-label="${escapeHtml(label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${value}" style="--command-progress:${value}%"><strong>${value}%</strong><span class="command-progress-track" aria-hidden="true"><i></i></span></span>`;
+    }
     let devicesLoading = false;
     let devicesReadSerial = 0;
     let devicesFresh = false;
@@ -249,13 +256,15 @@
     async function performCommand(path, body) {
         if (commandBusy || activeCloudExecution() || devicesLoading || !devicesFresh) return;
         commandBusy = true;
-        localDeviceCommand = {deviceId:body.deviceId,outlets:body.outlets||null};
+        localDeviceCommand = {deviceId:body.deviceId,outlets:body.outlets||null,percent:0};
+        deviceProgressDone.delete(body.deviceId);
         renderDeviceCards();
         updateControlLocks();
         let error = null, result = null;
-        try { result = await apiRequest(path, body); }
+        try { result = await apiRequest(path, body); localDeviceCommand.percent = 50; renderDeviceCards(); }
         catch (err) { error = err; }
         const refreshed = await loadDevices();
+        if (!error && refreshed) deviceProgressDone.set(body.deviceId,{until:Date.now()+1800,outlets:body.outlets||null});
         setMessage(error ? "Comando non confermato: " + error.message : refreshed
             ? result?.protectionMessage || "Comando accettato. Stato aggiornato dal server."
             : "Comando accettato, ma stato non verificato: ricarica i dispositivi.", error || !refreshed ? "error" : "");
@@ -321,6 +330,7 @@
         sceneWorkspace = null;
         cloudExecutions = {};
         sceneConfirmations.clear();
+        sceneProgressDone.clear(); deviceProgressDone.clear(); localSceneProgress.clear();
         sceneSyncMode = "local";
         currentDevices = [];
         devicesFresh = false;
@@ -449,7 +459,7 @@
         } finally {
             devicesLoading = false;
             let verifiedScene=false;
-            for(const [id,pending] of sceneConfirmations)if(readSerial>=pending.after){sceneConfirmations.delete(id);verifiedScene=true;}
+            for(const [id,pending] of sceneConfirmations)if(readSerial>=pending.after){sceneConfirmations.delete(id);if(devicesFresh)sceneProgressDone.set(id,Date.now()+1800);else sceneProgressDone.delete(id);verifiedScene=true;}
             if(verifiedScene)renderScenes();
             if(sceneConfirmations.size&&!commandBusy)void Promise.resolve().then(()=>loadDevices());
             if (devicesFresh) lastSyncTime = new Date();
@@ -733,6 +743,8 @@
         if (!scene?.actions?.length) return;
         const availability = sceneAvailability(scene);
         if (availability.offline || availability.missing) { setMessage(availability.offline ? "Scenario non eseguito: un dispositivo non in linea." : "Scenario non eseguito: un dispositivo non disponibile.", "error"); return; }
+        sceneProgressDone.delete(sceneId);
+        localSceneProgress.set(sceneId,0);
         if (cloudScenes) {
             if (sceneSyncMode !== "live") { setMessage("Attendi il collegamento a Firebase.", "error"); return; }
             localRunningScene = sceneId;
@@ -775,6 +787,8 @@
                     ...(action.kind === "multi" ? {outlets: action.outlets} : {})
                 });
                 completed++;
+                localSceneProgress.set(scene.id,completed);
+                renderScenes();
             }
         } catch (error) { failure = error; }
         const refreshed = await loadDevices();
@@ -783,6 +797,8 @@
             : "Scenario: " + scene.name + ". Comandi accettati: " + completed + ". " + (refreshed ? "Stato aggiornato dal server." : "Stato non verificato: ricarica i dispositivi."),
             failure || !refreshed ? "error" : "");
         if (!failure && scene.actions.some(action => action.kind === "gate" || action.pulse === true)) localPulseFeedback.set(scene.id, Date.now() + 2500);
+        if (!failure && refreshed) sceneProgressDone.set(scene.id,Date.now()+1800);
+        localSceneProgress.delete(scene.id);
         commandBusy = false;
         localRunningScene = null;
         renderScenes();
@@ -975,6 +991,12 @@
         const expired = run?.status === "unknown" || (run?.status === "running" && run.expiresAt <= Date.now());
         const pulseFeedbackUntil = Math.max(localPulseFeedback.get(scene.id) || 0, run?.status === "succeeded" ? Number(run.finishedAt || 0) + 2500 : 0);
         const pulseConfirmed = pulse && pulseFeedbackUntil > Date.now();
+        const doneFeedback = !unavailable && !expired && run?.status !== "failed" && (sceneProgressDone.get(scene.id) > Date.now() || pulseConfirmed);
+        const freshRun = run && (localRunningScene !== scene.id || run.status === 'running' || sceneConfirmations.has(scene.id));
+        const total = freshRun && Number.isFinite(run.total) && run.total > 0 ? run.total : scene.actions.length;
+        const completedActions = freshRun ? (Number.isFinite(run.completed) ? run.completed : 0) : localSceneProgress.get(scene.id) || 0;
+        const percent = running ? Math.floor(Math.max(0,Math.min(total,completedActions)) * 100 / (total + 1)) : 100;
+        const progress = running || doneFeedback ? commandProgress(percent,'Avanzamento scenario ' + scene.name) : '<span class="pad-dot"></span>';
         const turnsOff = scene.mode === "toggle" ? state === true : scene.actions.every(action => action.state === "off");
         const status = running ? "running" : unavailable ? "offline" : expired ? "unknown" : pulse && (pulseConfirmed || state === true) ? "pulse" : state === true || partial ? "on" : "off";
         const label = running ? "Comando in esecuzione…" : availability.offline ? "Non in linea" : availability.missing ? "Dispositivo non disponibile" : expired ? "Esito da verificare" : pulseConfirmed ? "Impulso inviato" : pulse
@@ -983,7 +1005,7 @@
         const detail = running && availability.offline ? "Un dispositivo non in linea" : !running && !unavailable && pulse && state === null ? "Stato del relè non disponibile" : "";
         const lastResult = !running && run?.status === "succeeded" && pulse ? "Ultimo impulso inviato" : !running && run?.status === "failed" ? "Comando non completato · verifica l’esito" : run?.status === "succeeded" ? run.protectionMessage || "" : "";
         tile.className = "scenario-unit";
-        tile.innerHTML = `<button type="button" class="scenario-pad scene-run state-${status}" data-scene-id="${escapeHtml(scene.id)}" data-offline="${unavailable}" ${unavailable ? 'disabled' : ''} aria-busy="${running}" aria-label="${escapeHtml((running ? "In esecuzione: " : "Esegui scenario: ") + scene.name + ". " + label)}" onclick="runUserScene(${jsArg(scene.id)})"><span class="pad-top"><span class="pad-icon">${icon(pulse ? "gate" : turnsOff ? "moon" : "sun")}</span>${running ? '<span class="pad-spinner" aria-hidden="true"></span>' : '<span class="pad-dot"></span>'}</span><span class="pad-name">${escapeHtml(scene.name)}</span><span class="pad-type">${pulse ? "COMANDO A IMPULSO" : turnsOff ? "SPEGNIMENTO" : "SCENARIO"} · ${scene.actions.length} ${scene.actions.length === 1 ? "AZIONE" : "AZIONI"}</span><span class="pad-state">${label}</span>${detail ? `<span class="pad-result">${detail}</span>` : ""}${lastResult ? `<span class="pad-result">${escapeHtml(lastResult)}</span>` : ""}</button>${manage ? `<div class="pad-management"><button onclick="startSceneEdit(${jsArg(scene.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteScene(${jsArg(scene.id)})">Elimina</button></div>` : ""}`;
+        tile.innerHTML = `<button type="button" class="scenario-pad scene-run state-${status}" data-scene-id="${escapeHtml(scene.id)}" data-offline="${unavailable}" ${unavailable ? 'disabled' : ''} aria-busy="${running}" aria-label="${escapeHtml((running ? "In esecuzione: " : "Esegui scenario: ") + scene.name + ". " + label + (running ? " " + percent + "%" : ""))}" onclick="runUserScene(${jsArg(scene.id)})"><span class="pad-top"><span class="pad-icon">${icon(pulse ? "gate" : turnsOff ? "moon" : "sun")}</span>${progress}</span><span class="pad-name">${escapeHtml(scene.name)}</span><span class="pad-type">${pulse ? "COMANDO A IMPULSO" : turnsOff ? "SPEGNIMENTO" : "SCENARIO"} · ${scene.actions.length} ${scene.actions.length === 1 ? "AZIONE" : "AZIONI"}</span><span class="pad-state">${label}</span>${detail ? `<span class="pad-result">${detail}</span>` : ""}${lastResult ? `<span class="pad-result">${escapeHtml(lastResult)}</span>` : ""}</button>${manage ? `<div class="pad-management"><button onclick="startSceneEdit(${jsArg(scene.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteScene(${jsArg(scene.id)})">Elimina</button></div>` : ""}`;
         return tile;
     }
 
@@ -1064,16 +1086,19 @@
         const on = deviceOn(dev);
         const known = (devicesFresh || devicesLoading) && dev.online;
         const pending = localDeviceCommand?.deviceId===dev.deviceid;
-        const spinner = '<span class="device-command-spinner" aria-hidden="true"></span>';
+        const done = deviceProgressDone.get(dev.deviceid);
+        const finished = done?.until > Date.now();
+        const progress = commandProgress(pending ? localDeviceCommand.percent : 100);
+        const showProgress = pending || finished;
         let controls = '<p class="unsupported">Comando non disponibile per questo modello.</p>';
         const attributes = `data-device-command data-offline="${!dev.online}"`;
         if (gate) {
-            controls = `<button class="gate-button" ${attributes} aria-busy="${pending}" onclick="toggleDevice(${jsArg(dev.deviceid)}, true)">${pending?spinner:icon("gate")} ${pending?"In esecuzione…":"Apri cancello"} ${icon("arrow-right")}</button>`;
+            controls = `<button class="gate-button" ${attributes} aria-busy="${pending}" onclick="toggleDevice(${jsArg(dev.deviceid)}, true)">${showProgress?progress:icon("gate")} ${pending?"In esecuzione…":"Apri cancello"} ${icon("arrow-right")}</button>`;
         } else if (dev.params?.switch !== undefined) {
-            controls = `<div class="device-control"><span>${pending?"In esecuzione…":known ? on ? "Acceso" : "Spento" : "Stato non verificato"}</span><button class="toggle-button ${known && on ? "is-on" : ""}" role="switch" aria-checked="${known && on}" aria-label="${escapeHtml(dev.name || "Dispositivo")}" ${attributes} aria-busy="${pending}" onclick="toggleDevice(${jsArg(dev.deviceid)}, ${!on})"><span>${pending?spinner:""}</span></button></div>`;
+            controls = `<div class="device-control"><span>${showProgress?progress:known ? on ? "Acceso" : "Spento" : "Stato non verificato"}</span><button class="toggle-button ${known && on ? "is-on" : ""}" role="switch" aria-checked="${known && on}" aria-label="${escapeHtml(dev.name || "Dispositivo")}" ${attributes} aria-busy="${pending}" onclick="toggleDevice(${jsArg(dev.deviceid)}, ${!on})"><span></span></button></div>`;
         } else if (multi) {
             const channels = dev.params.switches.filter(channel => Number.isInteger(channel.outlet) && channel.outlet >= 0);
-            controls = `<div class="channel-controls">${channels.map(channel => `<button class="channel-button ${known && channel.switch === "on" ? "is-on" : ""}" ${attributes} aria-busy="${pending&&(!localDeviceCommand.outlets||localDeviceCommand.outlets.includes(channel.outlet))}" aria-pressed="${known && channel.switch === "on"}" aria-label="${escapeHtml(dev.name || "Dispositivo")}, canale ${channel.outlet + 1}" onclick="toggleMulti(${jsArg(dev.deviceid)}, [${channel.outlet}], ${channel.switch !== "on"})"><span>CH ${channel.outlet + 1}</span>${pending&&(!localDeviceCommand.outlets||localDeviceCommand.outlets.includes(channel.outlet))?spinner:icon("power")}</button>`).join("")}</div>`;
+            controls = `<div class="channel-controls">${channels.map(channel => `<button class="channel-button ${known && channel.switch === "on" ? "is-on" : ""}" ${attributes} aria-busy="${pending&&(!localDeviceCommand.outlets||localDeviceCommand.outlets.includes(channel.outlet))}" aria-pressed="${known && channel.switch === "on"}" aria-label="${escapeHtml(dev.name || "Dispositivo")}, canale ${channel.outlet + 1}" onclick="toggleMulti(${jsArg(dev.deviceid)}, [${channel.outlet}], ${channel.switch !== "on"})"><span>CH ${channel.outlet + 1}</span>${(pending&&(!localDeviceCommand.outlets||localDeviceCommand.outlets.includes(channel.outlet)))||(finished&&(!done.outlets||done.outlets.includes(channel.outlet)))?progress:icon("power")}</button>`).join("")}</div>`;
         }
         return `<article class="device-card ${known && on ? "device-on" : ""}"><div class="device-card-top"><span class="device-icon ${gate ? "gate-icon" : ""}">${icon(gate ? "gate" : "bulb")}</span><span class="connection-chip ${known ? "online" : "offline"}"><i></i>${!devicesFresh&&!devicesLoading ? "Da aggiornare" : dev.online ? "Online" : "Non in linea"}</span></div><h3>${escapeHtml(dev.name || "Senza nome")}</h3><p class="device-kind">${gate ? "Accesso · posizione non rilevata" : multi ? "Interruttore multicanale" : "Interruttore"}</p><div class="device-card-controls">${controls}</div></article>`;
     }
@@ -1730,9 +1755,12 @@
             let expired = false;
             for (const run of Object.values(cloudExecutions)) if (run.status === "running" && run.expiresAt <= Date.now()) { run.status = "unknown"; expired = true; }
             let pulseFeedbackChanged = false;
+            let progressChanged = false;
+            for (const [id,until] of sceneProgressDone) if (until <= Date.now()) {sceneProgressDone.delete(id);progressChanged=true;}
+            for (const [id,done] of deviceProgressDone) if (done.until <= Date.now()) {deviceProgressDone.delete(id);renderDeviceCards();}
             for (const [id, until] of localPulseFeedback) if (until <= Date.now()) { localPulseFeedback.delete(id); pulseFeedbackChanged = true; }
             const recentPulse = Object.values(cloudExecutions).some(run => run.status === "succeeded" && Number(run.finishedAt || 0) + 3500 > Date.now());
-            if (expired || pulseFeedbackChanged || recentPulse || localPulseFeedback.size || localRunningScene || activeCloudExecution()) renderScenes();
+            if (expired || progressChanged || pulseFeedbackChanged || recentPulse || localPulseFeedback.size || localRunningScene || activeCloudExecution()) renderScenes();
         }, 1000);
         ensureDefaultScenes();
         renderScenes();
