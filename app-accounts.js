@@ -89,7 +89,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   if((expected&&expected!==a.id)||(!['GET','HEAD'].includes(req.method)&&expected!==a.id))throw fail(409,'app_context_changed','La plancia aperta è cambiata. Ricarica la pagina prima di inviare comandi.');
   if(req.method!=='GET'&&req.method!=='HEAD'){csrf(req);if(req.appReadOnly)throw fail(403,'app_readonly','Questa plancia è consultabile soltanto: account non attivo.');}
   if(!a.providerOwner)throw fail(401,'not_authenticated','Collega eWeLink per la prima volta dalla tua plancia.');
-  const c=await programming().access(a.providerOwner);req.programmingOwner=a.providerOwner;req.programmingChecked=true;
+  const c=await programming().access(a.providerOwner,{inspection:req.appImpersonating===true&&req.appReadOnly===true});req.programmingOwner=a.providerOwner;req.programmingChecked=true;
   req.cookies={...req.cookies,ewelink_access:c.accessToken,ewelink_refresh:c.refreshToken,ewelink_expires:String(c.atExpiredTime)};
  }
  async function tokenAllowed(token){const owner=await programming().identity({cookies:{ewelink_access:token}});await authorizeOwner(owner);}

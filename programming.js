@@ -117,15 +117,17 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    if(data?.credentials&&open(data.credentials).accessToken===used)t.set(ref,{...data,reauthRequired:true,renewAt:core.NEVER,lastError:'Ricollega eWeLink da un dispositivo: il collegamento verrà aggiornato anche sugli altri.'});
   });
  }
- async function access(owner,{scheduled=false}={}){
-  await authorizeOwner(owner);
+ async function access(owner,{scheduled=false,inspection=false}={}){
+  if(scheduled&&inspection)throw error(403,"app_readonly","La consultazione amministrativa non può eseguire timer.");
+  const linkedAccount=inspection?null:await authorizeOwner(owner);
   const ref=accounts().doc(owner),claim=crypto.randomUUID();
   const result=await db().runTransaction(async t=>{
    const snap=await t.get(ref),data=snap.exists?snap.data():{};
    if(data.reauthRequired)throw error(401,'not_authenticated','Ricollega eWeLink da questo dispositivo per aggiornare anche gli altri.');
    if(scheduled&&!automatic(data))throw error(401,'automation_disabled','Esecuzione automatica disattivata.');
-   if(!automatic(data)&&(data.browserUntil||0)<=now()&&data.automationEnabled===false)throw error(401,'not_authenticated','Accesso della plancia scaduto. Accedi nuovamente.');
+   if(!inspection&&!linkedAccount&&!automatic(data)&&(data.browserUntil||0)<=now()&&data.automationEnabled===false)throw error(401,'not_authenticated','Accesso della plancia scaduto. Accedi nuovamente.');
    if(data.revoked||!data.credentials)throw error(401,'not_authenticated','Ricollega eWeLink nella sezione Programmazione.');
+   if(linkedAccount&&(data.browserUntil||0)<now()+59*core.DAY){data.browserUntil=now()+60*core.DAY;t.set(ref,data);}
    const credentials=open(data.credentials);
    if(credentials.atExpiredTime>now()+5*60000)return {credentials};
    if(data.refreshUntil>now())throw error(409,'refresh_busy','Rinnovo dell’accesso in corso.');
@@ -366,7 +368,9 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    const renewals=await accounts().where('renewAt','<=',now()).limit(5).get();
    for(const doc of renewals.docs){
     const data=doc.data();
-    if(!data.revoked&&(automatic(data)||(data.browserUntil||0)>now()))await access(doc.id).catch(()=>{});
+    const linkedAccount=await authorizeOwner(doc.id).catch(()=>false);
+    if(linkedAccount===false)continue;
+    if(!data.revoked&&(linkedAccount||automatic(data)||(data.browserUntil||0)>now()))await access(doc.id).catch(()=>{});
     else if(!automatic(data))await accounts().doc(doc.id).set({credentials:null,revoked:true,renewAt:core.NEVER},{merge:true});
    }
   }finally{busy=false;}
