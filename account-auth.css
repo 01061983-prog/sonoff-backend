@@ -10,8 +10,10 @@ body.account-locked>main,body.account-locked>#navigationDialog,body.account-lock
 #accountToolbar{position:fixed;top:calc(18px + env(safe-area-inset-top));right:20px;z-index:500;display:flex;gap:12px;align-items:center;max-width:calc(100vw - 100px)}
 #accountToolbar button{padding:12px 18px;border:1px solid #c9ddd1;border-radius:14px;background:#fff;color:#126c4e;box-shadow:0 4px 15px #12392210;font:inherit;font-weight:600;cursor:pointer}
 #accountIdentity{padding:8px;background:#fff3d4;border-radius:10px;font-size:.8rem}body.account-delegated .topbar{min-height:100px!important}
-#accountAdmin{width:min(1100px,94vw);max-height:90dvh;border:1px solid #dce7df;border-radius:24px;padding:30px;color:#21392f;background:#f6f8f6;overflow:auto;font-family:inherit}
+#accountAdmin{box-sizing:border-box;width:min(1100px,94vw);max-height:90dvh;border:1px solid #dce7df;border-radius:24px;padding:30px;color:#21392f;background:#f6f8f6;overflow:auto;font-family:inherit}
 #accountAdmin::backdrop{background:#132b2370}.account-admin-heading{display:flex;justify-content:space-between;align-items:center;gap:20px}.account-admin-heading h1{margin:0;font-size:2rem}
 #accountInvite{display:grid;grid-template-columns:1fr 1fr auto;align-items:end;gap:16px;padding:24px 0}.account-row{background:#fff;border:1px solid #dce7df;border-radius:18px;padding:22px;margin:16px 0;display:flex;justify-content:space-between;gap:20px;align-items:center}
 .account-row h2{font-size:1.2rem;margin:0 0 8px}.account-row p{margin:6px 0;overflow-wrap:anywhere}.account-row span{font-size:.85rem;margin-right:12px}.account-badge{display:inline-block;padding:5px 10px;border-radius:8px;background:#e8f3ec}.account-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}.account-actions button{font-size:.9rem}
-@media(max-width:1023px),(pointer:coarse){#accountManage{display:none!important}#accountToolbar{right:12px;gap:6px}#accountIdentity{max-width:150px}#accountAdmin{display:none}}
+@media(pointer:coarse){#accountManage{display:none!important}#accountToolbar{right:12px;gap:6px}#accountIdentity{max-width:150px}#accountAdmin{display:none}}
+
+@media(max-width:850px){#accountInvite{grid-template-columns:1fr}.account-row{flex-direction:column;align-items:stretch}.account-actions{justify-content:flex-start}#accountAdmin{padding:20px}}
