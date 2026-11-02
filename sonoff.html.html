@@ -12,9 +12,9 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <script src="text-size.js?v=29"></script>
-  <script src="scene-pages.js?v=29"></script>
-  <link rel="stylesheet" href="app.css?v=29">
+  <script src="text-size.js?v=30"></script>
+  <script src="scene-pages.js?v=30"></script>
+  <link rel="stylesheet" href="app.css?v=30">
   <style>
     #startupScreen{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:28px;background:#f6f8f6;color:#24382f;text-align:center;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:auto}
     #startupScreen[hidden]{display:none}body.app-starting>main{visibility:hidden}
@@ -68,7 +68,7 @@
     <section class="dashboard-section"><div class="section-heading"><div><h2>I tuoi dispositivi</h2><p>Le cose importanti, sempre a portata di mano.</p></div><button class="text-button" onclick="setView('devices')">Vedi tutti <span data-icon="arrow-right"></span></button></div><div id="homeDevicesGrid" class="devices-grid"></div></section>
     <div class="sync-footer"><span data-icon="shield"></span><span>Collegamento al tuo account eWeLink</span><span id="lastSync">In attesa del primo aggiornamento</span></div>
   </section>
-  <section id="devicesView" class="view" style="display:none" aria-labelledby="devicesHeading"><div class="page-heading"><div><p class="eyebrow">LUCI E ACCESSI</p><h1 id="devicesHeading">I tuoi dispositivi<span class="green-dot">.</span></h1><p class="heading-sub">Controlla gli ambienti, uno alla volta.</p></div></div><details class="technical-details"><summary>Collega un dispositivo mancante tramite ID</summary><p class="page-note">Per dispositivi compatibili a due canali, come New Smart G2, leggibili da eWeLink ma assenti dall’elenco automatico. Il collegamento è condiviso soltanto tra i tuoi dispositivi dello stesso account.</p><form id="linkDeviceForm" class="device-toolbar"><label class="search-box">ID eWeLink<input id="linkDeviceId" name="deviceId" required pattern="[0-9A-Fa-f]{10}" maxlength="10" placeholder="ID di 10 caratteri" autocomplete="off"></label><button id="linkDeviceBtn" type="submit" class="primary-button">Collega dispositivo</button><p id="linkDeviceStatus" role="status"></p></form></details><div class="device-toolbar"><label class="search-box"><span data-icon="search"></span><input type="search" id="deviceSearch" placeholder="Cerca un dispositivo…" aria-label="Cerca un dispositivo"></label><div class="filter-tabs" aria-label="Filtra dispositivi"><button data-filter="all" class="selected" aria-pressed="true">Tutti</button><button data-filter="online" aria-pressed="false">Online</button><button data-filter="offline" aria-pressed="false">Offline</button></div></div><div id="allDevicesGrid" class="devices-grid"></div><details class="technical-details"><summary>Dettagli tecnici dei dispositivi</summary><div class="table-wrap"><table id="devicesTable"><thead><tr><th>Dispositivo</th><th>ID</th><th>Connessione</th><th>Stato</th><th>Comando</th></tr></thead><tbody><tr><td colspan="5">Caricamento…</td></tr></tbody></table></div></details><p class="page-note">Gli stati si aggiornano all’apertura della pagina e dopo ogni comando. Usa il pulsante Aggiorna per una nuova lettura.</p></section>
+  <section id="devicesView" class="view" style="display:none" aria-labelledby="devicesHeading"><div class="page-heading"><div><p class="eyebrow">LUCI E ACCESSI</p><h1 id="devicesHeading">I tuoi dispositivi<span class="green-dot">.</span></h1><p class="heading-sub">Controlla gli ambienti, uno alla volta.</p></div></div><details class="technical-details"><summary>Collega un dispositivo mancante tramite ID</summary><p class="page-note">Per dispositivi compatibili a due canali, come New Smart G2, leggibili da eWeLink ma assenti dall’elenco automatico. Il collegamento è condiviso soltanto tra i tuoi dispositivi dello stesso account.</p><form id="linkDeviceForm" class="device-toolbar"><label class="search-box">ID eWeLink<input id="linkDeviceId" name="deviceId" required pattern="[0-9A-Fa-f]{10}" maxlength="10" placeholder="ID di 10 caratteri" autocomplete="off"></label><button id="linkDeviceBtn" type="submit" class="primary-button">Collega dispositivo</button><p id="linkDeviceStatus" role="status"></p></form></details><div class="device-toolbar"><label class="search-box"><span data-icon="search"></span><input type="search" id="deviceSearch" placeholder="Cerca un dispositivo…" aria-label="Cerca un dispositivo"></label><div class="filter-tabs" aria-label="Filtra dispositivi"><button data-filter="all" class="selected" aria-pressed="true">Tutti</button><button data-filter="online" aria-pressed="false">Online</button><button data-filter="offline" aria-pressed="false">Non in linea</button></div></div><div id="allDevicesGrid" class="devices-grid"></div><details class="technical-details"><summary>Dettagli tecnici dei dispositivi</summary><div class="table-wrap"><table id="devicesTable"><thead><tr><th>Dispositivo</th><th>ID</th><th>Connessione</th><th>Stato</th><th>Comando</th></tr></thead><tbody><tr><td colspan="5">Caricamento…</td></tr></tbody></table></div></details><p class="page-note">Gli stati si aggiornano all’apertura della pagina e dopo ogni comando. Usa il pulsante Aggiorna per una nuova lettura.</p></section>
   <section id="settingsView" class="view" aria-labelledby="scenesHeading"><div class="page-heading"><div><p class="eyebrow">PICCOLI GESTI, GRANDI COMODITÀ</p><h1 id="scenesHeading">Scenari<span class="green-dot">.</span></h1><p class="heading-sub">Combina più azioni in un unico pulsante.</p></div></div><div id="scenesList" class="scenes-grid-settings"></div><div id="sceneEditor" class="scene-editor" style="display:none"><div class="editor-heading"><div><p class="eyebrow">PERSONALIZZA</p><h2 id="editorTitle">Crea uno scenario</h2></div><button class="icon-button" onclick="cancelSceneEdit()" aria-label="Chiudi editor"><span data-icon="close"></span></button></div><div class="form-grid"><div class="form-row"><label for="sceneName">Nome scenario</label><input id="sceneName" type="text" maxlength="100" placeholder="Es. Serata in oratorio"></div><div class="form-row"><label for="sceneType">Esecuzione</label><select id="sceneType"><option value="manuale">Manuale · con un tocco</option><option value="crepuscolare" disabled>Crepuscolare · non disponibile</option></select></div></div><h3 class="editor-subtitle">Scegli dispositivi e azioni</h3><p class="page-note">Per cancello e relè con autoritorno già configurato scegli “Impulso”. Il colore indica lo stato del relè, non la posizione del cancello.</p><div id="sceneDevicesList" class="devices-list"></div><div class="editor-footer"><button class="secondary-button" onclick="cancelSceneEdit()">Annulla</button><button class="primary-button" onclick="saveScene()"><span data-icon="check"></span>Salva scenario</button></div></div></section>
 
   <section id="programmingView" class="view" style="display:none" aria-labelledby="programmingHeading">
@@ -731,6 +731,8 @@
         if (commandBusy || activeCloudExecution() || devicesLoading || !devicesFresh) return;
         const scene = loadUserScenes().find(s => s.id === sceneId);
         if (!scene?.actions?.length) return;
+        const availability = sceneAvailability(scene);
+        if (availability.offline || availability.missing) { setMessage(availability.offline ? "Scenario non eseguito: un dispositivo non in linea." : "Scenario non eseguito: un dispositivo non disponibile.", "error"); return; }
         if (cloudScenes) {
             if (sceneSyncMode !== "live") { setMessage("Attendi il collegamento a Firebase.", "error"); return; }
             localRunningScene = sceneId;
@@ -940,23 +942,48 @@
         document.getElementById("sceneManageBtn").textContent = sceneManageMode ? "Termina modifica" : "Modifica scenari";
         renderScenes();
     }
+    function sceneAvailability(scene) {
+        const fresh = devicesFresh || devicesLoading;
+        const result = {offline:false,missing:false,unknown:!fresh,on:0,off:0};
+        if (!fresh) return result;
+        for (const action of scene.actions || []) {
+            const device = currentDevices.find(d => d.deviceid === action.deviceId);
+            if (!device) { result.missing = true; continue; }
+            if (!device.online) { result.offline = true; continue; }
+            const values = action.kind === 'gate'
+                ? [device.params?.switches?.find(c => c.outlet === 0)?.switch ?? device.params?.switch]
+                : action.kind === 'single' ? [device.params?.switch]
+                : action.outlets?.map(outlet => device.params?.switches?.find(c => c.outlet === outlet)?.switch) || [];
+            if (!values.length) result.unknown = true;
+            for (const value of values) {
+                if (value === 'on') result.on++;
+                else if (value === 'off') result.off++;
+                else result.unknown = true;
+            }
+        }
+        return result;
+    }
     function makeSceneTile(scene, manage = false) {
         const tile = document.createElement("div");
         const pulse = scene.actions.some(action => action.kind === "gate" || action.pulse === true);
         const state = sceneState(scene);
+        const availability = sceneAvailability(scene);
+        const unavailable = availability.offline || availability.missing;
+        const partial = !pulse && availability.on > 0 && availability.off > 0 && !availability.unknown;
         const running = runningScene(scene.id);
         const run = cloudExecutions[scene.id];
         const expired = run?.status === "unknown" || (run?.status === "running" && run.expiresAt <= Date.now());
         const pulseFeedbackUntil = Math.max(localPulseFeedback.get(scene.id) || 0, run?.status === "succeeded" ? Number(run.finishedAt || 0) + 2500 : 0);
         const pulseConfirmed = pulse && pulseFeedbackUntil > Date.now();
         const turnsOff = scene.mode === "toggle" ? state === true : scene.actions.every(action => action.state === "off");
-        const status = running ? "running" : expired ? "unknown" : pulse && (pulseConfirmed || state === true) ? "pulse" : state === true ? "on" : state === false ? "off" : "unknown";
-        const label = running ? "Comando in esecuzione…" : expired ? "Esito da verificare" : pulseConfirmed ? "Impulso inviato" : pulse
-            ? state === false ? "Relè a riposo" : state === true ? "Relè attivo" : "Impulso · stato non rilevato"
-            : state === true ? "Acceso" : state === false ? "Spento" : "Stato misto o non rilevato";
+        const status = running ? "running" : unavailable ? "offline" : expired ? "unknown" : pulse && (pulseConfirmed || state === true) ? "pulse" : state === true || partial ? "on" : "off";
+        const label = running ? "Comando in esecuzione…" : availability.offline ? "Non in linea" : availability.missing ? "Dispositivo non disponibile" : expired ? "Esito da verificare" : pulseConfirmed ? "Impulso inviato" : pulse
+            ? state === true ? "Relè attivo" : state === false ? "Relè a riposo" : "A riposo"
+            : partial ? "Parzialmente acceso" : state === true ? "Acceso" : state === false ? "Spento" : "Stato non disponibile";
+        const detail = running && availability.offline ? "Un dispositivo non in linea" : !running && !unavailable && pulse && state === null ? "Stato del relè non disponibile" : "";
         const lastResult = !running && run?.status === "succeeded" && pulse ? "Ultimo impulso inviato" : !running && run?.status === "failed" ? "Comando non completato · verifica l’esito" : run?.status === "succeeded" ? run.protectionMessage || "" : "";
         tile.className = "scenario-unit";
-        tile.innerHTML = `<button type="button" class="scenario-pad scene-run state-${status}" data-scene-id="${escapeHtml(scene.id)}" aria-busy="${running}" aria-label="${escapeHtml((running ? "In esecuzione: " : "Esegui scenario: ") + scene.name + ". " + label)}" onclick="runUserScene(${jsArg(scene.id)})"><span class="pad-top"><span class="pad-icon">${icon(pulse ? "gate" : turnsOff ? "moon" : "sun")}</span>${running ? '<span class="pad-spinner" aria-hidden="true"></span>' : '<span class="pad-dot"></span>'}</span><span class="pad-name">${escapeHtml(scene.name)}</span><span class="pad-type">${pulse ? "COMANDO A IMPULSO" : turnsOff ? "SPEGNIMENTO" : "SCENARIO"} · ${scene.actions.length} ${scene.actions.length === 1 ? "AZIONE" : "AZIONI"}</span><span class="pad-state">${label}</span>${lastResult ? `<span class="pad-result">${escapeHtml(lastResult)}</span>` : ""}</button>${manage ? `<div class="pad-management"><button onclick="startSceneEdit(${jsArg(scene.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteScene(${jsArg(scene.id)})">Elimina</button></div>` : ""}`;
+        tile.innerHTML = `<button type="button" class="scenario-pad scene-run state-${status}" data-scene-id="${escapeHtml(scene.id)}" data-offline="${unavailable}" ${unavailable ? 'disabled' : ''} aria-busy="${running}" aria-label="${escapeHtml((running ? "In esecuzione: " : "Esegui scenario: ") + scene.name + ". " + label)}" onclick="runUserScene(${jsArg(scene.id)})"><span class="pad-top"><span class="pad-icon">${icon(pulse ? "gate" : turnsOff ? "moon" : "sun")}</span>${running ? '<span class="pad-spinner" aria-hidden="true"></span>' : '<span class="pad-dot"></span>'}</span><span class="pad-name">${escapeHtml(scene.name)}</span><span class="pad-type">${pulse ? "COMANDO A IMPULSO" : turnsOff ? "SPEGNIMENTO" : "SCENARIO"} · ${scene.actions.length} ${scene.actions.length === 1 ? "AZIONE" : "AZIONI"}</span><span class="pad-state">${label}</span>${detail ? `<span class="pad-result">${detail}</span>` : ""}${lastResult ? `<span class="pad-result">${escapeHtml(lastResult)}</span>` : ""}</button>${manage ? `<div class="pad-management"><button onclick="startSceneEdit(${jsArg(scene.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteScene(${jsArg(scene.id)})">Elimina</button></div>` : ""}`;
         return tile;
     }
 
@@ -1048,7 +1075,7 @@
             const channels = dev.params.switches.filter(channel => Number.isInteger(channel.outlet) && channel.outlet >= 0);
             controls = `<div class="channel-controls">${channels.map(channel => `<button class="channel-button ${known && channel.switch === "on" ? "is-on" : ""}" ${attributes} aria-busy="${pending&&(!localDeviceCommand.outlets||localDeviceCommand.outlets.includes(channel.outlet))}" aria-pressed="${known && channel.switch === "on"}" aria-label="${escapeHtml(dev.name || "Dispositivo")}, canale ${channel.outlet + 1}" onclick="toggleMulti(${jsArg(dev.deviceid)}, [${channel.outlet}], ${channel.switch !== "on"})"><span>CH ${channel.outlet + 1}</span>${pending&&(!localDeviceCommand.outlets||localDeviceCommand.outlets.includes(channel.outlet))?spinner:icon("power")}</button>`).join("")}</div>`;
         }
-        return `<article class="device-card ${known && on ? "device-on" : ""}"><div class="device-card-top"><span class="device-icon ${gate ? "gate-icon" : ""}">${icon(gate ? "gate" : "bulb")}</span><span class="connection-chip ${known ? "online" : "offline"}"><i></i>${!devicesFresh&&!devicesLoading ? "Da aggiornare" : dev.online ? "Online" : "Offline"}</span></div><h3>${escapeHtml(dev.name || "Senza nome")}</h3><p class="device-kind">${gate ? "Accesso · posizione non rilevata" : multi ? "Interruttore multicanale" : "Interruttore"}</p><div class="device-card-controls">${controls}</div></article>`;
+        return `<article class="device-card ${known && on ? "device-on" : ""}"><div class="device-card-top"><span class="device-icon ${gate ? "gate-icon" : ""}">${icon(gate ? "gate" : "bulb")}</span><span class="connection-chip ${known ? "online" : "offline"}"><i></i>${!devicesFresh&&!devicesLoading ? "Da aggiornare" : dev.online ? "Online" : "Non in linea"}</span></div><h3>${escapeHtml(dev.name || "Senza nome")}</h3><p class="device-kind">${gate ? "Accesso · posizione non rilevata" : multi ? "Interruttore multicanale" : "Interruttore"}</p><div class="device-card-controls">${controls}</div></article>`;
     }
     function renderDeviceCards() {
         const search = document.getElementById("deviceSearch").value.trim().toLocaleLowerCase("it");

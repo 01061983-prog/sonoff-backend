@@ -137,3 +137,13 @@ body.scenes-paged .auth-panel,body.scenes-paged .offline-banner{flex-shrink:0}
 body.scenes-paged #scenesList>.empty-state{grid-column:1/-1;grid-row:1/-1}
 /* Unico indicatore: l'icona dello scenario resta ferma. */
 .state-running .pad-icon .icon{animation:none}
+
+/* v30: rosso a riposo, verde attivo, blu per esecuzione e impulsi. */
+.scenario-pad.state-unknown,.scenario-pad.state-offline,.scenario-pad.state-unknown:hover:not(:disabled){--pad-edge:#8d1d26;--pad-shadow:#ad253930;background:linear-gradient(145deg,#e44e55,#bc2737);color:#fff;border-color:#d53c48}
+.scenario-pad.state-offline:disabled{opacity:1;cursor:not-allowed}
+.scenario-pad.state-offline .pad-state{font-weight:800;text-decoration:underline;text-underline-offset:3px}
+.channel-button:not(.is-on),.gate-button{background:#bc2737;border-color:#bc2737;color:#fff}
+.channel-button.is-on{background:#087b47;border-color:#087b47;color:#fff}
+.channel-button[aria-busy="true"],.gate-button[aria-busy="true"]{background:#205fc4;border-color:#205fc4;color:#fff}
+.toggle-button:not(.is-on):before{background:#bc2737}
+.toggle-button[aria-busy="true"]:before{background:#205fc4}
