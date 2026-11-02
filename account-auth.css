@@ -1,10 +1,10 @@
 #accountGate[hidden],#accountToolbar [hidden]{display:none!important}
-#accountGate{position:fixed;inset:0;z-index:10000;background:#f3f7f4;overflow:auto;display:grid;place-items:center;padding:24px;color:#21392f}
-.account-card{width:min(100%,440px);padding:32px;background:white;border:1px solid #dce7df;border-radius:28px;box-shadow:0 16px 60px #173b2912}
-.account-card h1{font-size:2rem;margin:8px 0 16px}.account-eyebrow{font-size:.75rem;letter-spacing:.12em;font-weight:700;color:#147d5a}
-#accountMessage{line-height:1.5;min-height:3em}.account-card form{display:grid;gap:12px}.account-card label,#accountInvite label{font-weight:600;display:grid;gap:6px}
-.account-card input:not([type=checkbox]),#accountInvite input{width:100%;box-sizing:border-box;border:1px solid #bacfc2;border-radius:12px;background:#fff;color:#21392f;padding:13px;font:inherit;font-size:1rem;min-height:48px}
-.account-card button{width:100%;margin:4px 0;white-space:normal}.account-card .account-remember{display:flex;align-items:center;font-size:.95rem;gap:12px}.account-remember input{width:22px;height:22px;accent-color:#147d5a;flex-shrink:0}
+#accountGate{position:fixed;inset:0;z-index:10000;background:#f3f7f4;overflow:auto;display:grid;place-items:center;padding:24px;box-sizing:border-box;color:#21392f}
+#accountGate .app-login-card{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;min-width:0;max-width:100%;width:min(100%,440px);padding:32px;background:white;border:1px solid #dce7df;border-radius:28px;box-shadow:0 16px 60px #173b2912}
+#accountGate .app-login-card h1{font-size:2rem;margin:8px 0 16px}.account-eyebrow{font-size:.75rem;letter-spacing:.12em;font-weight:700;color:#147d5a}
+#accountMessage{line-height:1.5;min-height:3em}#accountGate .app-login-card form{display:grid;gap:12px}#accountGate .app-login-card label,#accountInvite label{font-weight:600;display:grid;gap:6px}
+#accountGate .app-login-card input:not([type=checkbox]),#accountInvite input{width:100%;box-sizing:border-box;border:1px solid #bacfc2;border-radius:12px;background:#fff;color:#21392f;padding:13px;font:inherit;font-size:1rem;min-height:48px}
+#accountGate .app-login-card button{width:100%;margin:4px 0;white-space:normal}#accountGate .app-login-card .account-remember{display:flex;align-items:center;font-size:.95rem;gap:12px}.account-remember input{width:22px;height:22px;accent-color:#147d5a;flex-shrink:0}
 .account-small{font-size:.8rem;line-height:1.4;color:#54685e;margin:0}.account-divider{text-align:center;font-size:.85rem;color:#65776e;padding:18px 0}.account-link{border:0;background:none;text-decoration:underline;color:#126c4e;min-height:44px;padding:8px;font:inherit}
 body.account-locked>main,body.account-locked>#navigationDialog,body.account-locked>#accountToolbar{visibility:hidden;pointer-events:none}
 #accountToolbar{position:fixed;top:calc(18px + env(safe-area-inset-top));right:20px;z-index:500;display:flex;gap:12px;align-items:center;max-width:calc(100vw - 100px)}
@@ -17,3 +17,6 @@ body.account-locked>main,body.account-locked>#navigationDialog,body.account-lock
 @media(pointer:coarse){#accountManage{display:none!important}#accountToolbar{right:12px;gap:6px}#accountIdentity{max-width:150px}#accountAdmin{display:none}}
 
 @media(max-width:850px){#accountInvite{grid-template-columns:1fr}.account-row{flex-direction:column;align-items:stretch}.account-actions{justify-content:flex-start}#accountAdmin{padding:20px}}
+
+#accountGate .app-login-card>img{align-self:center;flex-shrink:0}#accountGate .app-login-card h1,#accountGate .account-eyebrow{text-align:center}#accountGate .app-login-card>*{min-width:0}#accountGate .app-login-card{max-height:none;height:auto}#accountCredentials,#accountPending{width:100%}
+@media(max-width:500px){#accountGate{padding:16px;align-items:start}#accountGate .app-login-card{padding:24px 20px;border-radius:22px;margin:auto 0}}

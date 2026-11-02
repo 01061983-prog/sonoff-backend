@@ -12,11 +12,11 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <script src="account-auth.js?v=34"></script>
-  <link rel="stylesheet" href="account-auth.css?v=34">
-  <script src="text-size.js?v=34"></script>
-  <script src="scene-pages.js?v=34"></script>
-  <link rel="stylesheet" href="app.css?v=34">
+  <script src="account-auth.js?v=35"></script>
+  <link rel="stylesheet" href="account-auth.css?v=35">
+  <script src="text-size.js?v=35"></script>
+  <script src="scene-pages.js?v=35"></script>
+  <link rel="stylesheet" href="app.css?v=35">
   <style>
     #startupScreen{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:28px;background:#f6f8f6;color:#24382f;text-align:center;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:auto}
     #startupScreen[hidden]{display:none}body.app-starting>main{visibility:hidden}
@@ -1952,7 +1952,12 @@
         if(window.AppAccounts){
             const allowed=await window.AppAccounts.bootstrap(BACKEND_URL);
             if(!allowed)return;
-            if(window.AppAccounts.state.enabled)SCENES_STORAGE_KEY="ewelink_private_scenes_"+window.AppAccounts.state.account.id;
+            if(window.AppAccounts.state.enabled){
+                SCENES_STORAGE_KEY="ewelink_private_scenes_"+window.AppAccounts.state.account.id;
+                startupComplete=false;document.body.classList.add('app-starting');
+                const splash=document.getElementById('startupScreen');splash.hidden=false;splash.setAttribute('aria-busy','true');
+                document.getElementById('startupContinue').hidden=true;document.getElementById('mainContent').inert=true;
+            }
         }
         initApp();
         setTimeout(()=>{if(!startupComplete){startupStatus('La connessione sta richiedendo più tempo. Puoi attendere oppure aprire la plancia.');document.getElementById('startupContinue').hidden=false;}},12000);

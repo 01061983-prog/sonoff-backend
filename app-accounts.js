@@ -19,7 +19,14 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
  async function audit(actor,action,target){await db().collection('ewelinkAppAudit').doc(crypto.randomBytes(16).toString('hex')).set({actor:actor.uid,action,target,at:now()});}
  async function isAdmin(actor){const s=await adminRef().get();return actor.role==='admin'&&s.data()?.uid===actor.uid;}
  async function session(req,{active=true,allowActAs=true}={}){
-  let decoded;try{decoded=await auth().verifySessionCookie(req.cookies?.[COOKIE]||'',true);}catch{throw fail(401,'app_auth_required','Accedi con il tuo account della webapp.');}
+  const cookie=req.cookies?.[COOKIE];
+  if(!cookie)throw fail(401,'app_auth_required','Accedi con il tuo account della webapp.');
+  let decoded;
+  try{decoded=await auth().verifySessionCookie(cookie,true);}
+  catch(error){
+   if(['auth/session-cookie-expired','auth/session-cookie-revoked','auth/argument-error','auth/invalid-session-cookie','auth/user-disabled','auth/user-not-found','auth/id-token-revoked'].includes(error.code))throw fail(401,'app_auth_required','Accedi con il tuo account della webapp.');
+   throw fail(503,'app_auth_unavailable','Verifica dell’accesso temporaneamente non disponibile. Riprova tra poco: la sessione è stata conservata.');
+  }
   const actor=await read(accountId(decoded.email||''));
   if(actor.uid!==decoded.uid||decoded.email_verified!==true)throw fail(401,'app_auth_required','Identità dell’account non confermata.');
   if(actor.status==='blocked'||actor.status==='deleted')throw fail(403,'app_blocked','Account sospeso o rimosso. Contatta l’amministratore.');
@@ -70,7 +77,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   }
   return {ok:true,account:publicProfile(await read(a.id))};
  }
- async function status(req){const a=await session(req,{active:false});return {ok:true,account:publicProfile(a),actor:publicProfile(req.appActor),impersonating:!!req.appImpersonating,readOnly:!!req.appReadOnly,adminDesktop:desktop(req)&&await isAdmin(req.appActor),csrf:mac(req.cookies[COOKIE])};}
+ async function status(req){const a=await session(req,{active:false});return {ok:true,authenticated:true,account:publicProfile(a),actor:publicProfile(req.appActor),impersonating:!!req.appImpersonating,readOnly:!!req.appReadOnly,adminDesktop:desktop(req)&&await isAdmin(req.appActor),csrf:mac(req.cookies[COOKIE])};}
  async function bind(a,owner){
   const pr=profiles().doc(a.id),lr=links().doc(owner);
   await db().runTransaction(async t=>{
@@ -132,7 +139,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
  }
  function install(app,wrap){
   app.get('/api/app/config',(_req,res)=>res.json({ok:true,enabled:true,firebase:webConfig}));
-  app.get('/api/app/session',wrap(async(req,res)=>{try{res.json(await status(req));}catch(e){if(e.code==='app_actas_expired')res.clearCookie(ACT,opts);throw e;}}));
+  app.get('/api/app/session',wrap(async(req,res)=>{try{res.json(await status(req));}catch(e){if(e.code==='app_auth_required'){if(req.cookies?.[COOKIE])res.clearCookie(COOKIE,opts);return res.json({ok:true,authenticated:false});}if(e.code==='app_actas_expired')res.clearCookie(ACT,opts);throw e;}}));
   app.post('/api/app/login',wrap(async(req,res)=>res.json(await login(req,res))));
   app.post('/api/app/logout',wrap(async(req,res)=>{csrf(req);res.clearCookie(COOKIE,opts);res.clearCookie(ACT,opts);res.json({ok:true});}));
   app.get('/api/app/accounts',wrap(async(req,res)=>res.json(await manage(req,res))));
