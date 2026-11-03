@@ -1451,7 +1451,7 @@
     function initLiveDeviceStatus() {
         setInterval(() => {
             const latest = Math.max(lastSyncTime?.getTime() || 0,lastBackgroundAttempt);
-            if (Date.now() - latest >= 20000) void refreshDeviceStatus();
+            if (Date.now() - latest >= 10000) void refreshDeviceStatus();
         }, 5000);
     }
     // END LIVE DEVICE STATUS
