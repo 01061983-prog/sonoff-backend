@@ -45,9 +45,18 @@
  }
  async function exchange(user){
   if(!user.emailVerified){message('Conferma l’email ricevuta, poi torna qui e accedi.');return;}
-  const data=await request('/api/app/login',{idToken:await user.getIdToken(true),remember:$('accountRemember').checked});
-  await (await sdk()).signOut(fbAuth);
-  const current=await request('/api/app/session');
+  message('Completamento dell’accesso…');
+  await request('/api/app/login',{idToken:await user.getIdToken(),remember:$('accountRemember').checked});
+  // La sessione della plancia è indipendente dalla pulizia del login Firebase.
+  void (await sdk()).signOut(fbAuth).catch(()=>{});
+  let current;
+  for(const delay of [0,250,750]){
+   if(delay)await new Promise(resolve=>setTimeout(resolve,delay));
+   try{current=await request('/api/app/session');}
+   catch(e){if(e.code!=='app_auth_unavailable'&&e.name!=='TypeError')throw e;continue;}
+   if(current.authenticated!==false)break;
+  }
+  if(!current)throw new Error('Verifica della sessione non disponibile. Riprova tra poco.');
   if(current.authenticated===false)throw new Error('Il browser non ha conservato l’accesso. Consenti i cookie per questo sito e riprova.');
   const firstAccess=Boolean(readyResolve);
   if(accepted(current)&&!firstAccess)location.reload();
