@@ -2,6 +2,8 @@
    password e token eWeLink non vengono salvati nel browser dalla webapp. */
 (() => {
  'use strict';
+ const dashboardUrl=()=>new URL(location.pathname,location.origin);
+ const adminPage=new URLSearchParams(location.search).get('view')==='accounts';
  const state={enabled:false,csrf:'',account:null,actor:null,readOnly:false};
  const $=id=>document.getElementById(id);
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -29,6 +31,11 @@
   document.title=name+' · Plancia';
   const brand=document.querySelector('.brand-copy');if(brand){brand.textContent='eWeLink';const small=document.createElement('small');small.textContent=name;brand.append(small);}
   const space=document.querySelector('.workspace');if(space){space.textContent='';const label=document.createElement('span');label.textContent=name;space.append(label);}
+  if(state.account.logo){
+   const logo=document.querySelector('.customer-logo')||document.createElement('img');
+   logo.src=state.account.logo;logo.alt=name;logo.className='customer-logo';
+   document.querySelector('.topbar')?.append(logo);
+  }
   const foot=document.querySelector('footer');if(foot)foot.textContent=name+' · La tua plancia';
  }
  function accepted(data){
@@ -67,8 +74,6 @@
   section.innerHTML=`<div class="app-login-card"><img src="icons/icon.svg" width="72" height="72" alt=""><p class="account-eyebrow">LA TUA PLANCIA</p><h1>Benvenuto.</h1><p id="accountMessage" role="status" aria-live="polite"></p><div id="accountCredentials"><label class="account-remember"><input id="accountRemember" type="checkbox"> Resta connesso su questo dispositivo</label><p class="account-small">Conserva l’accesso per un massimo di 14 giorni. Usalo soltanto sui tuoi dispositivi.</p><button id="accountGoogle" class="primary-button" type="button">Continua con Google</button><button id="accountGoogleRedirect" class="account-link" type="button">Apri Google nella pagina</button><div class="account-divider">oppure con la tua email</div><form id="accountForm"><label for="accountEmail">Email</label><input id="accountEmail" type="email" autocomplete="username" required maxlength="254"><label for="accountPassword">Password</label><input id="accountPassword" type="password" autocomplete="current-password" required maxlength="4096"><button class="primary-button" type="submit">Accedi</button><button id="accountRegister" class="secondary-button" type="button">Crea il tuo account</button><button id="accountReset" class="account-link" type="button">Password dimenticata?</button><button id="accountVerify" class="account-link" type="button">Invia di nuovo la conferma email</button></form></div><button id="accountRetry" class="account-link" type="button">Ricarica l’accesso</button><div id="accountPending" hidden><button id="accountCheck" class="primary-button">Controlla l’ammissione</button><button id="accountPendingLogout" class="secondary-button">Esci</button></div></div>`;
   document.body.append(section);
   const bar=document.createElement('div');bar.id='accountToolbar';bar.innerHTML='<span id="accountIdentity" hidden></span><button id="accountReturn" hidden>Torna alla gestione</button><button id="accountManage" hidden>Gestione account</button>';document.body.append(bar);
-  const dialog=document.createElement('dialog');dialog.id='accountAdmin';dialog.innerHTML='<div class="account-admin-heading"><div><p class="account-eyebrow">AMMINISTRAZIONE</p><h1>Gestione account</h1></div><button id="accountAdminClose" class="secondary-button">Chiudi</button></div><p>Ammetti gli utenti e personalizza la loro plancia. Ogni account vede soltanto i propri dati.</p><form id="accountInvite"><label>Nome della plancia<input id="accountInviteName" required maxlength="80" placeholder="Per esempio: Oratorio San Luigi"></label><label>Email dell’utente<input id="accountInviteEmail" type="email" required maxlength="254"></label><button class="primary-button">Aggiungi account</button></form><p id="accountAdminMessage" role="status"></p><div id="accountList"></div>';document.body.append(dialog);
-  window.matchMedia?.('(pointer:fine)').addEventListener('change',event=>{if(!event.matches&&dialog.open)dialog.close();});
   $('accountRetry').onclick=()=>location.reload();
   $('accountForm').addEventListener('submit',e=>{e.preventDefault();void run(async()=>exchange((await (await sdk()).signInWithEmailAndPassword(fbAuth,$('accountEmail').value.trim(),$('accountPassword').value)).user));});
   $('accountGoogle').onclick=()=>void run(async()=>{const a=await sdk();await exchange((await a.signInWithPopup(fbAuth,new a.GoogleAuthProvider())).user);});
@@ -85,21 +90,115 @@
   $('accountReset').onclick=()=>void run(async()=>{if(!$('accountEmail').reportValidity())return;const a=await sdk();try{await a.sendPasswordResetEmail(fbAuth,$('accountEmail').value.trim());}catch(e){if(e.code!=='auth/user-not-found')throw e;}message('Se l’indirizzo è registrato, riceverai un’email per recuperare la password.');});
   $('accountCheck').onclick=()=>void run(async()=>{if(accepted(await request('/api/app/session')))location.reload();});
   $('accountPendingLogout').onclick=()=>void logout();
-  $('accountManage').onclick=()=>void openAdmin();$('accountAdminClose').onclick=()=>$('accountAdmin').close();
-  $('accountReturn').onclick=()=>void adminMutation({op:'stop-view'},true);
-  $('accountInvite').onsubmit=e=>{e.preventDefault();void adminMutation({op:'invite',name:$('accountInviteName').value,email:$('accountInviteEmail').value});};
-  $('accountList').onclick=e=>{const b=e.target.closest('[data-account-op]');if(!b)return;const op=b.dataset.accountOp,id=b.dataset.accountId,name=b.dataset.accountName;
-   if(op==='rename'){const next=prompt('Nome personalizzato della plancia',name);if(next!==null)void adminMutation({op,id,name:next});return;}
-   if(['delete','block'].includes(op)&&!confirm((op==='delete'?'Rimuovere l’accesso? I dati saranno archiviati e i timer sospesi. Potrai riattivare l’account.':'Bloccare l’account? Saranno bloccati accessi e nuovi comandi automatici; i dispositivi già accesi non verranno spenti.')+'\n'+name))return;
-   void adminMutation({op,id},op==='enter');
+  $('accountManage').onclick=()=>navigateAdmin(true);
+  $('accountReturn').onclick=()=>void adminMutation({op:'stop-view'},'accounts');
+ }
+ function navigateAdmin(show){
+  const url=dashboardUrl();
+  if(show)url.searchParams.set('view','accounts');
+  location.assign(url.href);
+ }
+ function showAdmin(){
+  document.body.classList.add('account-admin-page');
+  const page=document.createElement('section');
+  page.id='accountAdmin';
+  page.innerHTML=`<header class="account-admin-heading"><div><p class="account-eyebrow">AMMINISTRAZIONE</p><h1>Gestione account</h1></div><button id="accountBack" class="secondary-button">Torna alla plancia</button></header>
+   <div class="account-admin-heading"><p>Gestisci l’accesso e il logo delle plance dei clienti.</p><button id="accountNew" class="primary-button">Nuova plancia</button></div>
+   <p id="accountAdminMessage" role="status"></p><div id="accountList"></div>
+   <dialog id="accountEditor"><form id="accountInvite"><h2 id="accountEditorTitle"></h2><label>Nome della plancia<input id="accountInviteName" required maxlength="80"></label><label id="accountEmailField">Email dell’utente<input id="accountInviteEmail" type="email" maxlength="254"></label><label id="accountEnabledField" class="account-enabled"><input id="accountEnabled" type="checkbox"> Abilitato</label><label>Logo del cliente (facoltativo)<input id="accountLogo" type="file" accept="image/png,image/jpeg,image/webp"></label><img id="accountLogoPreview" alt="Anteprima logo" hidden><button id="accountLogoRemove" class="account-link" type="button">Rimuovi logo</button><p id="accountEditorMessage" role="alert"></p><div class="account-actions"><button id="accountEditorCancel" type="button" class="secondary-button">Annulla</button><button class="primary-button">Salva</button></div></form></dialog>
+   <dialog id="accountRemove"><h2>Rimuovere la plancia?</h2><p>La plancia sarà archiviata e le programmazioni saranno sospese.</p><div class="account-actions"><button id="accountRemoveCancel" class="secondary-button">Annulla</button><button id="accountRemoveConfirm" class="primary-button">Rimuovi</button></div></dialog>`;
+  document.body.append(page);
+  $('accountBack').onclick=()=>navigateAdmin(false);
+  $('accountNew').onclick=()=>editAccount();
+  $('accountEditorCancel').onclick=()=>$('accountEditor').close();
+  $('accountLogoRemove').onclick=()=>{$('accountLogo').value='';$('accountLogo').setCustomValidity('');setLogo('');};
+  $('accountLogo').onchange=async()=>{
+   const file=$('accountLogo').files[0];
+   if(!file)return;
+   const input=$('accountLogo');
+   input.setCustomValidity('Attendi il caricamento del logo.');
+   $('accountEditorMessage').textContent='';
+   try{
+    if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>5000000)throw Error('Scegli un logo PNG, JPEG o WebP di massimo 5 MB.');
+    const image=await createImageBitmap(file);
+    try{
+     const canvas=document.createElement('canvas'),scale=Math.min(1,160/Math.max(image.width,image.height));
+     canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
+     canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+     if(input.files[0]===file){setLogo(canvas.toDataURL('image/png'));input.setCustomValidity('');}
+    }finally{image.close();}
+   }catch(e){if(input.files[0]===file){input.value='';input.setCustomValidity('');$('accountEditorMessage').textContent=e.message;}}
   };
+  $('accountInvite').onsubmit=async event=>{
+   event.preventDefault();
+   const editor=$('accountEditor');
+   const button=editor.querySelector('button[type=submit],button:not([type])');
+   button.disabled=true;
+   const body={name:$('accountInviteName').value,logo:editorLogo};
+   if(editing)Object.assign(body,{op:'edit',id:editing.id});
+   else Object.assign(body,{op:'invite',email:$('accountInviteEmail').value,enabled:$('accountEnabled').checked});
+   try{await request('/api/app/accounts',body);editor.close();await openAdmin();}
+   catch(e){$('accountEditorMessage').textContent=e.message;}
+   finally{button.disabled=false;}
+  };
+  $('accountRemoveCancel').onclick=()=>$('accountRemove').close();
+  $('accountList').onclick=e=>{
+   const control=e.target.closest('[data-account-op]');
+   if(!control)return;
+   const {accountOp:op,accountId:id}=control.dataset;
+   if(op==='edit'){editAccount(accounts.find(a=>a.id===id));return;}
+   if(op==='delete'){
+    $('accountRemoveConfirm').onclick=()=>{$('accountRemove').close();void adminMutation({op,id});};
+    $('accountRemove').showModal();return;
+   }
+   if(op==='toggle')return void adminMutation({op:control.checked?'approve':'block',id});
+   void adminMutation({op,id},'dashboard');
+  };
+  void openAdmin();
+ }
+ let accounts=[],editing,editorLogo='',adminBusy=false;
+ function setLogo(logo){
+  editorLogo=logo;
+  const preview=$('accountLogoPreview');
+  if(logo)preview.src=logo;else preview.removeAttribute('src');
+  preview.hidden=!logo;$('accountLogoRemove').hidden=!logo;
+ }
+ function editAccount(account){
+  editing=account;
+  $('accountInvite').reset();
+  $('accountLogo').setCustomValidity('');
+  $('accountEditorTitle').textContent=account?'Modifica plancia':'Nuova plancia';
+  $('accountInviteName').value=account?.name||'';
+  $('accountEmailField').hidden=Boolean(account);$('accountInviteEmail').required=!account;
+  $('accountEnabledField').hidden=Boolean(account);$('accountEnabled').checked=true;
+  $('accountEditorMessage').textContent='';
+  setLogo(account?.logo||'');
+  $('accountEditor').showModal();
  }
  async function openAdmin(){
-  if(!state.adminDesktop)return;if(!$('accountAdmin').open)$('accountAdmin').showModal();$('accountAdminMessage').textContent='Caricamento account…';
-  try{const data=await request('/api/app/accounts');$('accountList').innerHTML=data.accounts.map(a=>`<article class="account-row"><div><h2>${esc(a.name)}</h2><p>${esc(a.email)}</p><span class="account-badge">${esc({active:'Ammesso',pending:'In attesa',blocked:'Bloccato',deleted:'Rimosso · archiviato'}[a.status]||a.status)}</span><span>${a.linked?'eWeLink collegato':'eWeLink da collegare'}</span></div><div class="account-actions">${[['enter','Apri plancia'],['rename','Cambia nome'],...(a.id===state.actor.id?[]:a.status==='active'?[['block','Blocca'],['delete','Rimuovi']]:[['approve',a.status==='pending'?'Ammetti':'Riattiva'],['delete','Rimuovi']])].map(([op,label])=>`<button type="button" class="secondary-button" data-account-op="${op}" data-account-id="${a.id}" data-account-name="${esc(a.name)}">${label}</button>`).join('')}</div></article>`).join('');$('accountAdminMessage').textContent=data.accounts.length+' account';}catch(e){$('accountAdminMessage').textContent=e.message;}
+  const message=$('accountAdminMessage');
+  message.textContent='Caricamento account…';
+  try{
+   const data=await request('/api/app/accounts');
+   accounts=data.accounts;
+   $('accountList').innerHTML=accounts.map(a=>`<article class="account-row"><div>${a.logo?`<img class="account-row-logo" src="${esc(a.logo)}" alt="">`:''}<h2>${esc(a.name)}</h2><p>${esc(a.email)}</p><span class="account-badge">${esc({active:'Ammesso',pending:'In attesa',blocked:'Disattivata',deleted:'Archiviata'}[a.status]||a.status)}</span><span>${a.linked?'eWeLink collegato':'eWeLink da collegare'}</span></div><div class="account-actions"><label class="account-enabled"><input type="checkbox" data-account-op="toggle" data-account-id="${a.id}" ${a.status==='active'?'checked':''} ${a.id===state.actor.id?'disabled':''}> Abilitato</label><button class="secondary-button" data-account-op="enter" data-account-id="${a.id}">Apri plancia</button><button class="secondary-button" data-account-op="edit" data-account-id="${a.id}">Modifica</button>${a.id!==state.actor.id?`<button class="secondary-button" data-account-op="delete" data-account-id="${a.id}">Rimuovi</button>`:''}</div></article>`).join('');
+   message.textContent=accounts.length+' account';
+  }catch(e){message.textContent=e.message;}
  }
- let adminBusy=false;
- async function adminMutation(body,reload=false){if(adminBusy)return;adminBusy=true;try{await request('/api/app/accounts',body);if(reload){location.reload();return;}await openAdmin();$('accountInvite').reset();}catch(e){$('accountAdminMessage').textContent=e.message;if(!$('accountAdmin').open)alert(e.message);}finally{adminBusy=false;}}
+ async function adminMutation(body,destination){
+  if(adminBusy)return;
+  adminBusy=true;
+  const list=$('accountList');
+  if(list)list.inert=true;
+  try{
+   await request('/api/app/accounts',body);
+   if(destination){navigateAdmin(destination==='accounts');return;}
+   await openAdmin();
+  }catch(e){
+   if(list){await openAdmin();$('accountAdminMessage').textContent=e.message;}
+   else message(e.message);
+  }finally{adminBusy=false;if(list)list.inert=false;}
+ }
  async function logout(){try{await request('/api/app/logout',{});if(fbAuth)await (await sdk()).signOut(fbAuth);location.reload();}catch(e){alert('Uscita non confermata: '+e.message);}}
  async function bootstrap(url){
   base=url;
@@ -115,5 +214,11 @@
    if(!$('accountGate'))mount();state.enabled=true;gate('Accesso non disponibile: '+translate(e));return ready;
   }
  }
- window.AppAccounts={state,bootstrap,logout,headers:()=>state.enabled?{'X-App-CSRF':state.csrf,'X-App-Account':state.account?.id||''}:{},handleError:d=>{if(state.enabled&&['app_auth_required','app_blocked','app_pending','app_actas_expired','app_context_changed'].includes(d?.error)){gate(d.msg);return true;}return false;}};
+ window.AppAccounts={state,bootstrap,logout,openPage:()=>{
+  if(!adminPage||!state.enabled)return false;
+  if(!state.adminDesktop){navigateAdmin(false);return true;}
+  document.title="Gestione account · "+state.actor.name;
+  if(typeof window.finishStartup==="function")window.finishStartup();
+  showAdmin();return true;
+ },headers:()=>state.enabled?{'X-App-CSRF':state.csrf,'X-App-Account':state.account?.id||''}:{},handleError:d=>{if(state.enabled&&['app_auth_required','app_blocked','app_pending','app_actas_expired','app_context_changed'].includes(d?.error)){gate(d.msg);return true;}return false;}};
 })();

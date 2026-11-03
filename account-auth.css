@@ -20,3 +20,19 @@ body.account-locked>main,body.account-locked>#navigationDialog,body.account-lock
 
 #accountGate .app-login-card>img{align-self:center;flex-shrink:0}#accountGate .app-login-card h1,#accountGate .account-eyebrow{text-align:center}#accountGate .app-login-card>*{min-width:0}#accountGate .app-login-card{max-height:none;height:auto}#accountCredentials,#accountPending{width:100%}
 @media(max-width:500px){#accountGate{padding:16px;align-items:start}#accountGate .app-login-card{padding:24px 20px;border-radius:22px;margin:auto 0}}
+
+body.account-admin-page{overflow:auto;min-height:100dvh;background:#f3f7f4}
+body.account-admin-page>main,body.account-admin-page>#navigationDialog,body.account-admin-page>#accountToolbar{display:none}
+.account-admin-page #accountAdmin{width:min(1100px,100%);max-height:none;margin:0 auto;border:0;background:transparent;padding:clamp(20px,5vw,56px)}
+.account-admin-page #accountAdmin [hidden],#accountGate [hidden]{display:none!important}
+#accountAdmin .account-admin-heading{flex-wrap:wrap;margin-bottom:20px}
+#accountAdmin dialog{width:min(480px,calc(100vw - 32px));max-height:90dvh;overflow:auto;padding:24px;border:1px solid #dce7df;border-radius:20px;background:#fff;color:#21392f}
+#accountAdmin dialog::backdrop{background:#132b2370}
+#accountAdmin #accountInvite{grid-template-columns:minmax(0,1fr);align-items:start;padding:0}
+#accountInvite h2,#accountEditorMessage{margin:0}
+#accountEditorMessage{color:#9b2b24}
+#accountAdmin .account-enabled{display:flex;align-items:center;gap:8px;font-weight:600}
+#accountAdmin .account-enabled input{width:21px;height:21px;min-height:0;accent-color:#147d5a}
+#accountLogoPreview,.account-row-logo{width:64px;height:64px;object-fit:contain}
+.customer-logo{width:44px;height:44px;object-fit:contain;margin-left:12px}
+@media(pointer:coarse){.account-admin-page #accountAdmin{display:block}}

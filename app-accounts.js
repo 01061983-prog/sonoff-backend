@@ -11,7 +11,8 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
  const links=()=>db().collection('ewelinkAppProviderLinks');
  const adminRef=()=>db().collection('ewelinkAppSettings').doc('administrator');
  const accountId=email=>hash(appid+':account:'+email.toLowerCase().trim());
- const publicProfile=a=>({id:a.id,name:a.name,email:a.email,status:a.status,role:a.role||'user',linked:!!a.providerOwner});
+ const disabledMessage='Plancia disattivata. Contatta l’amministratore.';
+ const publicProfile=a=>({id:a.id,name:a.name,email:a.email,status:a.status,role:a.role||'user',linked:!!a.providerOwner,logo:a.logo||''});
  function originCheck(req){if(req.headers?.origin!==origin)throw fail(403,'app_origin','Richiesta non autorizzata: riapri la plancia dal suo indirizzo ufficiale.');}
  function csrf(req){originCheck(req);const expected=mac(req.cookies?.[COOKIE]||'');const supplied=req.headers?.['x-app-csrf']||'';if(supplied.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected)))throw fail(403,'app_csrf','Sessione aggiornata. Ricarica la pagina prima di riprovare.');}
  function desktop(req){return !/Mobile|Android|iPhone|iPad|Tablet/i.test(req.headers?.['user-agent']||'');}
@@ -29,7 +30,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   }
   const actor=await read(accountId(decoded.email||''));
   if(actor.uid!==decoded.uid||decoded.email_verified!==true)throw fail(401,'app_auth_required','Identità dell’account non confermata.');
-  if(actor.status==='blocked'||actor.status==='deleted')throw fail(403,'app_blocked','Account sospeso o rimosso. Contatta l’amministratore.');
+  if(actor.status==='blocked'||actor.status==='deleted')throw fail(403,'app_blocked',disabledMessage);
   if(Number(decoded.auth_time)*1000<Number(actor.invalidBefore||0))throw fail(401,'app_auth_required','Accesso revocato: accedi nuovamente.');
   req.appActor=actor;req.appAccount=actor;
   if(allowActAs&&req.cookies?.[ACT]){
@@ -51,7 +52,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   const profile=await db().runTransaction(async t=>{
    const s=await t.get(ref),a=s.data(),root=await t.get(ar);
    if(a?.uid&&a.uid!==d.uid)throw fail(409,'app_identity_conflict','Questa email è già associata a un’altra identità. Contatta l’amministratore.');
-   if(['blocked','deleted'].includes(a?.status))throw fail(403,'app_blocked','Account sospeso o rimosso. Contatta l’amministratore.');
+   if(['blocked','deleted'].includes(a?.status))throw fail(403,'app_blocked',disabledMessage);
    const bootstrap=email===adminEmail&&(!root.exists||root.data().uid===d.uid);
    if(email===adminEmail&&root.exists&&root.data().uid!==d.uid)throw fail(403,'app_admin_identity','Identità amministratore non corrispondente.');
    const next={...(a||{}),email,uid:d.uid,name:a?.name||d.name||email.split('@')[0],status:bootstrap?'active':a?.status||'pending',role:bootstrap?'admin':'user',createdAt:a?.createdAt||now(),updatedAt:now()};
@@ -110,6 +111,15 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   if(a.role==='admin')await db().runTransaction(async t=>{const dest=await t.get(ref),old=await t.get(legacyRef);if(!dest.exists&&old.exists){const data=old.data();if(Object.values(data.executions||{}).some(r=>r.status==='running'&&r.expiresAt>now()))throw fail(409,'app_migration_busy','Attendi la fine del comando prima di aprire la nuova plancia.');t.set(ref,{...data,migratedFrom:legacyRef.id,migratedAt:now()});}});
   return ref;
  }
+ function accountLogo(value){
+  if(value==='')return '';
+  if(typeof value!=='string'||value.length>140000||!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(value)){
+   throw fail(400,'app_logo','Logo non valido o troppo grande.');
+  }
+  const bytes=Buffer.from(value.slice(22),'base64');
+  if(bytes.subarray(0,8).toString('hex')!=='89504e470d0a1a0a')throw fail(400,'app_logo','Logo PNG non valido.');
+  return value;
+ }
  async function manage(req,res){
   const actor=await admin(req);
   if(req.method==='GET'){const rows=await profiles().get();return {ok:true,accounts:rows.docs.map(s=>publicProfile({...s.data(),id:s.id})).sort((a,b)=>a.name.localeCompare(b.name))};}
@@ -119,7 +129,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
    const email=String(b.email||'').trim().toLowerCase(),name=String(b.name||'').trim();
    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254||!name||name.length>80)throw fail(400,'app_invite','Inserisci un nome (massimo 80 caratteri) e un indirizzo email valido.');
    const id=accountId(email),ref=profiles().doc(id);
-   await db().runTransaction(async t=>{const s=await t.get(ref);if(s.exists)throw fail(409,'app_exists','Account già presente: usa Ammetti o Riattiva.');t.set(ref,{email,name,status:'active',role:'user',createdAt:now(),updatedAt:now()});});await audit(actor,'invite',id);return {ok:true};
+   await db().runTransaction(async t=>{const s=await t.get(ref);if(s.exists)throw fail(409,'app_exists','Account già presente: usa Ammetti o Riattiva.');t.set(ref,{email,name,logo:accountLogo(b.logo??''),status:b.enabled===false?'blocked':'active',role:'user',createdAt:now(),updatedAt:now()});});await audit(actor,'invite',id);return {ok:true};
   }
   const a=await read(b.id);
   if(b.op==='enter'){
@@ -127,13 +137,17 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
    res.cookie(ACT,id,{...opts,maxAge:3600000});await audit(actor,'enter',a.id);return {ok:true};
   }
   if(a.id===actor.id&&['block','delete'].includes(b.op))throw fail(400,'app_self','Non puoi bloccare o rimuovere l’unico amministratore.');
-  if(b.op==='rename'){
+  if(b.op==='edit'){
+   const name=String(b.name||'').trim();
+   if(!name||name.length>80)throw fail(400,'app_name','Inserisci un nome tra 1 e 80 caratteri.');
+   await profiles().doc(a.id).set({name,logo:accountLogo(b.logo??''),updatedAt:now()},{merge:true});
+  }else if(b.op==='rename'){
    const name=String(b.name||'').trim();if(!name||name.length>80)throw fail(400,'app_name','Inserisci un nome tra 1 e 80 caratteri.');await profiles().doc(a.id).set({name,updatedAt:now()},{merge:true});
   }else if(['approve','block','delete'].includes(b.op)){
    const status={approve:'active',block:'blocked',delete:'deleted'}[b.op];
    // La revoca applicativa è efficace anche se Firebase non risponde.
    await profiles().doc(a.id).set({status,updatedAt:now(),...(['block','delete'].includes(b.op)?{invalidBefore:now()}: {})},{merge:true});
-   if(a.uid&&status!=='active')await auth().revokeRefreshTokens(a.uid);
+   if(a.uid&&status!=='active')await auth().revokeRefreshTokens(a.uid).catch(()=>{});
   }else throw fail(400,'app_operation','Operazione account non valida.');
   await audit(actor,b.op,a.id);return {ok:true};
  }
