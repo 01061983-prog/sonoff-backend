@@ -146,6 +146,37 @@ if(APP_AUTH_ENABLED){
   if(!adminEmail)throw new Error("Impostare EWELINK_APP_ADMIN_EMAIL prima di attivare gli account.");
   const webConfig=JSON.parse(process.env.FIREBASE_WEB_CONFIG||"{}");
   if(!webConfig.apiKey||!webConfig.authDomain||webConfig.projectId!==process.env.FIREBASE_PROJECT_ID)throw new Error("Configurazione pubblica Firebase Auth mancante o non coerente.");
+  const sameOriginGoogle = process.env.EWELINK_SAME_ORIGIN_GOOGLE ??
+    String(new URL(HOME).origin === "https://sonoff-backend-k8sh.onrender.com" && webConfig.projectId === "ewelink-oratorio");
+  if (sameOriginGoogle === "true") {
+    const firebaseHosting = new URL(`https://${webConfig.projectId}.firebaseapp.com`);
+    const authHelper = /^\/__\/auth\/(?:handler|iframe|links)(?:\.js)?$|^\/__\/auth\/experiments\.js$|^\/__\/firebase\/init\.json$/;
+    app.all(authHelper, express.raw({type:"application/x-www-form-urlencoded",limit:"64kb"}), async (req,res) => {
+      if (!["GET","HEAD","POST"].includes(req.method)) return res.sendStatus(405);
+      const url = new URL(firebaseHosting);
+      url.pathname = req.path;
+      url.search = new URL(req.originalUrl, firebaseHosting).search;
+      const form = req.method === "POST" && Buffer.isBuffer(req.body);
+      if (req.method === "POST" && !form) return res.sendStatus(415);
+      try {
+        const response = await fetch(url, {
+          method:req.method,
+          redirect:"manual",
+          signal:AbortSignal.timeout(10000),
+          ...(form ? {body:req.body,headers:{"Content-Type":"application/x-www-form-urlencoded"}} : {})
+        });
+        // Il browser deve ricevere gli helper sul dominio della plancia.
+        if (response.status >= 300 && response.status < 400) return res.sendStatus(502);
+        const type = response.headers.get("content-type");
+        if (type) res.set("Content-Type",type);
+        res.set("X-Content-Type-Options","nosniff");
+        return res.status(response.status).send(Buffer.from(await response.arrayBuffer()));
+      } catch {
+        return res.status(502).send("Accesso Google temporaneamente non disponibile.");
+      }
+    });
+    webConfig.authDomain = new URL(HOME).host;
+  }
   appAccounts=require('./app-accounts')({db:getSceneDatabase,auth:()=>{getSceneDatabase();return require('firebase-admin/auth').getAuth(require('firebase-admin/app').getApps().find(a=>a.name==='san-luigi-scenes'));},secret:APPSECRET,appid:APPID,adminEmail,origin:new URL(HOME).origin,webConfig,programming:()=>requireProgramming()});
   appAccounts.install(app,route);
 }else app.get('/api/app/config',(_req,res)=>res.json({ok:true,enabled:false}));
