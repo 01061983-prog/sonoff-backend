@@ -22,7 +22,7 @@ body.account-locked>main,body.account-locked>#navigationDialog,body.account-lock
 @media(max-width:500px){#accountGate{padding:16px;align-items:start}#accountGate .app-login-card{padding:24px 20px;border-radius:22px;margin:auto 0}}
 
 body.account-admin-page{overflow:auto;min-height:100dvh;background:#f3f7f4}
-body.account-admin-page>main,body.account-admin-page>#navigationDialog,body.account-admin-page>#accountToolbar{display:none}
+body.account-admin-page>main,body.account-admin-page>#navigationDialog,body.account-admin-page>#accountToolbar{display:none!important}
 .account-admin-page #accountAdmin{width:min(1100px,100%);max-height:none;margin:0 auto;border:0;background:transparent;padding:clamp(20px,5vw,56px)}
 .account-admin-page #accountAdmin [hidden],#accountGate [hidden]{display:none!important}
 #accountAdmin .account-admin-heading{flex-wrap:wrap;margin-bottom:20px}

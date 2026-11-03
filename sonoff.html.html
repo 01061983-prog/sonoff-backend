@@ -13,7 +13,7 @@
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <script src="account-auth.js?v=38"></script>
-  <link rel="stylesheet" href="account-auth.css?v=38">
+  <link rel="stylesheet" href="account-auth.css?v=39">
   <script src="text-size.js?v=35"></script>
   <script src="scene-pages.js?v=35"></script>
   <link rel="stylesheet" href="app.css?v=35">
@@ -1951,7 +1951,7 @@
     document.addEventListener("DOMContentLoaded", async () => {
         if(window.AppAccounts){
             const allowed=await window.AppAccounts.bootstrap(BACKEND_URL);
-            if(!allowed||window.AppAccounts.openPage())return;
+            if(!allowed||window.AppAccounts.openPage?.())return;
             if(window.AppAccounts.state.enabled){
                 SCENES_STORAGE_KEY="ewelink_private_scenes_"+window.AppAccounts.state.account.id;
                 startupComplete=false;document.body.classList.add('app-starting');
