@@ -1518,6 +1518,16 @@
             }
         }
     }
+    function resumeVisiblePlancia() {
+        if (document.visibilityState !== 'visible' || authRequired) return;
+        if (connectionPending || !devicesFresh || (cloudScenes && sceneSyncMode !== 'live')) {
+            requestConnectionRecovery(0);
+            return;
+        }
+        // Returning from standby does not require a blocking dashboard reload.
+        openSceneStream();
+        void refreshDeviceStatus();
+    }
     function initConnectionRecovery() {
         connectionInitialized = true;
         window.addEventListener('offline', () => {
@@ -1528,13 +1538,12 @@
             requestConnectionRecovery();
         });
         window.addEventListener('online', () => requestConnectionRecovery());
-        window.addEventListener('pageshow', event => { if (event.persisted) requestConnectionRecovery(); });
+        window.addEventListener('pageshow', event => { if (event.persisted) resumeVisiblePlancia(); });
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden') {
                 closeSceneStream();
-                connectionPending = true;
                 if (connectionTimer !== null) { clearTimeout(connectionTimer); connectionTimer = null; }
-            } else requestConnectionRecovery();
+            } else resumeVisiblePlancia();
         });
         navigator.connection?.addEventListener?.('change', () => requestConnectionRecovery());
         // Also detects silent Wi-Fi/mobile transitions on Safari (no Network Information API).
