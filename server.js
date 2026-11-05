@@ -231,7 +231,7 @@ app.use("/app", express.static(path.join(__dirname, "public"), { index: "index.h
 // Compatibilità con i file caricati accanto a server.js su GitHub.
 // Sono esposti soltanto gli asset elencati, mai il codice del backend.
 const WEBAPP_ASSETS = [
-  "index.html", "sonoff.html.html", "app.css", "text-size.js", "scene-pages.js", "account-auth.js", "account-auth.css", "manifest.webmanifest", "sw.js",
+  "index.html", "sonoff.html.html", "app.css", "text-size.js", "scene-pages.js", "room-map.js", "room-map.css", "account-auth.js", "account-auth.css", "manifest.webmanifest", "sw.js",
   "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png",
   "icons/icon-maskable.png", "icons/apple-touch-icon.png"
 ];
@@ -576,9 +576,43 @@ function cleanRoom(room) {
     if (seen.has(key)) throw cloudError(400, "invalid_room", "Un elemento è stato inserito due volte nella stanza.");
     seen.add(key); return {kind:member.kind, id:member.id};
   });
-  return {id:room.id, name:room.name.trim(), members};
+  const mode=room.mode||"list";
+  if(!["list","map"].includes(mode))throw cloudError(400,"invalid_room","Tipo di stanza non valido.");
+  if(mode==="map"){
+    for(let i=0;i<members.length;i++){
+      const pin=room.members[i];
+      if(pin.kind!=="device"||!Number.isFinite(pin.x)||!Number.isFinite(pin.y)||pin.x<0||pin.x>1||pin.y<0||pin.y>1||!["bulb","power"].includes(pin.icon))
+        throw cloudError(400,"invalid_room","Controlla i dispositivi e le posizioni nell’immagine.");
+      Object.assign(members[i],{x:pin.x,y:pin.y,icon:pin.icon});
+    }
+  }
+  return {id:room.id, name:room.name.trim(), mode, members};
 }
+function roomImageRef(context,id){
+  return getSceneDatabase().collection("ewelinkRoomImages").doc(crypto.createHash("sha256").update(context.ref.path+":"+id).digest("hex"));
+}
+function validateRoomImage(image){
+  if(typeof image!=="string"||image.length>360000||!/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(image)||Buffer.from(image.slice(23),"base64").subarray(0,2).toString("hex")!=="ffd8")
+    throw cloudError(400,"invalid_room_image","Scegli un’immagine JPEG valida, di dimensioni ridotte.");
+  return image;
+}
+function requireRoomEditor(req){
+  if(/iPhone|iPod|Windows Phone|Android.*Mobile/i.test(req.headers?.["user-agent"]||""))
+    throw cloudError(403,"room_editor_device","Crea e modifica le stanze da computer o tablet.");
+}
+app.get("/api/room-image",requireLogin,route(async(req,res)=>{
+  const context=await sceneContext(req),id=req.query.roomId;
+  if(typeof id!=="string"||!/^[a-zA-Z0-9_-]{1,100}$/.test(id))throw cloudError(400,"invalid_room","Stanza non valida.");
+  const workspace=workspaceData(await context.ref.get());
+  const room=workspace.rooms?.find(room=>room.id===id&&room.mode==="map");
+  if(!room)throw cloudError(404,"room_not_found","Stanza non disponibile.");
+  const stored=await roomImageRef(context,id).get();
+  if(!stored.exists||!stored.data().image)throw cloudError(404,"room_image_missing","Immagine non disponibile. Ricaricala da Modifica stanza.");
+  res.json({ok:true,image:stored.data().image,imageVersion:stored.data().version});
+}));
 async function changeRoom(context, body, req) {
+  requireRoomEditor(req);
+  const image=body.room?.image===undefined?undefined:validateRoomImage(body.room.image);
   const incoming = body.op === "room-upsert" ? cleanRoom(body.room) : null;
   const id = incoming?.id || body.id;
   if (typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(id) || !Number.isInteger(body.expectedVersion) || body.expectedVersion < 0)
@@ -594,13 +628,22 @@ async function changeRoom(context, body, req) {
     if (currentExecution(data)) throw cloudError(409,"scene_busy","Attendi la fine del comando prima di modificare le stanze.");
     const rooms = [...(data.rooms || [])], index = rooms.findIndex(room=>room.id === id);
     const actualVersion = index < 0 ? 0 : rooms[index].version || 1;
+    const previous=rooms[index];
     if (actualVersion !== body.expectedVersion) throw cloudError(409,"room_conflict","Questa stanza è cambiata su un altro dispositivo. Riaprila prima di salvare.");
     if (incoming) {
       if (incoming.members.some(member=>member.kind === "scene" ? !(data.scenes || []).some(scene=>scene.id===member.id) : !allowedDevices.has(member.id)))
         throw cloudError(400,"room_member_unavailable","Uno degli elementi non è più disponibile. Rimuovilo dalla stanza oppure aggiorna i dispositivi.");
-      const next = {...incoming,version:actualVersion+1,updatedAt:Date.now()};
+      if(incoming.mode==="map"&&!image&&!previous?.imageVersion)
+        throw cloudError(400,"room_image_required","Carica un’immagine per la stanza.");
+      const next = {...incoming,version:actualVersion+1,updatedAt:Date.now(),
+        ...(incoming.mode==="map"?{imageVersion:image?actualVersion+1:previous.imageVersion}:{})};
+      if(image&&incoming.mode==="map")transaction.set(roomImageRef(context,id),{image,version:next.imageVersion});
+      if(previous?.mode==="map"&&incoming.mode!=="map")transaction.set(roomImageRef(context,id),{image:null,version:actualVersion+1});
       if (index < 0) rooms.push(next); else rooms[index] = next;
-    } else if (index >= 0) rooms.splice(index,1);
+    } else if (index >= 0) {
+      rooms.splice(index,1);
+      if(previous?.mode==="map")transaction.set(roomImageRef(context,id),{image:null,version:actualVersion+1});
+    }
     if (rooms.length > 80 || Buffer.byteLength(JSON.stringify(rooms)) > 150000) throw cloudError(400,"room_limit","Limite stanze raggiunto: massimo 80 stanze.");
     transaction.set(context.ref,{...data,rooms,revision:(data.revision||0)+1,updatedAt:Date.now()});
   });

@@ -15,7 +15,9 @@
   <script src="account-auth.js?v=38"></script>
   <link rel="stylesheet" href="account-auth.css?v=39">
   <script src="text-size.js?v=35"></script>
-  <script src="scene-pages.js?v=35"></script>
+  <script src="scene-pages.js?v=42"></script>
+  <script src="room-map.js?v=42"></script>
+  <link rel="stylesheet" href="room-map.css?v=42">
   <link rel="stylesheet" href="app.css?v=35">
   <style>
     #startupScreen{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:28px;background:#f6f8f6;color:#24382f;text-align:center;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:auto}
@@ -42,7 +44,7 @@
     <button id="sceneNavBtn" class="nav-item active" data-view="scenes" aria-label="Scenari" aria-current="page" aria-controls="sceneSubmenu" aria-expanded="false"><span data-icon="layers"></span><span>Scenari</span><span class="submenu-chevron" aria-hidden="true">⌄</span></button>
     <div id="sceneSubmenu" class="scene-submenu" hidden><button class="submenu-item" onclick="showScenarioBoard()">Apri scenari</button><button id="sceneManageBtn" class="submenu-item" onclick="setSceneManageMode()">Modifica scenari</button><button id="newSceneBtn" class="submenu-item"><span data-icon="plus"></span><span>Aggiungi scenario</span></button></div>
     <button id="roomsNavBtn" class="nav-item" data-view="rooms" aria-label="Stanze" aria-controls="roomsSubmenu" aria-expanded="false"><span data-icon="building"></span><span>Stanze</span><span class="submenu-chevron" aria-hidden="true">⌄</span></button>
-    <div id="roomsSubmenu" class="scene-submenu" hidden><button class="submenu-item" onclick="openRooms()">Apri stanze</button><button id="editCurrentRoomBtn" class="submenu-item" onclick="editRoom(selectedRoomId)" hidden>Modifica stanza aperta</button><button class="submenu-item" onclick="editRoom(null)">Crea nuova stanza</button><button class="submenu-item" onclick="manageRooms()">Modifica o elimina stanze</button></div>
+    <div id="roomsSubmenu" class="scene-submenu" hidden><button class="submenu-item" onclick="openRooms()">Apri stanze</button><button id="editCurrentRoomBtn" class="submenu-item" data-room-edit onclick="editRoom(selectedRoomId)" hidden>Modifica stanza aperta</button><button class="submenu-item" data-room-edit onclick="editRoom(null)">Crea nuova stanza</button><button class="submenu-item" data-room-edit onclick="manageRooms()">Modifica o elimina stanze</button></div>
     <button class="nav-item" data-view="programming" aria-label="Programmazione"><span data-icon="calendar"></span><span>Programmazione</span></button>
     <button class="nav-item" data-view="install" aria-label="La tua webapp"><span data-icon="download"></span><span>La tua webapp</span></button>
   </nav>
@@ -76,9 +78,9 @@
   <section id="settingsView" class="view" aria-labelledby="scenesHeading"><div class="page-heading"><div><p class="eyebrow">PICCOLI GESTI, GRANDI COMODITÀ</p><h1 id="scenesHeading">Scenari<span class="green-dot">.</span></h1><p class="heading-sub">Combina più azioni in un unico pulsante.</p></div></div><div id="scenesList" class="scenes-grid-settings"></div><div id="sceneEditor" class="scene-editor" style="display:none"><div class="editor-heading"><div><p class="eyebrow">PERSONALIZZA</p><h2 id="editorTitle">Crea uno scenario</h2></div><button class="icon-button" onclick="cancelSceneEdit()" aria-label="Chiudi editor"><span data-icon="close"></span></button></div><div class="form-grid"><div class="form-row"><label for="sceneName">Nome scenario</label><input id="sceneName" type="text" maxlength="100" placeholder="Es. Serata in oratorio"></div><div class="form-row"><label for="sceneType">Esecuzione</label><select id="sceneType"><option value="manuale">Manuale · con un tocco</option><option value="crepuscolare" disabled>Crepuscolare · non disponibile</option></select></div></div><h3 class="editor-subtitle">Scegli dispositivi e azioni</h3><p class="page-note">Per cancello e relè con autoritorno già configurato scegli “Impulso”. Il colore indica lo stato del relè, non la posizione del cancello.</p><div id="sceneDevicesList" class="devices-list"></div><div class="editor-footer"><button class="secondary-button" onclick="cancelSceneEdit()">Annulla</button><button class="primary-button" onclick="saveScene()"><span data-icon="check"></span>Salva scenario</button></div></div></section>
 
   <section id="roomsView" class="view" style="display:none" aria-labelledby="roomsHeading">
-    <div class="page-heading"><div><h1 id="roomsHeading">Stanze<span class="green-dot">.</span></h1><p class="heading-sub">Raccogli scenari e dispositivi nei tuoi spazi. Aprire una stanza non invia comandi.</p></div><button class="primary-button" onclick="editRoom(null)">Crea nuova stanza</button></div>
+    <div class="page-heading"><div><h1 id="roomsHeading">Stanze<span class="green-dot">.</span></h1><p class="heading-sub">Raccogli scenari e dispositivi nei tuoi spazi. Aprire una stanza non invia comandi.</p></div><button class="primary-button" data-room-edit onclick="editRoom(null)">Crea nuova stanza</button></div>
     <p id="roomsStatus" class="page-note" role="status"></p><div id="roomsList" class="rooms-grid"></div>
-    <section id="roomDetail" hidden aria-labelledby="roomTitle"><div class="room-toolbar"><button class="secondary-button" onclick="openRooms()">Tutte le stanze</button><h2 id="roomTitle"></h2><button class="secondary-button" onclick="editRoom(selectedRoomId)">Modifica stanza</button></div><div id="roomMembers" class="room-members"></div></section>
+    <section id="roomDetail" hidden aria-labelledby="roomTitle"><div class="room-toolbar"><button class="secondary-button" onclick="openRooms()">Tutte le stanze</button><h2 id="roomTitle"></h2><button class="secondary-button" data-room-edit onclick="editRoom(selectedRoomId)">Modifica stanza</button></div><div id="roomMembers" class="room-members"></div></section>
   </section>
 
   <section id="programmingView" class="view" style="display:none" aria-labelledby="programmingHeading">
@@ -1230,6 +1232,12 @@
 
     function initApp() {
         hydrateIcons();
+        window.RoomMap?.init({
+            devices:()=>currentDevices,deviceCard,icon,
+            workspace:()=>sceneWorkspace?.id||'',
+            scope:()=>(window.AppAccounts?.state.account?.id||'')+':'+(sceneWorkspace?.id||''),
+            request:apiRequest,redraw:renderRooms
+        });
         document.getElementById('roomEditorForm').addEventListener('submit',saveRoom);
         initDeviceGestures();
         document.getElementById("menuBtn").addEventListener("click", openNavigation);
@@ -1294,19 +1302,23 @@
     function renderRooms() {
         const list=document.getElementById('roomsList'),detail=document.getElementById('roomDetail');
         if (!list || !detail) return;
+        window.RoomMap?.updatePermissions();
         const ready=sceneSyncMode==='live'&&!authRequired;
         document.getElementById('roomsStatus').textContent=ready?'Stanze sincronizzate tra i dispositivi collegati alla stessa casa eWeLink.':'Attendi la connessione per creare o modificare le stanze.';
         const room=cloudRooms.find(room=>room.id===selectedRoomId);
         document.getElementById('roomsView').dataset.management=String(roomsManaging);
         document.getElementById('roomsView').dataset.room=room?.id||'';
-        document.getElementById('editCurrentRoomBtn').hidden=!room;
+        document.getElementById('editCurrentRoomBtn').hidden=!room||!window.RoomMap?.canEdit();
         list.hidden=Boolean(room);detail.hidden=!room;
+        document.getElementById('roomsView').dataset.mode=room?.mode||'list';
         if (!room) {
-            list.innerHTML=cloudRooms.length?cloudRooms.map(room=>`<article class="room-folder scenario-unit" data-board-key="room:${escapeHtml(room.id)}"><button type="button" class="room-open scenario-pad" onclick="openRoom(${jsArg(room.id)})"><span class="pad-top"><span class="pad-icon">${icon('building')}</span><span class="pad-dot"></span></span><span class="pad-name">${escapeHtml(room.name)}</span><span class="pad-state">${room.members.length} ${room.members.length===1?'elemento':'elementi'}</span><span class="pad-result">Apri stanza →</span></button>${roomsManaging?`<div class="room-folder-actions"><button class="secondary-button" onclick="editRoom(${jsArg(room.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteRoom(${jsArg(room.id)})">Elimina</button></div>`:''}</article>`).join(''):'<div class="empty-state"><h2>Nessuna stanza</h2><p>Crea una stanza e scegli gli scenari o i dispositivi da raccogliere.</p></div>';
+            list.innerHTML=cloudRooms.length?cloudRooms.map(room=>`<article class="room-folder scenario-unit" data-board-key="room:${escapeHtml(room.id)}"><button type="button" class="room-open scenario-pad" onclick="openRoom(${jsArg(room.id)})"><span class="pad-top"><span class="pad-icon">${icon('building')}</span><span class="pad-dot"></span></span><span class="pad-name">${escapeHtml(room.name)}</span><span class="pad-state">${room.members.length} ${room.members.length===1?'elemento':'elementi'}</span><span class="pad-result">Apri stanza →</span></button>${roomsManaging&&window.RoomMap?.canEdit()?`<div class="room-folder-actions"><button class="secondary-button" data-room-edit onclick="editRoom(${jsArg(room.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteRoom(${jsArg(room.id)})">Elimina</button></div>`:''}</article>`).join(''):'<div class="empty-state"><h2>Nessuna stanza</h2><p>Crea una stanza e scegli gli scenari o i dispositivi da raccogliere.</p></div>';
             return;
         }
         document.getElementById('roomTitle').textContent=room.name;
         const members=document.getElementById('roomMembers');members.innerHTML='';
+        members.classList.remove('room-map-members');
+        if(room.mode==='map'&&window.RoomMap){window.RoomMap.render(room,members);updateControlLocks();return;}
         for (const member of room.members) {
             if (member.kind==='scene') {
                 const scene=loadUserScenes().find(scene=>scene.id===member.id);
@@ -1321,6 +1333,7 @@
         updateControlLocks();
     }
     function editRoom(id) {
+        if(!window.RoomMap?.canEdit()){setMessage('Crea e modifica le stanze da computer o tablet.','error');return;}
         setView('rooms');
         if (authRequired||sceneSyncMode!=='live'||!sceneWorkspace) {setMessage('Attendi la sincronizzazione prima di modificare le stanze.','error');return;}
         const room=cloudRooms.find(room=>room.id===id);
@@ -1333,21 +1346,25 @@
         document.getElementById('roomEditorTitle').textContent=room?'Modifica stanza':'Nuova stanza';
         document.getElementById('roomName').value=room?.name||'';
         document.getElementById('roomChoices').innerHTML=choices.length?choices.map(choice=>`<label class="room-choice"><input type="checkbox" data-room-member="${escapeHtml(choice.key)}" ${selected.has(choice.key)?'checked':''}><span><strong>${escapeHtml(choice.name)}</strong><small>${choice.kind}</small></span></label>`).join(''):'<p>Nessun elemento disponibile al momento. Puoi salvare la stanza vuota.</p>';
+        window.RoomMap?.begin(room);
         document.getElementById('roomEditorError').textContent='';document.getElementById('roomSaveBtn').disabled=false;
         document.getElementById('roomEditorDialog').showModal();document.getElementById('roomName').focus();
     }
     async function saveRoom(event) {
-        event.preventDefault();if(roomSaveBusy||!editingRoom)return;
+        event.preventDefault();if(roomSaveBusy||!editingRoom||!window.RoomMap?.canEdit())return;
         const error=document.getElementById('roomEditorError'),name=document.getElementById('roomName').value.trim();
         if(!name){error.textContent='Scrivi il nome della stanza.';return;}
         if(authRequired||sceneSyncMode!=='live'){error.textContent='Connessione interrotta. Attendi il ripristino prima di salvare.';return;}
         const members=[...document.querySelectorAll('[data-room-member]:checked')].map(input=>{const [kind,id]=input.dataset.roomMember.split(':');return {kind,id};});
+        let visual;
+        try{visual=window.RoomMap?.collect()||{mode:'list'};}catch(err){error.textContent=err.message;return;}
         roomSaveBusy=true;document.getElementById('roomSaveBtn').disabled=true;
-        try {await cloudSceneChange({op:'room-upsert',room:{id:editingRoom.id,name,members},expectedVersion:editingRoom.version});selectedRoomId=editingRoom.id;document.getElementById('roomEditorDialog').close();renderRooms();setMessage('Stanza salvata e sincronizzata.','');}
+        try {await cloudSceneChange({op:'room-upsert',room:{id:editingRoom.id,name,members,...visual},expectedVersion:editingRoom.version});selectedRoomId=editingRoom.id;document.getElementById('roomEditorDialog').close();renderRooms();setMessage('Stanza salvata e sincronizzata.','');}
         catch(err){error.textContent=err.message;}
         finally{roomSaveBusy=false;document.getElementById('roomSaveBtn').disabled=false;}
     }
     async function deleteRoom(id) {
+        if(!window.RoomMap?.canEdit())return;
         const room=cloudRooms.find(room=>room.id===id);if(!room)return;
         if(!window.confirm('Eliminare la stanza «'+room.name+'»? Gli scenari e i dispositivi al suo interno restano disponibili.'))return;
         try{await cloudSceneChange({op:'room-delete',id,expectedVersion:room.version});if(selectedRoomId===id)selectedRoomId=null;renderRooms();setMessage('Stanza eliminata. Scenari e dispositivi conservati.','');}

@@ -1,0 +1,43 @@
+.room-map-stage{position:relative;aspect-ratio:2/3;background:#e7eee9;border:1px solid #cad8cd;border-radius:16px;isolation:isolate;margin:12px auto;width:100%;max-width:600px}
+.room-map-image{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;border-radius:inherit;pointer-events:none;z-index:-1}
+.room-map-pin{position:absolute;transform:translate(-50%,-50%);width:64px;min-height:54px;border:2px solid #fff;border-radius:16px;padding:8px 4px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;color:white;background:#c82d3c;box-shadow:0 3px 0 #74202d,0 5px 18px #0005;cursor:pointer;touch-action:manipulation;font:inherit}
+.room-map-pin svg{width:25px;height:25px;flex-shrink:0}
+.room-map-pin.state-on{background:#138258;box-shadow:0 3px 0 #07583b,0 5px 18px #0005}
+.room-map-pin.state-running{background:#246ed3;box-shadow:0 3px 0 #174a90,0 5px 18px #0005}
+.room-map-pin.state-offline{background:#697586;box-shadow:0 3px 0 #44505f,0 5px 18px #0005}
+.room-map-pin:disabled{opacity:1;cursor:default}
+.room-map-pin small{font-size:.58rem;line-height:1.2}
+.room-map-label{position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);width:max-content;max-width:110px;text-align:center;white-space:normal;overflow-wrap:anywhere;color:#fff;background:#17372ee8;border-radius:6px;padding:3px 5px;font-size:.7rem;line-height:1.2;pointer-events:none}
+.map-edit-stage .room-map-pin{touch-action:none;cursor:grab;background:#246ed3}
+.map-edit-stage .room-map-pin:focus-visible{outline:4px solid #eead2c;outline-offset:4px}
+.room-map-status{position:absolute;top:0;left:0;right:0;margin:0;padding:10px;background:#fffffff0;font-size:.8rem;color:#21392f}
+#roomMapFields{display:grid;gap:10px;margin:16px 0}
+#roomMapFields select{font:inherit;padding:12px;border:1px solid #b9cfc1;border-radius:12px;background:#fff;color:#21392f;width:100%}
+#roomMapEditor[hidden],.room-choice[hidden],[data-room-edit][hidden]{display:none!important}
+#roomMapEditor{display:grid;gap:10px}
+#roomMapEditor p{font-size:.85rem;line-height:1.5}
+#roomEditorDialog{width:min(760px,95vw);max-height:92dvh;overflow:auto}
+#roomEditorDialog input[type=file]{max-width:100%}
+#roomsView[data-mode=map] #roomMembers{display:block!important;overflow:visible}
+#roomsView[data-mode=map] .room-map-stage{width:min(100%,600px)}
+#roomsView[data-mode=map] .room-toolbar{display:flex}
+@media(max-width:600px){.room-map-pin{width:52px;min-height:48px;padding:5px 2px}.room-map-label{max-width:92px;font-size:.65rem}}
+#roomMapDraft[hidden]{display:none!important}
+.room-map-pin .command-progress{position:absolute;inset:3px;padding:3px;background:#246ed3;display:flex;align-items:center;justify-content:center;border-radius:12px}
+.room-map-pin .command-progress-track{display:none}
+body.room-map-active{height:100dvh;overflow:hidden}
+body.room-map-active .main-content{height:100dvh;min-height:0;max-width:none;display:flex;flex-direction:column;overflow:hidden;padding-bottom:max(12px,env(safe-area-inset-bottom))}
+body.room-map-active .topbar{position:relative;flex:0 0 64px;min-height:64px;height:64px}
+body.room-map-active #roomsView{display:flex!important;flex:1;min-height:0;flex-direction:column;padding-top:4px}
+body.room-map-active #roomsView>.page-heading,body.room-map-active #roomsStatus,body.room-map-active footer,body.room-map-active .site-footer,body.room-map-active .scene-pagination{display:none!important}
+body.room-map-active #roomDetail{display:flex;flex-direction:column;flex:1;min-height:0}
+body.room-map-active .room-toolbar{flex:0 0 auto;gap:12px;margin:0 0 8px;align-items:center}
+body.room-map-active .room-toolbar h2{font-size:1.1rem;margin:0;flex:1}
+body.room-map-active .room-toolbar button{font-size:.75rem;padding:8px 12px;min-height:40px}
+body.room-map-active #roomMembers{display:flex!important;flex:1;min-height:0;align-items:center;justify-content:center;margin:0;padding-bottom:12px}
+body.room-map-active #roomMembers .room-map-stage{width:min(100%,calc((100dvh - 190px)*2/3));margin:0;flex-shrink:0}
+body.room-map-active .notification{flex:0 0 auto;max-height:10dvh;overflow:auto}
+button.room-map-pin:hover:not(:disabled){background:#d73c49;border-color:#fff}
+button.room-map-pin.state-on:hover:not(:disabled){background:#179565}
+button.room-map-pin.state-running:hover:not(:disabled){background:#246ed3}
+button.room-map-pin:active:not(:disabled){transform:translate(-50%,-50%);box-shadow:0 1px 0 #17372e,0 3px 12px #0005}

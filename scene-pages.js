@@ -53,14 +53,15 @@
   }
   function layout(){
    const sceneEnabled=document.body.dataset.view==='scenes'&&editor.style.display!=='block'&&!sceneGrid.querySelector('.pad-management');
-   const roomEnabled=document.body.dataset.view==='rooms'&&roomsView.dataset.management!=='true';
+   document.body.classList.toggle('room-map-active',document.body.dataset.view==='rooms'&&roomsView.dataset.mode==='map');
+   const roomEnabled=document.body.dataset.view==='rooms'&&roomsView.dataset.management!=='true'&&roomsView.dataset.mode!=='map';
    document.body.classList.toggle('scenes-paged',sceneEnabled);document.body.classList.toggle('rooms-paged',roomEnabled);
    place(scenes,sceneEnabled);place(rooms,roomEnabled);
   }
   for(const grid of [sceneGrid,roomList,members])new MutationObserver(schedule).observe(grid,{childList:true});
   new MutationObserver(schedule).observe(editor,{attributes:true,attributeFilter:['style']});
   new MutationObserver(schedule).observe(detail,{attributes:true,attributeFilter:['hidden']});
-  new MutationObserver(schedule).observe(roomsView,{attributes:true,attributeFilter:['data-room','data-management']});
+  new MutationObserver(schedule).observe(roomsView,{attributes:true,attributeFilter:['data-room','data-management','data-mode']});
   new MutationObserver(schedule).observe(document.body,{attributes:true,attributeFilter:['data-view']});
   new MutationObserver(schedule).observe(document.documentElement,{attributes:true,attributeFilter:['data-text-size']});
   if(typeof ResizeObserver!=='undefined'){const observer=new ResizeObserver(schedule);for(const grid of [sceneGrid,roomList,members])observer.observe(grid);}
