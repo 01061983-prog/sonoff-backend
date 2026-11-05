@@ -18,13 +18,15 @@
  function message(text){$('accountMessage').textContent=text;}
  function translate(e){return ({'auth/invalid-credential':'Email o password non corretti.','auth/invalid-email':'Inserisci un indirizzo email valido.','auth/account-exists-with-different-credential':'Questa email usa già un altro metodo. Accedi con Google oppure recupera la password.','auth/operation-not-allowed':'Metodo di accesso non ancora disponibile. Contatta l’amministratore.','auth/user-disabled':'Account sospeso. Contatta l’amministratore.','auth/email-already-in-use':'Email già registrata. Accedi oppure recupera la password.','auth/weak-password':'Scegli una password di almeno 8 caratteri.','auth/too-many-requests':'Troppi tentativi. Attendi prima di riprovare.','auth/popup-closed-by-user':'Accesso Google annullato.','auth/popup-blocked':'Il browser ha bloccato la finestra Google. Apri la plancia direttamente in Safari o Chrome e riprova.','auth/network-request-failed':'Connessione assente o cambiata. Riprova.','auth/unauthorized-domain':'Accesso Google non ancora autorizzato per questo sito. Contatta l’amministratore.'})[e.code]||e.message||'Accesso non riuscito.';}
  async function sdk(){
-  if(!sdkPromise)sdkPromise=Promise.all([import('https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js'),import('https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js')]).then(async([app,auth])=>{fbAuth=auth.getAuth(app.initializeApp(config.firebase,'ewelink-webapp'));await auth.setPersistence(fbAuth,auth.inMemoryPersistence);fbAuth.languageCode='it';return auth;}).catch(e=>{sdkPromise=null;throw e;});
+  if(!sdkPromise)sdkPromise=Promise.all([import('https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js'),import('https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js')]).then(async([app,auth])=>{fbAuth=auth.getAuth(app.initializeApp(config.firebase,'ewelink-webapp'));fbAuth.languageCode='it';return auth;}).catch(e=>{sdkPromise=null;throw e;});
   return sdkPromise;
  }
  function gate(text){
   document.body.classList.add('account-locked');$('accountGate').hidden=false;message(text||'Accedi alla tua plancia. Il collegamento eWeLink si fa solo la prima volta.');
   document.querySelectorAll('dialog[open]').forEach(d=>d.close());
   if(typeof window.finishStartup==='function')window.finishStartup();
+  const splash=$('startupScreen');if(splash)splash.hidden=true;
+  document.body.classList.remove('app-starting');
  }
  function branding(){
   const name=state.account.name;
@@ -50,12 +52,24 @@
   if(readyResolve){readyResolve(true);readyResolve=null;}
   return true;
  }
- async function exchange(user){
+ async function signInPersistence(redirect=false){
+  const a=await sdk();
+  await a.setPersistence(fbAuth,$('accountRemember').checked?a.browserLocalPersistence:redirect?a.browserSessionPersistence:a.inMemoryPersistence);
+  return a;
+ }
+ function completing(){
+  $('accountGate').hidden=true;
+  document.body.classList.add('account-locked','app-starting');
+  const splash=$('startupScreen');
+  if(splash){splash.hidden=false;splash.setAttribute('aria-busy','true');}
+  const status=$('startupStatus');if(status)status.textContent='Completamento dell’accesso…';
+ }
+ async function exchange(user,{renew=false}={}){
   if(!user.emailVerified){message('Conferma l’email ricevuta, poi torna qui e accedi.');return;}
-  message('Completamento dell’accesso…');
-  await request('/api/app/login',{idToken:await user.getIdToken(),remember:$('accountRemember').checked});
-  // La sessione della plancia è indipendente dalla pulizia del login Firebase.
-  void (await sdk()).signOut(fbAuth).catch(()=>{});
+  completing();
+  const remember=renew||$('accountRemember').checked;
+  await request(renew?'/api/app/renew':'/api/app/login',{idToken:await user.getIdToken(true),remember});
+  if(!remember)void (await sdk()).signOut(fbAuth).catch(()=>{});
   let current;
   for(const delay of [0,250,750]){
    if(delay)await new Promise(resolve=>setTimeout(resolve,delay));
@@ -68,21 +82,20 @@
   const firstAccess=Boolean(readyResolve);
   if(accepted(current)&&!firstAccess)location.reload();
  }
- async function run(fn){if(busy)return;busy=true;$('accountGate').setAttribute('aria-busy','true');document.querySelectorAll('#accountGate button').forEach(b=>b.disabled=true);try{await fn();}catch(e){message(translate(e));}finally{busy=false;$('accountGate').setAttribute('aria-busy','false');document.querySelectorAll('#accountGate button').forEach(b=>b.disabled=false);}}
+ async function run(fn){if(busy)return;busy=true;$('accountGate').setAttribute('aria-busy','true');document.querySelectorAll('#accountGate button').forEach(b=>b.disabled=true);try{await fn();}catch(e){gate(translate(e));}finally{busy=false;$('accountGate').setAttribute('aria-busy','false');document.querySelectorAll('#accountGate button').forEach(b=>b.disabled=false);}}
  function mount(){
   const section=document.createElement('section');section.id='accountGate';section.hidden=true;section.setAttribute('aria-label','Accesso alla webapp');
-  section.innerHTML=`<div class="app-login-card"><img src="icons/icon.svg" width="72" height="72" alt=""><p class="account-eyebrow">LA TUA PLANCIA</p><h1>Benvenuto.</h1><p id="accountMessage" role="status" aria-live="polite"></p><div id="accountCredentials"><label class="account-remember"><input id="accountRemember" type="checkbox"> Resta connesso su questo dispositivo</label><p class="account-small">Conserva l’accesso per un massimo di 14 giorni. Usalo soltanto sui tuoi dispositivi.</p><button id="accountGoogle" class="primary-button" type="button">Continua con Google</button><button id="accountGoogleRedirect" class="account-link" type="button">Apri Google nella pagina</button><div class="account-divider">oppure con la tua email</div><form id="accountForm"><label for="accountEmail">Email</label><input id="accountEmail" type="email" autocomplete="username" required maxlength="254"><label for="accountPassword">Password</label><input id="accountPassword" type="password" autocomplete="current-password" required maxlength="4096"><button class="primary-button" type="submit">Accedi</button><button id="accountRegister" class="secondary-button" type="button">Crea il tuo account</button><button id="accountReset" class="account-link" type="button">Password dimenticata?</button><button id="accountVerify" class="account-link" type="button">Invia di nuovo la conferma email</button></form></div><button id="accountRetry" class="account-link" type="button">Ricarica l’accesso</button><div id="accountPending" hidden><button id="accountCheck" class="primary-button">Controlla l’ammissione</button><button id="accountPendingLogout" class="secondary-button">Esci</button></div></div>`;
+  section.innerHTML=`<div class="app-login-card"><img src="icons/icon.svg" width="72" height="72" alt=""><p class="account-eyebrow">LA TUA PLANCIA</p><h1>Benvenuto.</h1><p id="accountMessage" role="status" aria-live="polite"></p><div id="accountCredentials"><label class="account-remember"><input id="accountRemember" type="checkbox"> Ricorda questo dispositivo</label><p class="account-small">Rimani connesso fino a quando esci o l’amministratore revoca l’accesso. Usalo soltanto sui tuoi dispositivi.</p><button id="accountGoogle" class="primary-button" type="button">Continua con Google</button><button id="accountGoogleRedirect" class="account-link" type="button">Apri Google nella pagina</button><div class="account-divider">oppure con la tua email</div><form id="accountForm"><label for="accountEmail">Email</label><input id="accountEmail" type="email" autocomplete="username" required maxlength="254"><label for="accountPassword">Password</label><input id="accountPassword" type="password" autocomplete="current-password" required maxlength="4096"><button class="primary-button" type="submit">Accedi</button><button id="accountRegister" class="secondary-button" type="button">Crea il tuo account</button><button id="accountReset" class="account-link" type="button">Password dimenticata?</button><button id="accountVerify" class="account-link" type="button">Invia di nuovo la conferma email</button></form></div><button id="accountRetry" class="account-link" type="button">Ricarica l’accesso</button><div id="accountPending" hidden><button id="accountCheck" class="primary-button">Controlla l’ammissione</button><button id="accountPendingLogout" class="secondary-button">Esci</button></div></div>`;
   document.body.append(section);
   const bar=document.createElement('div');bar.id='accountToolbar';bar.innerHTML='<span id="accountIdentity" hidden></span><button id="accountReturn" hidden>Torna alla gestione</button><button id="accountManage" hidden>Gestione account</button>';document.body.append(bar);
   $('accountRetry').onclick=()=>location.reload();
-  $('accountForm').addEventListener('submit',e=>{e.preventDefault();void run(async()=>exchange((await (await sdk()).signInWithEmailAndPassword(fbAuth,$('accountEmail').value.trim(),$('accountPassword').value)).user));});
-  $('accountGoogle').onclick=()=>void run(async()=>{const a=await sdk();await exchange((await a.signInWithPopup(fbAuth,new a.GoogleAuthProvider())).user);});
+  $('accountForm').addEventListener('submit',e=>{e.preventDefault();void run(async()=>exchange((await (await signInPersistence()).signInWithEmailAndPassword(fbAuth,$('accountEmail').value.trim(),$('accountPassword').value)).user));});
+  $('accountGoogle').onclick=()=>void run(async()=>{const a=await signInPersistence();await exchange((await a.signInWithPopup(fbAuth,new a.GoogleAuthProvider())).user);});
   const redirect = $('accountGoogleRedirect');
   redirect.hidden = !config?.firebase?.authDomain || config.firebase.authDomain !== location.host;
   redirect.onclick=()=>void run(async()=>{
-   const a=await sdk();
+   const a=await signInPersistence(true);
    sessionStorage.setItem('ewelink_auth_remember',$('accountRemember').checked?'yes':'no');
-   await a.setPersistence(fbAuth,a.browserSessionPersistence);
    await a.signInWithRedirect(fbAuth,new a.GoogleAuthProvider());
   });
   $('accountRegister').onclick=()=>void run(async()=>{if(!$('accountForm').reportValidity())return;if($('accountPassword').value.length<8){message('Per creare l’account scegli una password di almeno 8 caratteri.');return;}const a=await sdk(),c=await a.createUserWithEmailAndPassword(fbAuth,$('accountEmail').value.trim(),$('accountPassword').value);await a.sendEmailVerification(c.user);await a.signOut(fbAuth);$('accountPassword').value='';message('Account creato. Conferma l’email ricevuta e accedi. L’amministratore dovrà ammetterti alla plancia.');});
@@ -205,9 +218,24 @@
   try{
    config=await request('/api/app/config');if(!config.enabled)return true;
    state.enabled=true;mount();
-   try{const current=await request('/api/app/session');if(current.authenticated===false)gate();else if(accepted(current))return true;}catch(e){gate(e.code==='app_auth_required'?'':e.message);}
-   const a=await sdk();const redirected=await a.getRedirectResult(fbAuth);
-   if(redirected){$('accountRemember').checked=sessionStorage.getItem('ewelink_auth_remember')==='yes';sessionStorage.removeItem('ewelink_auth_remember');await exchange(redirected.user);}
+   let sessionError='';
+   try{
+    const current=await request('/api/app/session');
+    if(current.authenticated!==false){if(accepted(current))return true;return ready;}
+   }catch(e){
+    if(e.code!=='app_auth_required')sessionError=e.message;
+   }
+   const a=await sdk();
+   const redirected=await a.getRedirectResult(fbAuth);
+   await fbAuth.authStateReady();
+   if(redirected){
+    $('accountRemember').checked=sessionStorage.getItem('ewelink_auth_remember')==='yes';
+    sessionStorage.removeItem('ewelink_auth_remember');
+    await exchange(redirected.user);
+   }else if(fbAuth.currentUser){
+    $('accountRemember').checked=true;
+    await exchange(fbAuth.currentUser,{renew:true});
+   }else gate(sessionError);
    return ready;
   }catch(e){
    // Non aprire la plancia con il controllo account indisponibile.

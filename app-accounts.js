@@ -44,15 +44,18 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   return req.appAccount;
  }
  async function admin(req){await session(req,{allowActAs:false});if(!desktop(req))throw fail(403,'app_desktop','La gestione account è disponibile da computer.');if(!await isAdmin(req.appActor))throw fail(403,'app_forbidden','Accesso riservato all’amministratore.');return req.appActor;}
- async function identify(token){
+ async function identify(token,{renew=false}={}){
   const d=await auth().verifyIdToken(token,true);
   if(d.email_verified!==true||!d.email)throw fail(403,'app_verify_email','Conferma la tua email prima di accedere.');
-  if(!Number.isFinite(d.auth_time)||now()/1000-d.auth_time>300||d.auth_time>now()/1000+60)throw fail(401,'app_recent_login','Accedi nuovamente per confermare l’identità.');
+  const verifiedTime=renew?d.iat:d.auth_time;
+  if(!Number.isFinite(verifiedTime)||now()/1000-verifiedTime>300||verifiedTime>now()/1000+60)throw fail(401,'app_recent_login','Accedi nuovamente per confermare l’identità.');
   const email=d.email.trim().toLowerCase(),id=accountId(email),ref=profiles().doc(id),ar=adminRef();
   const profile=await db().runTransaction(async t=>{
    const s=await t.get(ref),a=s.data(),root=await t.get(ar);
+   if(renew&&(!a?.uid||a.uid!==d.uid||!Number.isFinite(d.auth_time)||d.auth_time*1000<Number(a.invalidBefore||0)))throw fail(401,'app_auth_required','Accedi nuovamente per confermare il dispositivo.');
    if(a?.uid&&a.uid!==d.uid)throw fail(409,'app_identity_conflict','Questa email è già associata a un’altra identità. Contatta l’amministratore.');
    if(['blocked','deleted'].includes(a?.status))throw fail(403,'app_blocked',disabledMessage);
+   if(renew&&a.status!=='active')throw fail(403,'app_pending','Account in attesa di ammissione da parte dell’amministratore.');
    const bootstrap=email===adminEmail&&(!root.exists||root.data().uid===d.uid);
    if(email===adminEmail&&root.exists&&root.data().uid!==d.uid)throw fail(403,'app_admin_identity','Identità amministratore non corrispondente.');
    const next={...(a||{}),email,uid:d.uid,name:a?.name||d.name||email.split('@')[0],status:bootstrap?'active':a?.status||'pending',role:bootstrap?'admin':'user',createdAt:a?.createdAt||now(),updatedAt:now()};
@@ -61,14 +64,14 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   return profile;
  }
  const loginAttempts=new Map();
- async function login(req,res){
+ async function login(req,res,{renew=false}={}){
   originCheck(req);
   const address=req.ip||req.socket?.remoteAddress||'unknown',time=now();
   for(const [key,v]of loginAttempts)if(v.until<=time)loginAttempts.delete(key);
   const attempt=loginAttempts.get(address)||{count:0,until:time+600000};
   if(++attempt.count>30)throw fail(429,'app_rate_limit','Troppi tentativi di accesso. Attendi qualche minuto.');
   loginAttempts.set(address,attempt);if(typeof req.body?.idToken!=='string'||req.body.idToken.length>20000)throw fail(400,'app_token','Accesso non valido.');
-  const a=await identify(req.body.idToken),remember=req.body.remember===true,expiresIn=remember?14*DAY:12*3600000;
+  const a=await identify(req.body.idToken,{renew}),remember=renew||req.body.remember===true,expiresIn=remember?14*DAY:12*3600000;
   const cookie=await auth().createSessionCookie(req.body.idToken,{expiresIn});
   res.cookie(COOKIE,cookie,{...opts,...(remember?{maxAge:expiresIn}:{})});res.clearCookie(ACT,opts);
   // Solo il proprietario originale può adottare la sessione eWeLink precedente.
@@ -155,6 +158,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   app.get('/api/app/config',(_req,res)=>res.json({ok:true,enabled:true,firebase:webConfig}));
   app.get('/api/app/session',wrap(async(req,res)=>{try{res.json(await status(req));}catch(e){if(e.code==='app_auth_required'){if(req.cookies?.[COOKIE])res.clearCookie(COOKIE,opts);return res.json({ok:true,authenticated:false});}if(e.code==='app_actas_expired')res.clearCookie(ACT,opts);throw e;}}));
   app.post('/api/app/login',wrap(async(req,res)=>res.json(await login(req,res))));
+  app.post('/api/app/renew',wrap(async(req,res)=>res.json(await login(req,res,{renew:true}))));
   app.post('/api/app/logout',wrap(async(req,res)=>{csrf(req);res.clearCookie(COOKIE,opts);res.clearCookie(ACT,opts);res.json({ok:true});}));
   app.get('/api/app/accounts',wrap(async(req,res)=>res.json(await manage(req,res))));
   app.post('/api/app/accounts',wrap(async(req,res)=>res.json(await manage(req,res))));
