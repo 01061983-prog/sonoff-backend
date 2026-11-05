@@ -3,6 +3,7 @@
  'use strict';
  let api, draft=null, imageEpoch=0, imageBusy=false, drag=null, selectedPin=null;
  const images=new Map();
+ let sizeObserver;
  const $=id=>document.getElementById(id);
  const clamp=value=>Math.max(.08,Math.min(.92,value));
  function canEdit(){
@@ -84,13 +85,22 @@
    else{button.disabled=true;button.classList.add('state-offline');button.title='Dispositivo non disponibile';const status=document.createElement('small');status.textContent='Non disponibile';button.append(status);}
   }
   button.classList.add('room-map-pin');
-  const label=document.createElement('span');label.className='room-map-label';label.textContent=device?.name||pin.id;button.append(label);
+  if(editing){const label=document.createElement('span');label.className='room-map-label';label.textContent=device?.name||pin.id;button.append(label);}
   place(button,pin);return button;
+ }
+ function fit(stage){
+  if(!stage.isConnected)return;
+  const rect=stage.parentElement.getBoundingClientRect();
+  const width=Math.max(0,Math.min(rect.width,rect.height*2/3));
+  stage.style.width=width+'px';
  }
  function render(room,container){
   container.classList.add('room-map-members');
   const stage=document.createElement('div');stage.className='room-map-stage';stage.setAttribute('aria-label',room.name);container.append(stage);
   for(const pin of room.members)stage.append(pinButton(pin,false));
+  sizeObserver?.disconnect();
+  sizeObserver=new ResizeObserver(()=>fit(stage));
+  sizeObserver.observe(container);requestAnimationFrame(()=>fit(stage));
   const status=document.createElement('p');status.className='room-map-status';status.textContent='Caricamento immagine…';stage.append(status);
   readImage(room).then(image=>{if(stage.isConnected){background(stage,image);status.remove();}}).catch(error=>{if(stage.isConnected){status.textContent=error.message;const retry=document.createElement('button');retry.textContent='Riprova';retry.onclick=()=>api.redraw();status.append(retry);}});
  }

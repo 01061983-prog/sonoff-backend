@@ -41,3 +41,8 @@ button.room-map-pin:hover:not(:disabled){background:#d73c49;border-color:#fff}
 button.room-map-pin.state-on:hover:not(:disabled){background:#179565}
 button.room-map-pin.state-running:hover:not(:disabled){background:#246ed3}
 button.room-map-pin:active:not(:disabled){transform:translate(-50%,-50%);box-shadow:0 1px 0 #17372e,0 3px 12px #0005}
+body.room-map-active #roomsView #roomMembers{display:flex!important;overflow:hidden;align-items:center;justify-content:center;width:100%;padding:0;flex:1;min-height:0}
+body.room-map-active #roomsView #roomMembers .room-map-stage{max-width:none;max-height:100%;height:auto;min-width:0;margin:0;aspect-ratio:2/3}
+body.room-map-active #mainContent{padding-left:max(8px,env(safe-area-inset-left));padding-right:max(8px,env(safe-area-inset-right));padding-bottom:max(8px,env(safe-area-inset-bottom))}
+body.room-map-active #roomMembers .room-map-label{display:none}
+body.room-map-active #roomMembers .room-map-pin small{font-size:max(.65rem,11px);line-height:1.2}
