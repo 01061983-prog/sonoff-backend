@@ -64,7 +64,7 @@ function validate(input,device,now=Date.now()){
  if(input.days!==undefined&&!Array.isArray(input.days))err('Giorni non validi.');
  const channels=Array.isArray(device.params?.switches)?device.params.switches.map(c=>c.outlet).filter(Number.isInteger):null;
  let outlets=[];
- if(channels){outlets=[...new Set(input.outlets||[])];if(!outlets.length||outlets.some(v=>!channels.includes(v)))err('Seleziona almeno un canale valido.');}
+ if(channels){outlets=[...new Set(input.outlets||[])];if(device.controlOutlets)outlets=outlets.filter(outlet=>device.controlOutlets.includes(outlet));if(!outlets.length||outlets.some(v=>!channels.includes(v)))err('Seleziona almeno un canale valido.');}
  else if(!['on','off'].includes(device.params?.switch))err('Questo dispositivo non espone un interruttore programmabile.');
  const name=typeof input.name==='string'?input.name.trim():'';
  if(name.length>100)err('Nome troppo lungo.');

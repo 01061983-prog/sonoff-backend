@@ -332,6 +332,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
     let actions=active.map(({target,p})=>{
      const device=devices.find(d=>d.deviceid===target.deviceId);
      if(!device?.online)throw new Error('Dispositivo offline o non più autorizzato. Nessun comando inviato.');
+     if(target.kind==='multi'&&device.controlOutlets){p.outlets=p.outlets.filter(outlet=>device.controlOutlets.includes(outlet));if(!p.outlets.length)throw new Error('Nessun canale fisico selezionato. Controlla la programmazione.');}
      if(target.kind==='multi'&&p.outlets.some(o=>!device.params.switches?.some(c=>c.outlet===o)))throw new Error('I canali del dispositivo sono cambiati. Controlla la programmazione.');
      if(target.kind==='single'&&!['on','off'].includes(device.params.switch))throw new Error('Il dispositivo non espone più l’interruttore previsto.');
      return {deviceId:target.deviceId,kind:target.kind,state:p.event.state,...(target.kind==='multi'?{outlets:p.outlets}:{}),...(p.event.pulse?{pulse:true}:{})};

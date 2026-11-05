@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <script src="account-auth.js?v=44"></script>
+  <script src="account-auth.js?v=45"></script>
   <link rel="stylesheet" href="account-auth.css?v=39">
   <script src="text-size.js?v=35"></script>
   <script src="scene-pages.js?v=43"></script>
@@ -254,6 +254,10 @@
         reloadBtn.disabled = commandBusy || devicesLoading;
     }
 
+    function sceneOutlets(action,device) {
+        const outlets=action.outlets||[];
+        return device?.controlOutlets?outlets.filter(outlet=>device.controlOutlets.includes(outlet)):outlets;
+    }
     function sceneState(scene) {
         if ((!devicesFresh && !devicesLoading) || !scene.actions?.length) return null;
         const states = scene.actions.map(action => {
@@ -262,7 +266,8 @@
             if (action.kind === "gate") return dev.params?.switches?.find(channel => channel.outlet === 0)?.switch ?? dev.params?.switch ?? null;
             if (action.kind === "single") return dev.params?.switch ?? null;
             if (action.kind === "multi" && action.outlets?.length) {
-                const values = action.outlets.map(outlet => dev.params?.switches?.find(s => s.outlet === outlet)?.switch);
+                const selected=sceneOutlets(action,dev); if(!selected.length)return null;
+                const values = selected.map(outlet => dev.params?.switches?.find(s => s.outlet === outlet)?.switch);
                 if (values.every(v => v === "on")) return "on";
                 if (values.every(v => v === "off")) return "off";
             }
@@ -794,8 +799,8 @@
             if (scene.mode === "toggle" && !await loadDevices()) throw new Error("Impossibile verificare lo stato delle luci.");
             if (scene.mode === "toggle") for (const action of scene.actions) {
                 const device=currentDevices.find(device=>device.deviceid===action.deviceId);
-                const values=action.kind==="multi" ? action.outlets.map(outlet=>device?.params.switches?.find(channel=>channel.outlet===outlet)?.switch) : [device?.params.switch];
-                if (!device?.online || values.some(value=>!["on","off"].includes(value))) throw new Error("Stato delle luci non verificabile. Nessun comando inviato.");
+                const values=action.kind==="multi" ? sceneOutlets(action,device).map(outlet=>device?.params.switches?.find(channel=>channel.outlet===outlet)?.switch) : [device?.params.switch];
+                if (!device?.online || !values.length || values.some(value=>!["on","off"].includes(value))) throw new Error("Stato delle luci non verificabile. Nessun comando inviato.");
             }
             const target = sceneState(scene) === true ? "off" : "on";
             const actions = scene.mode === "toggle" ? scene.actions.map(action=>({...action,state:target})) : scene.actions;
@@ -809,7 +814,7 @@
                 await apiRequest(action.kind === "multi" ? "/api/toggle-multi" : "/api/toggle", {
                     deviceId: action.deviceId,
                     state: action.kind === "gate" ? "on" : action.state,
-                    ...(action.kind === "multi" ? {outlets: action.outlets} : {})
+                    ...(action.kind === "multi" ? {outlets: sceneOutlets(action,sceneDevice)} : {})
                 });
                 completed++;
                 localSceneProgress.set(scene.id,completed);
@@ -1000,7 +1005,7 @@
             const values = action.kind === 'gate'
                 ? [device.params?.switches?.find(c => c.outlet === 0)?.switch ?? device.params?.switch]
                 : action.kind === 'single' ? [device.params?.switch]
-                : action.outlets?.map(outlet => device.params?.switches?.find(c => c.outlet === outlet)?.switch) || [];
+                : sceneOutlets(action,device).map(outlet => device.params?.switches?.find(c => c.outlet === outlet)?.switch) || [];
             if (!values.length) result.unknown = true;
             for (const value of values) {
                 if (value === 'on') result.on++;

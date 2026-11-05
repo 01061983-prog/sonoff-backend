@@ -75,7 +75,9 @@ module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar
   try{
    const credentials=await access(s.owner,{scheduled:true}),records=await owned(s.owner),stored=(await ledger(s.owner).get()).data()?.entries;
    if(s.kind==='scene'){const scene=getScene&&await getScene({cookies:{ewelink_access:credentials.accessToken}},s.sceneId,s.workspaceId);if(!scene||scene.mode!=='toggle'||scene.signature!==s.sceneSignature)throw Object.assign(new Error('Scenario modificato o eliminato: apri e salva di nuovo la programmazione.'),{status:409,code:'scene_changed'});}
-   const intended=desired(s,records,stored,now()),devices=await listDevices(credentials.accessToken),groups=new Map();
+   const devices=await listDevices(credentials.accessToken),groups=new Map();
+   const intended=desired(s,records,stored,now()).filter(item=>{const device=devices.find(d=>d.deviceid===item.deviceId);return item.kind!=='multi'||!device?.controlOutlets||device.controlOutlets.includes(item.outlet);});
+   if(!intended.length)throw Object.assign(new Error('Nessun canale fisico selezionato. Controlla la programmazione.'),{status:409});
    // Validate every target before sending anything, including scene targets.
    for(const item of intended){
     const device=devices.find(d=>d.deviceid===item.deviceId);
@@ -124,7 +126,8 @@ module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar
     for(const{doc,s}of records){
      const inconsistent=targets(s).some(target=>{
       const device=devices.find(d=>d.deviceid===target.deviceId);
-      return !device?.online||channels(target).some(outlet=>(target.kind==='multi'?device.params?.switches?.find(c=>c.outlet===outlet)?.switch:device.params?.switch)!=='on');
+      const selected=channels(target).filter(outlet=>target.kind!=='multi'||!device?.controlOutlets||device.controlOutlets.includes(outlet));
+      return !device?.online||!selected.length||selected.some(outlet=>(target.kind==='multi'?device.params?.switches?.find(c=>c.outlet===outlet)?.switch:device.params?.switch)!=='on');
      });
      if(!inconsistent)continue;
      await db().runTransaction(async t=>{

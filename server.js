@@ -14,6 +14,9 @@ const REDIRECT_URL = process.env.EWELINK_REDIRECT_URL ||
   "https://sonoff-backend-k8sh.onrender.com/oauth/callback";
 const HOME = new URL("/app/index.html", REDIRECT_URL).href;
 const GATE_ID = "1000ac81a0";
+// The MINIR4 has one relay; cloud payloads can retain synthetic outlets 1–3.
+const singleRelayDevices = new Set();
+function physicalOutlets(id,outlets){return singleRelayDevices.has(id)?outlets.filter(outlet=>outlet===0):outlets;}
 const COOKIE_OPTIONS = { httpOnly: true, secure: true, sameSite: "Lax", path: "/" };
 
 if (!APPID || !APPSECRET) throw new Error("Impostare EWELINK_APP_ID ed EWELINK_APP_SECRET su Render.");
@@ -193,6 +196,11 @@ async function api(path, token, body, authorization) {
   queue = slot.catch(() => {});
   await slot;
   if (appAccounts && body !== undefined && path === "/v2/device/thing/status") await appAccounts.tokenAllowed(token);
+  if(path==="/v2/device/thing/status"&&body?.params?.switches&&singleRelayDevices.has(body.id)){
+    const switches=body.params.switches.filter(channel=>channel.outlet===0);
+    if(!switches.length)throw cloudError(400,"invalid_channels","Questo MINIR4 dispone soltanto del canale 1. Modifica il comando selezionando CH1.");
+    body={...body,params:{...body.params,switches}};
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 60000);
   try {
@@ -379,10 +387,14 @@ async function listDevices(token, homes, {includeOwnership = false, deviceIds = 
       for (const thing of things) {
         if (![1, 2].includes(thing.itemType) || !thing.itemData?.deviceid) continue;
         const d = thing.itemData;
+        const singleRelay=String(d.productModel||'').toUpperCase()==='MINIR4';
+        if(singleRelay)singleRelayDevices.add(d.deviceid);
+        const params=singleRelay&&Array.isArray(d.params?.switches)?{...d.params,switches:d.params.switches.filter(channel=>channel.outlet===0)}:d.params||{};
         if (includeOwnership && devices.get(d.deviceid)?.itemType === 1 && thing.itemType !== 1) continue;
         devices.set(d.deviceid, {
           deviceid: d.deviceid, name: d.name, online: d.online === true,
-          params: d.params || {}, familyId: home.id, itemType: thing.itemType,
+          params, familyId: home.id, itemType: thing.itemType,
+          ...(singleRelay?{controlOutlets:[0]}:{}),
           ...(includeOwnership && thing.itemType === 1 && !d.sharedBy && typeof d.apikey === "string" ? {ownerApikey:d.apikey} : {})
         });
       }
@@ -726,11 +738,12 @@ async function runCloudScene(context, run, scene, accessToken) {
     for(const action of scene.actions)await assertLinkedDeviceChannels(accessToken,action.deviceId,action.kind==="multi"?action.outlets:action.kind==="gate"?[0]:null,linkedRegistry);
     if (scene.mode === "toggle") {
       const devices = await listDevices(accessToken, [context.workspace], {deviceIds:scene.actions.map(action=>action.deviceId),linkedRegistry});
+      scene={...scene,actions:scene.actions.map(action=>action.kind==='multi'?{...action,outlets:physicalOutlets(action.deviceId,action.outlets)}:action)};
       const states = scene.actions.flatMap(action => {
         const device = devices.find(device => device.deviceid === action.deviceId);
         if (!device?.online) throw new Error("Dispositivo non disponibile. Nessun comando inviato.");
         const values = action.kind === "multi" ? action.outlets.map(outlet => device.params.switches?.find(channel=>channel.outlet===outlet)?.switch) : [device.params.switch];
-        if (values.some(value=>!["on","off"].includes(value))) throw new Error("Stato delle luci non verificabile. Nessun comando inviato.");
+        if (!values.length||values.some(value=>!["on","off"].includes(value))) throw new Error("Stato delle luci non verificabile. Nessun comando inviato.");
         return values;
       });
       const target = states.every(state=>state==="on") ? "off" : "on";
