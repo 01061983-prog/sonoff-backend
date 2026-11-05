@@ -363,6 +363,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    await recovery.adoptLegacy();
    const refresh=await schedules().where('solarRefreshAt','<=',now()).limit(5).get();for(const doc of refresh.docs)if(doc.data().enabled&&core.usesSolar(doc.data()))await refreshSolar({...doc.data(),id:doc.id});
    const due=await schedules().where('nextAt','<=',now()).limit(20).get();for(const doc of due.docs)try{await execute(doc.ref);}catch{console.error('Programmazione temporaneamente sospesa: dati necessari non disponibili.');}
+   await recovery.monitorActive();
    const pending=await schedules().where('recoveryAt','<=',now()).limit(20).get();for(const doc of pending.docs)try{await recovery.run(doc.ref);}catch{console.error('Ripristino temporaneamente in attesa: nessun comando non verificato.');}
    // Mantiene valida l'autorizzazione anche per prenotazioni lontane nel tempo.
    const renewals=await accounts().where('renewAt','<=',now()).limit(5).get();

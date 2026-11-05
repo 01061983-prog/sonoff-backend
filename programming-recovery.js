@@ -107,6 +107,35 @@ module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar
    if(completedOnce(next)){t.set(db().collection('ewelinkProgrammingHistory').doc(crypto.createHash('sha256').update(next.owner+':'+ref.id).digest('hex')),{...next,id:ref.id,archivedAt:now(),enabled:false});t.delete(ref);}else t.set(ref,next);
   });
  }
+ let monitorAt=0;
+ async function monitorActive(){
+  if(monitorAt>now())return;
+  monitorAt=now()+60000;
+  const snapshot=await db().collection('ewelinkProgrammingSchedules').where('enabled','==',true).get(),owners=new Map();
+  for(const doc of snapshot.docs){const s=doc.data();
+   if(!eligible(s)||s.recoveryAt||!core.activeWindow(s,now())||s.last?.status==='claimed'&&s.last.until>now()||s.last?.finishedAt>now()-60000)continue;
+   if(!owners.has(s.owner))owners.set(s.owner,[]);owners.get(s.owner).push({doc,s});
+  }
+  for(const[owner,records]of owners){
+   try{
+    // Read once per account. Even a brief outage missed between polls is detected
+    // by the relay returning OFF inside a currently active ON interval.
+    const credentials=await access(owner,{scheduled:true}),devices=await listDevices(credentials.accessToken);
+    for(const{doc,s}of records){
+     const inconsistent=targets(s).some(target=>{
+      const device=devices.find(d=>d.deviceid===target.deviceId);
+      return !device?.online||channels(target).some(outlet=>(target.kind==='multi'?device.params?.switches?.find(c=>c.outlet===outlet)?.switch:device.params?.switch)!=='on');
+     });
+     if(!inconsistent)continue;
+     await db().runTransaction(async t=>{
+      const current=await t.get(doc.ref),data=current.data();
+      if(!data?.enabled||data.version!==s.version||data.recoveryAt||!core.activeWindow(data,now())||data.last?.status==='claimed'&&data.last.until>now()||data.last?.finishedAt>now()-60000)return;
+      t.set(doc.ref,{...data,recoveryAt:now(),recovery:{since:now(),message:'Verifica e ripristino della fascia attiva dopo un’interruzione o un cambio di stato.'}});
+     });
+    }
+   }catch{console.error('Verifica delle fasce attive temporaneamente in attesa di connessione o accesso.');}
+  }
+ }
  let migrationPasses=0,migrationAt=0;
  async function adoptLegacy(){
   if(migrationPasses>=2||migrationAt>now())return;
@@ -118,5 +147,5 @@ module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar
   }
   migrationPasses++;migrationAt=now()+180001;
  }
- return {eligible,prepare,claimIntent,finishIntent,renew,run,adoptLegacy};
+ return {eligible,prepare,claimIntent,finishIntent,renew,run,adoptLegacy,monitorActive};
 };
