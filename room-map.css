@@ -46,3 +46,12 @@ body.room-map-active #roomsView #roomMembers .room-map-stage{max-width:none;max-
 body.room-map-active #mainContent{padding-left:max(8px,env(safe-area-inset-left));padding-right:max(8px,env(safe-area-inset-right));padding-bottom:max(8px,env(safe-area-inset-bottom))}
 body.room-map-active #roomMembers .room-map-label{display:none}
 body.room-map-active #roomMembers .room-map-pin small{font-size:max(.65rem,11px);line-height:1.2}
+/* Riferimenti decorativi: nessun comando nella vista operativa. */
+.room-map-reference{position:absolute;transform:translate(-50%,-50%);max-width:80%;padding:6px 10px;border:1px solid #ffffffc9;border-radius:8px;background:#ffffffeb;color:#183f30;box-shadow:0 2px 8px #0003;font-size:.85rem;font-weight:750;line-height:1.25;text-align:center;overflow-wrap:anywhere;pointer-events:none;z-index:2}
+.map-edit-stage .room-map-reference{pointer-events:auto;touch-action:none;cursor:grab;font:inherit;font-weight:750;font-size:.85rem}
+.map-edit-stage .room-map-reference:focus-visible{outline:4px solid #eead2c;outline-offset:3px}
+.room-reference-tools{border-top:1px solid #cad8cd;padding-top:14px;display:grid;gap:8px}
+.room-reference-tools h3{margin:0;font-size:1rem}
+.room-reference-tools input{font:inherit;padding:12px;width:100%;border:1px solid #b9cfc1;border-radius:12px}
+.room-reference-actions{display:flex;gap:8px;flex-wrap:wrap}
+.room-reference-actions button{font:inherit;font-size:.85rem;border:1px solid #b9cfc1;border-radius:10px;background:#fff;color:#17372e;padding:10px}

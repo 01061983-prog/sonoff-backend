@@ -12,13 +12,13 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <script src="account-auth.js?v=45"></script>
+  <script src="account-auth.js?v=46"></script>
   <link rel="stylesheet" href="account-auth.css?v=39">
-  <script src="text-size.js?v=35"></script>
-  <script src="scene-pages.js?v=43"></script>
-  <script src="room-map.js?v=43"></script>
-  <link rel="stylesheet" href="room-map.css?v=43">
-  <link rel="stylesheet" href="app.css?v=35">
+  <script src="text-size.js?v=46"></script>
+  <script src="scene-pages.js?v=46"></script>
+  <script src="room-map.js?v=46"></script>
+  <link rel="stylesheet" href="room-map.css?v=46">
+  <link rel="stylesheet" href="app.css?v=46">
   <style>
     #startupScreen{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:28px;background:#f6f8f6;color:#24382f;text-align:center;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:auto}
     #startupScreen[hidden]{display:none}body.app-starting>main{visibility:hidden}
@@ -48,8 +48,8 @@
     <button class="nav-item" data-view="programming" aria-label="Programmazione"><span data-icon="calendar"></span><span>Programmazione</span></button>
     <button class="nav-item" data-view="install" aria-label="La tua webapp"><span data-icon="download"></span><span>La tua webapp</span></button>
   </nav>
-  <details class="text-size-settings" id="textSizeSettings"><summary>Dimensione caratteri <span aria-hidden="true">Aa</span></summary>
-    <div class="text-size-content"><label for="textSizeRange">Grandezza del testo: <output id="textSizeValue" for="textSizeRange">100%</output></label>
+  <details class="text-size-settings" id="textSizeSettings"><summary>Impostazioni app <span aria-hidden="true">⚙</span></summary>
+    <div class="text-size-content"><label for="appStartView">All’avvio apri</label><select id="appStartView"><option value="scenes">Scenari</option><option value="rooms">Stanze</option><option value="devices">Dispositivi</option><option value="home">Panoramica</option></select><p id="appStartStatus" class="text-size-status" role="status">La pagina iniziale si salva automaticamente su questo dispositivo.</p><h3>Dimensione caratteri</h3><label for="textSizeRange">Grandezza del testo: <output id="textSizeValue" for="textSizeRange">100%</output></label>
       <div class="text-size-controls"><button id="textSizeDecrease" type="button" aria-label="Riduci i caratteri">A−</button><input id="textSizeRange" type="range" min="100" max="200" step="25" value="100" aria-label="Dimensione dei caratteri"><button id="textSizeIncrease" type="button" aria-label="Ingrandisci i caratteri">A+</button></div>
       <div class="text-size-preview" aria-label="Anteprima della dimensione dei caratteri"><span class="text-size-preview-label">Anteprima</span><strong class="text-size-preview-title">Luci del portico</strong><span class="text-size-preview-state">Acceso</span><p>Programmazione attiva fino all’alba.</p></div>
       <button id="textSizeReset" type="button">Ripristina dimensione normale</button>
@@ -1250,7 +1250,7 @@
         const navigation = document.getElementById("navigationDialog");
         navigation.addEventListener("close", closeNavigation);
         navigation.addEventListener("click", event => { if (event.target === navigation) closeNavigation(); });
-        setView("scenes");
+        setView(window.AppPreferences?.initialView()||"scenes");
         document.getElementById("loginBtn").addEventListener("click", beginLogin);
         document.getElementById("sceneImport").addEventListener("change", importScenes);
         document.getElementById("todayLabel").textContent = new Date().toLocaleDateString("it-IT", {day:"numeric",month:"long",year:"numeric"});
@@ -1317,7 +1317,8 @@
         list.hidden=Boolean(room);detail.hidden=!room;
         document.getElementById('roomsView').dataset.mode=room?.mode||'list';
         if (!room) {
-            list.innerHTML=cloudRooms.length?cloudRooms.map(room=>`<article class="room-folder scenario-unit" data-board-key="room:${escapeHtml(room.id)}"><button type="button" class="room-open scenario-pad" onclick="openRoom(${jsArg(room.id)})"><span class="pad-top"><span class="pad-icon">${icon('building')}</span><span class="pad-dot"></span></span><span class="pad-name">${escapeHtml(room.name)}</span><span class="pad-state">${room.members.length} ${room.members.length===1?'elemento':'elementi'}</span><span class="pad-result">${room.mode==='map'?'Immagine interattiva · ':''}Apri stanza →</span></button>${roomsManaging&&window.RoomMap?.canEdit()?`<div class="room-folder-actions"><button class="secondary-button" data-room-edit onclick="editRoom(${jsArg(room.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteRoom(${jsArg(room.id)})">Elimina</button></div>`:''}</article>`).join(''):'<div class="empty-state"><h2>Nessuna stanza</h2><p>Crea una stanza e scegli gli scenari o i dispositivi da raccogliere.</p></div>';
+            list.innerHTML=cloudRooms.length?cloudRooms.map(room=>`<article class="room-folder scenario-unit" data-board-key="room:${escapeHtml(room.id)}"><button type="button" class="room-open scenario-pad room-cover" data-room-cover="${escapeHtml(room.id)}" onclick="openRoom(${jsArg(room.id)})"><span class="pad-top"><span class="pad-icon">${icon('building')}</span><span class="pad-dot"></span></span><span class="pad-name">${escapeHtml(room.name)}</span><span class="pad-state">${room.members.length} ${room.members.length===1?'elemento':'elementi'}</span><span class="pad-result">${room.mode==='map'?'Immagine interattiva · ':''}Apri stanza →</span></button>${roomsManaging&&window.RoomMap?.canEdit()?`<div class="room-folder-actions"><button class="secondary-button" data-room-edit onclick="editRoom(${jsArg(room.id)})">Modifica</button><button class="btn-ghost-danger" onclick="deleteRoom(${jsArg(room.id)})">Elimina</button></div>`:''}</article>`).join(''):'<div class="empty-state"><h2>Nessuna stanza</h2><p>Crea una stanza e scegli gli scenari o i dispositivi da raccogliere.</p></div>';
+            window.RoomMap?.previews?.(cloudRooms,list);
             return;
         }
         document.getElementById('roomTitle').textContent=room.name;

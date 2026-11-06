@@ -46,6 +46,7 @@
     if(!overflowing)break;
     if(rows>1)rows--;else if(cols>1)cols--;else break;
    }
+   if(grid===roomList){const size=Math.min((box.width-14*(cols-1)-4)/cols,(box.height-14*(rows-1)-12)/rows);grid.style.setProperty('--room-tile-size',Math.max(1,Math.floor(size))+'px');}
    board.capacity=count;board.anchorKey=tiles[board.page*count]?.dataset.boardKey||null;
    const total=Math.max(1,Math.ceil(tiles.length/count));previous.disabled=board.page===0;next.disabled=board.page>=total-1;
    const text=(board.page+1)+' / '+total;if(label.textContent!==text)label.textContent=text;

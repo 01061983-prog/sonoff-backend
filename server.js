@@ -598,7 +598,17 @@ function cleanRoom(room) {
       Object.assign(members[i],{x:pin.x,y:pin.y,icon:pin.icon});
     }
   }
-  return {id:room.id, name:room.name.trim(), mode, members};
+  const annotations=[];
+  if(mode==='map'&&room.annotations!==undefined){
+    if(!Array.isArray(room.annotations)||room.annotations.length>30)throw cloudError(400,'invalid_room','Puoi inserire al massimo 30 riferimenti nell’immagine.');
+    const ids=new Set();
+    for(const label of room.annotations){
+      if(!label||typeof label.id!=='string'||!/^[a-zA-Z0-9_-]{1,100}$/.test(label.id)||ids.has(label.id)||typeof label.text!=='string'||!label.text.trim()||label.text.length>60||!Number.isFinite(label.x)||!Number.isFinite(label.y)||label.x<0||label.x>1||label.y<0||label.y>1)
+        throw cloudError(400,'invalid_room','Controlla testo e posizione dei riferimenti (massimo 60 caratteri).');
+      ids.add(label.id);annotations.push({id:label.id,text:label.text.trim(),x:label.x,y:label.y});
+    }
+  }
+  return {id:room.id, name:room.name.trim(), mode, members,annotations};
 }
 function roomImageRef(context,id){
   return getSceneDatabase().collection("ewelinkRoomImages").doc(crypto.createHash("sha256").update(context.ref.path+":"+id).digest("hex"));
@@ -647,7 +657,7 @@ async function changeRoom(context, body, req) {
         throw cloudError(400,"room_member_unavailable","Uno degli elementi non è più disponibile. Rimuovilo dalla stanza oppure aggiorna i dispositivi.");
       if(incoming.mode==="map"&&!image&&!previous?.imageVersion)
         throw cloudError(400,"room_image_required","Carica un’immagine per la stanza.");
-      const next = {...incoming,version:actualVersion+1,updatedAt:Date.now(),
+      const next = {...incoming,annotations:incoming.mode==='map'&&body.room.annotations===undefined?previous?.annotations||[]:incoming.annotations,version:actualVersion+1,updatedAt:Date.now(),
         ...(incoming.mode==="map"?{imageVersion:image?actualVersion+1:previous.imageVersion}:{})};
       if(image&&incoming.mode==="map")transaction.set(roomImageRef(context,id),{image,version:next.imageVersion});
       if(previous?.mode==="map"&&incoming.mode!=="map")transaction.set(roomImageRef(context,id),{image:null,version:actualVersion+1});

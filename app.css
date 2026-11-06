@@ -225,3 +225,14 @@ body.rooms-paged .device-primary:has(+.device-channel-options) .pad-dot{visibili
 body.rooms-paged .device-primary[aria-busy="true"]+.device-channel-options{display:none}
 body.rooms-paged .room-missing{padding:20px;border-radius:18px;background:var(--bg-soft);border:1px solid var(--border-soft);align-items:center}
 body.rooms-paged :is(#roomsList,#roomMembers)>:not(.scenario-unit){grid-column:1/-1;grid-row:1/-1;align-self:center;text-align:center}
+/* Impostazioni locali e copertine delle stanze. */
+.text-size-content #appStartView{width:100%;padding:12px;border:1px solid #b9cfc1;border-radius:12px;font:inherit;background:white;color:#17372e}
+.text-size-content h3{font-size:1rem;margin:12px 0 0}
+.room-folder .room-open,body.rooms-paged #roomsList .room-open{position:relative;isolation:isolate;--pad-edge:#07593e;--pad-shadow:#12634226;background:linear-gradient(145deg,#19966a,#0d6f50);color:#fff;border:2px solid #36a47c;overflow:hidden;min-height:0;aspect-ratio:1}
+.room-cover-image{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2;pointer-events:none}
+.room-open.has-room-image::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,#071e1610 25%,#071e16e8 100%);z-index:-1;pointer-events:none}
+.room-open.has-room-image :is(.pad-name,.pad-state,.pad-result){text-shadow:0 1px 3px #0008}
+body.rooms-paged #roomsList{grid-template-columns:repeat(var(--scene-cols,2),minmax(0,var(--room-tile-size,1fr)));grid-template-rows:repeat(var(--scene-rows,3),minmax(0,var(--room-tile-size,1fr)));align-content:start;justify-content:center}
+body.rooms-paged #roomsList .room-open{aspect-ratio:1}
+#roomsView[data-management='true'] #roomsList{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr));gap:20px}
+#roomsView[data-management='true'] .room-open{width:100%;height:auto;min-height:0;aspect-ratio:1;border-radius:18px;padding:20px}

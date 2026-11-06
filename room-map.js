@@ -1,7 +1,7 @@
 /* Immagini delle stanze e posizioni normalizzate, condivise con il server. */
 (() => {
  'use strict';
- let api, draft=null, imageEpoch=0, imageBusy=false, drag=null, selectedPin=null;
+ let api, draft=null, imageEpoch=0, imageBusy=false, drag=null, selectedPin=null,selectedReference=null;
  const images=new Map();
  let sizeObserver;
  const $=id=>document.getElementById(id);
@@ -18,6 +18,17 @@
   const fields=document.createElement('div');fields.id='roomMapFields';
   fields.innerHTML=`<label for="roomType">Tipo di stanza</label><select id="roomType"><option value="list">Elenco di scenari e dispositivi</option><option value="map">Immagine con dispositivi</option></select><div id="roomMapEditor" hidden><label for="roomImageFile">Immagine della stanza</label><input id="roomImageFile" type="file" accept="image/jpeg,image/png,image/webp"><p>La tavola è verticale. Le immagini orizzontali vengono ruotate. Scegli i dispositivi e trascina le icone nella posizione desiderata.</p><label for="roomPinStyle">Icona dei dispositivi selezionati</label><select id="roomPinStyle"><option value="bulb">Lampadina</option><option value="power">Interruttore</option></select><p id="roomImageStatus" role="status"></p><div id="roomMapDraft" class="room-map-stage map-edit-stage" aria-label="Posiziona i dispositivi"></div></div>`;
   $('roomChoices').before(fields);
+  const references=document.createElement('div');references.className='room-reference-tools';
+  references.innerHTML='<h3>Riferimenti sull’immagine</h3><label for="roomReferenceText">Testo del riferimento</label><input id="roomReferenceText" maxlength="60" placeholder="Per esempio: lato portico"><div class="room-reference-actions"><button type="button" id="roomReferenceAdd">Aggiungi riferimento</button><button type="button" id="roomReferenceUpdate" disabled>Modifica testo</button><button type="button" id="roomReferenceRemove" disabled>Elimina riferimento</button></div><p>Scrivi un riferimento e aggiungilo, poi trascinalo sulla mappa. Tocca un riferimento per modificarlo o eliminarlo.</p>';
+  $('roomMapEditor').append(references);
+  $('roomReferenceAdd').onclick=()=>{
+   const text=$('roomReferenceText').value.trim();
+   if(!draft||!text){$('roomImageStatus').textContent='Scrivi il testo del riferimento.';return;}
+   if(draft.annotations.length>=30){$('roomImageStatus').textContent='Puoi inserire al massimo 30 riferimenti.';return;}
+   const label={id:crypto.randomUUID(),text,x:.5,y:.5};draft.annotations.push(label);selectedReference=label.id;selectedPin=null;renderDraft();
+  };
+  $('roomReferenceUpdate').onclick=()=>{const label=draft?.annotations.find(label=>label.id===selectedReference),text=$('roomReferenceText').value.trim();if(label&&text){label.text=text;renderDraft();}else $('roomImageStatus').textContent='Scrivi il testo del riferimento.';};
+  $('roomReferenceRemove').onclick=()=>{if(!draft)return;draft.annotations=draft.annotations.filter(label=>label.id!==selectedReference);selectedReference=null;$('roomReferenceText').value='';renderDraft();};
   $('roomChoices').after($('roomMapDraft'));
   $('roomType').onchange=()=>{draft.mode=$('roomType').value;syncChoices();};
   $('roomChoices').addEventListener('change',syncChoices);
@@ -26,29 +37,45 @@
   $('roomEditorDialog').addEventListener('close',()=>{imageEpoch++;imageBusy=false;draft=null;});
   const stage=$('roomMapDraft');
   stage.addEventListener('pointerdown',event=>{
-   const button=event.target.closest('[data-map-pin]');
+   const button=event.target.closest('[data-map-pin],[data-map-reference]');
    if(!button||event.isPrimary===false||event.button!==0||!draft)return;
    event.preventDefault();button.setPointerCapture(event.pointerId);
-   selectedPin=button.dataset.mapPin;
-   $('roomPinStyle').value=draft.members.find(p=>p.id===selectedPin).icon;
-   drag={id:selectedPin,pointer:event.pointerId,button};
+   selectPlacement(button);
+   drag={id:selectedReference||selectedPin,reference:Boolean(selectedReference),pointer:event.pointerId,button};
   });
-  stage.addEventListener('focusin',event=>{const id=event.target.closest('[data-map-pin]')?.dataset.mapPin;if(id&&draft){selectedPin=id;$('roomPinStyle').value=draft.members.find(p=>p.id===id).icon;}});
+  stage.addEventListener('focusin',event=>{const button=event.target.closest('[data-map-pin],[data-map-reference]');if(button&&draft)selectPlacement(button);});
   stage.addEventListener('pointermove',event=>{
    if(!drag||event.pointerId!==drag.pointer||!draft)return;
-   const rect=stage.getBoundingClientRect(),pin=draft.members.find(p=>p.id===drag.id);
+   const rect=stage.getBoundingClientRect(),pin=(drag.reference?draft.annotations:draft.members).find(p=>p.id===drag.id);
    pin.x=clamp((event.clientX-rect.left)/rect.width);pin.y=clamp((event.clientY-rect.top)/rect.height);
    place(drag.button,pin);
   });
   for(const event of ['pointerup','pointercancel','lostpointercapture'])stage.addEventListener(event,()=>{drag=null;});
   stage.addEventListener('keydown',event=>{
-   const button=event.target.closest('[data-map-pin]');if(!button||!draft)return;
+   const button=event.target.closest('[data-map-pin],[data-map-reference]');if(!button||!draft)return;
    const delta={ArrowLeft:[-.02,0],ArrowRight:[.02,0],ArrowUp:[0,-.02],ArrowDown:[0,.02]}[event.key];
    if(!delta)return;
-   event.preventDefault();const pin=draft.members.find(p=>p.id===button.dataset.mapPin);
+   event.preventDefault();const pin=button.dataset.mapReference?draft.annotations.find(p=>p.id===button.dataset.mapReference):draft.members.find(p=>p.id===button.dataset.mapPin);
    pin.x=clamp(pin.x+delta[0]);pin.y=clamp(pin.y+delta[1]);place(button,pin);
   });
   updatePermissions();window.addEventListener('resize',updatePermissions);
+ }
+ function selectPlacement(button){
+  selectedReference=button.dataset.mapReference||null;selectedPin=button.dataset.mapPin||null;
+  if(selectedReference)$('roomReferenceText').value=draft.annotations.find(label=>label.id===selectedReference).text;
+  else $('roomPinStyle').value=draft.members.find(pin=>pin.id===selectedPin).icon;
+  $('roomReferenceUpdate').disabled=$('roomReferenceRemove').disabled=!selectedReference;
+ }
+ function referenceLabel(label,editing){
+  const element=document.createElement(editing?'button':'span');element.className='room-map-reference';element.textContent=label.text;
+  if(editing){element.type='button';element.dataset.mapReference=label.id;element.setAttribute('aria-label',label.text+'. Trascina oppure usa le frecce.');}
+  place(element,label);return element;
+ }
+ function previews(rooms,container){
+  for(const button of container.querySelectorAll('[data-room-cover]')){
+   const room=rooms.find(room=>room.id===button.dataset.roomCover);if(room?.mode!=='map')continue;
+   readImage(room).then(image=>{if(!button.isConnected)return;const img=document.createElement('img');img.src=image;img.alt='';img.className='room-cover-image';button.prepend(img);button.classList.add('has-room-image');}).catch(()=>{});
+  }
  }
  function place(button,pin){button.style.left=(pin.x*100)+'%';button.style.top=(pin.y*100)+'%';}
  async function readImage(room){
@@ -98,6 +125,7 @@
   container.classList.add('room-map-members');
   const stage=document.createElement('div');stage.className='room-map-stage';stage.setAttribute('aria-label',room.name);container.append(stage);
   for(const pin of room.members)stage.append(pinButton(pin,false));
+  for(const label of room.annotations||[])stage.append(referenceLabel(label,false));
   sizeObserver?.disconnect();
   sizeObserver=new ResizeObserver(()=>fit(stage));
   sizeObserver.observe(container);requestAnimationFrame(()=>fit(stage));
@@ -105,10 +133,11 @@
   readImage(room).then(image=>{if(stage.isConnected){background(stage,image);status.remove();}}).catch(error=>{if(stage.isConnected){status.textContent=error.message;const retry=document.createElement('button');retry.textContent='Riprova';retry.onclick=()=>api.redraw();status.append(retry);}});
  }
  function begin(room){
-  imageEpoch++;imageBusy=false;drag=null;selectedPin=null;
-  draft={mode:room?.mode||'list',members:(room?.members||[]).filter(p=>p.kind==='device').map(p=>({...p,x:p.x??.5,y:p.y??.5,icon:p.icon||'bulb'})),image:'',changed:false};
+  imageEpoch++;imageBusy=false;drag=null;selectedPin=null;selectedReference=null;
+  draft={mode:room?.mode||'list',members:(room?.members||[]).filter(p=>p.kind==='device').map(p=>({...p,x:p.x??.5,y:p.y??.5,icon:p.icon||'bulb'})),annotations:(room?.annotations||[]).map(label=>({...label})),image:'',changed:false};
   $('roomType').value=draft.mode;$('roomImageFile').value='';$('roomImageStatus').textContent='';
   $('roomPinStyle').value='bulb';
+  $('roomReferenceText').value='';$('roomReferenceUpdate').disabled=$('roomReferenceRemove').disabled=true;
   if(room?.mode==='map'){
    const epoch=imageEpoch;imageBusy=true;
    $('roomImageStatus').textContent='Caricamento immagine salvata…';
@@ -133,6 +162,8 @@
   const stage=$('roomMapDraft');stage.innerHTML='';
   if(draft.image)background(stage,draft.image);
   for(const pin of draft.members)stage.append(pinButton(pin,true));
+  for(const label of draft.annotations)stage.append(referenceLabel(label,true));
+  $('roomReferenceUpdate').disabled=$('roomReferenceRemove').disabled=!selectedReference;
  }
  async function loadImage(){
   const file=$('roomImageFile').files[0];if(!file||!draft)return;
@@ -159,7 +190,7 @@
   if(!draft||draft.mode!=='map')return {mode:'list'};
   if(imageBusy)throw Error('Attendi il caricamento dell’immagine.');
   if(!draft.image)throw Error('Carica un’immagine per la stanza.');
-  return {mode:'map',members:draft.members.map(p=>({...p})),...(draft.changed?{image:draft.image}:{})};
+  return {mode:'map',members:draft.members.map(p=>({...p})),annotations:draft.annotations.map(label=>({...label})),...(draft.changed?{image:draft.image}:{})};
  }
- window.RoomMap={init,canEdit,updatePermissions,begin,collect,render};
+ window.RoomMap={init,canEdit,updatePermissions,begin,collect,render,previews};
 })();
