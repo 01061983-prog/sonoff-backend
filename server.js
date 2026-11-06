@@ -605,7 +605,10 @@ function cleanRoom(room) {
     for(const label of room.annotations){
       if(!label||typeof label.id!=='string'||!/^[a-zA-Z0-9_-]{1,100}$/.test(label.id)||ids.has(label.id)||typeof label.text!=='string'||!label.text.trim()||label.text.length>60||!Number.isFinite(label.x)||!Number.isFinite(label.y)||label.x<0||label.x>1||label.y<0||label.y>1)
         throw cloudError(400,'invalid_room','Controlla testo e posizione dei riferimenti (massimo 60 caratteri).');
-      ids.add(label.id);annotations.push({id:label.id,text:label.text.trim(),x:label.x,y:label.y});
+      const sized=label.width!==undefined||label.height!==undefined;
+      if(sized&&(!Number.isFinite(label.width)||!Number.isFinite(label.height)||label.width<.1||label.width>.9||label.height<.025||label.height>.5))
+        throw cloudError(400,'invalid_room','Dimensione del riferimento non valida. Ridimensionalo usando gli angoli.');
+      ids.add(label.id);annotations.push({id:label.id,text:label.text.trim(),x:label.x,y:label.y,...(sized?{width:label.width,height:label.height}:{})});
     }
   }
   return {id:room.id, name:room.name.trim(), mode, members,annotations};
