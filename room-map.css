@@ -70,3 +70,15 @@ body.room-map-active #roomMembers .room-map-pin small{font-size:max(.65rem,11px)
 .reference-handle.handle-se{bottom:-10px;right:-10px;cursor:nwse-resize}
 .map-edit-stage .is-selected .reference-trash{display:flex!important;position:absolute;right:0;top:-44px;width:34px;height:34px;min-width:34px;min-height:34px;align-items:center;justify-content:center;padding:6px;border:1px solid #fff;border-radius:10px;background:#bf2635;color:#fff;box-shadow:0 2px 5px #0004;cursor:pointer;z-index:4}
 .reference-handle:focus-visible,.reference-trash:focus-visible{outline:3px solid #eead2c;outline-offset:2px}
+/* Vista operativa su telefono/tablet: tutta l’area libera, senza bande vuote. */
+body.room-map-active #roomsView #roomMembers .room-map-stage.map-fill{aspect-ratio:auto;max-height:none;flex-shrink:0}
+body.room-map-active .room-map-stage.map-fill .room-map-image{object-fit:fill}
+@media (pointer:coarse),(max-width:1024px){
+ body.room-map-active #mainContent{padding-top:env(safe-area-inset-top);padding-left:max(4px,env(safe-area-inset-left));padding-right:max(4px,env(safe-area-inset-right));padding-bottom:max(4px,env(safe-area-inset-bottom))}
+ body.room-map-active .topbar{flex:0 0 52px;height:52px;min-height:52px;padding-top:0;margin:0}
+ body.room-map-active .topbar .menu-button{width:44px;height:44px;min-height:44px}
+ body.room-map-active #roomsView{padding-top:0}
+ body.room-map-active .room-toolbar{gap:8px;margin-bottom:6px}
+ body.room-map-active .room-toolbar h2{font-size:1rem;line-height:1.2;min-width:0;overflow-wrap:anywhere}
+ body.room-map-active .room-toolbar button{min-height:36px;padding:6px 10px}
+}

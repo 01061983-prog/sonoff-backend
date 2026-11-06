@@ -168,8 +168,12 @@
  function fit(stage){
   if(!stage.isConnected)return;
   const rect=stage.parentElement.getBoundingClientRect();
-  const width=Math.max(0,Math.min(rect.width,rect.height*2/3));
-  stage.style.width=width+'px';fitReferences(stage);
+  const fill=matchMedia('(pointer: coarse), (max-width: 1024px)').matches;
+  stage.classList.toggle('map-fill',fill);
+  const width=Math.max(0,fill?rect.width:Math.min(rect.width,rect.height*2/3));
+  stage.style.width=width+'px';
+  if(fill)stage.style.height=Math.max(0,rect.height)+'px';else stage.style.removeProperty('height');
+  fitReferences(stage);
  }
  function render(room,container){
   container.classList.add('room-map-members');
