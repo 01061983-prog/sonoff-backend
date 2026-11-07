@@ -1,7 +1,7 @@
 'use strict';
 const crypto=require('crypto');
 const core=require('./programming-core');
-module.exports=function createProgramming({db,api,listDevices,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch,authorizeOwner=async()=>null,isImpulseDevice=id=>id==='1000ac81a0'}){
+module.exports=function createProgramming({db,api,listDevices,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch,authorizeOwner=async()=>null,isImpulseDevice=id=>id==='1000ac81a0',wakeSetTimeout=setTimeout,wakeClearTimeout=clearTimeout}){
  const astronomy=require('./astronomy')({db,fetch:solarFetch,now});
  const recovery=require('./programming-recovery')({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,api,runScene,getScene,completedOnce});
  const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
@@ -158,7 +158,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
  const expandedSchedules=records=>records.flatMap(record=>record.kind==='scene'?(record.targets||[]).map((target,i)=>({...record,...target,id:record.id+':'+i,parentId:record.id})):[record]);
  function completedOnce(s){return s.repeat==='date'&&!s.recoveryAt&&s.nextAt===core.NEVER&&(s.last?.status==='succeeded'||s.last?.status==='skipped'&&s.last.message?.startsWith('Spegnimento evitato:'));}
  function automaticActivation(s,time){
-  if(s.action!=='on'||!s.end||!s.enabled)return null;
+  if(s.action!=='on'||!(s.end||s.autoOffSeconds)||!s.enabled)return null;
   const targets=s.kind==='scene'?s.targets:[s];
   if(!targets?.length||targets.some(t=>t.action==='pulse'||isImpulseDevice(t.deviceId)))return null;
   const window=core.currentWindow(s,time);
@@ -220,7 +220,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
     const scene=await getScene(req,input.sceneId,input.workspaceId);
     const toggle=scene.mode==='toggle';
     if(toggle?!['on','off'].includes(input.action):input.action!=='run')throw error(400,'invalid_schedule','Scegli accensione o spegnimento per gli interruttori, oppure esecuzione per gli scenari a comando.');
-    if(!toggle&&(input.end||input.endDate))throw error(400,'invalid_schedule','Uno scenario a comando non prevede uno spegnimento automatico.');
+    if(!toggle&&(input.end||input.endDate||input.autoOffSeconds!==undefined))throw error(400,'invalid_schedule','Uno scenario a comando non prevede uno spegnimento automatico.');
     const targets=scene.actions.map(a=>{
      const device=devices.find(d=>d.deviceid===a.deviceId),pulse=a.pulse===true||a.kind==='gate';
      const target=core.validate({...input,deviceId:a.deviceId,outlets:a.kind==='gate'?[0]:a.outlets,action:pulse?'pulse':input.action==='run'?a.state:input.action},device,now());
@@ -256,7 +256,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    if(op==='toggle'){delete next.solarPendingAt;next.enabled=!old.enabled;next.solarRefreshAt=next.enabled&&core.usesSolar(next)&&next.repeat!=='date'?now()+7*core.DAY:core.NEVER;if(clean?.solar)delete next.solarError;}
    if(op==='save'&&!clean.endDate)delete next.endDate;
    if(op==='save'){
-    for(const key of ['startDate','intervalDays','durationMode','durationWeeks','until'])if(!(key in clean))delete next[key];
+    for(const key of ['startDate','intervalDays','durationMode','durationWeeks','until','autoOffSeconds'])if(!(key in clean))delete next[key];
     if(!core.usesSolar(clean))delete next.solar;
     delete next.solarError;delete next.solarPendingAt;next.solarRefreshAt=clean.enabled&&core.usesSolar(clean)&&clean.repeat!=='date'?now()+7*core.DAY:core.NEVER;
    }
@@ -268,6 +268,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    t.set(ref,next);
   });
   if(op==='save'||op==='toggle')await execute(ref);
+  await armWake().catch(()=>console.error('Timer salvato: verifica delle scadenze al prossimo controllo.'));
   return list(req);
  }
  async function refreshSolar(s){
@@ -357,7 +358,19 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
   }catch(e){status='unknown';message=e.status===401?'Accesso scaduto: ricollega eWeLink.':String(e.message||'Esito non confermato.').slice(0,250);}
   await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data?.last?.id===claim){const next={...data,last:{...data.last,status,message,finishedAt:now(),until:0}};const success=status==='succeeded'||status==='skipped'&&message.startsWith('Spegnimento evitato:');await recovery.finishIntent(t,s,claim,success);if(recovery.eligible(s)){if(success){delete next.recoveryAt;delete next.recovery;}else{next.recoveryAt=now()+60000;next.recovery={since:s.nextAt,message:'Ripristino automatico in attesa di connessione e stato verificabili.'};}}if(completedOnce(next)){t.set(db().collection('ewelinkProgrammingHistory').doc(hash(next.owner+':'+ref.id)),{...next,id:ref.id,archivedAt:now(),enabled:false});t.delete(ref);}else t.set(ref,next);}});
  }
- let busy=false,timer=null;
+ let busy=false,timer=null,wakeTimer=null,wakeEpoch=0;
+ // One wake for the nearest deadline, rather than reading Firestore every second.
+ async function armWake(){
+  if(!timer)return;
+  const epoch=++wakeEpoch;
+  if(wakeTimer)wakeClearTimeout(wakeTimer);wakeTimer=null;
+  const due=await schedules().where('nextAt','<=',now()+30000).limit(100).get();
+  if(epoch!==wakeEpoch||!timer)return;
+  const deadlines=due.docs.map(doc=>doc.data()).filter(s=>s.enabled).map(s=>s.last?.status==='claimed'&&s.last.until>now()?Math.max(s.nextAt,s.last.until):s.nextAt);
+  if(!deadlines.length)return;
+  const delay=Math.max(250,Math.min(...deadlines)-now());
+  wakeTimer=wakeSetTimeout(()=>{wakeTimer=null;void tick().catch(()=>console.error('Esecuzione timer temporaneamente non disponibile.'));},delay);wakeTimer?.unref?.();
+ }
  async function tick(){
   if(busy)return;busy=true;
   try{
@@ -375,8 +388,8 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
     if(!data.revoked&&(linkedAccount||automatic(data)||(data.browserUntil||0)>now()))await access(doc.id).catch(()=>{});
     else if(!automatic(data))await accounts().doc(doc.id).set({credentials:null,revoked:true,renewAt:core.NEVER},{merge:true});
    }
-  }finally{busy=false;}
+  }finally{busy=false;await armWake();}
  }
  function start(){if(timer)return;timer=setInterval(()=>{void tick().catch(()=>console.error('Controllo programmazioni non riuscito.'));},30000);timer.unref?.();void tick().catch(()=>console.error('Avvio programmazioni non riuscito.'));}
- return {protectManual,solarPreview,linkedDevices,registerLinkedDevice,list,mutate,identity,restoreSession,connectBrowser,logoutBrowser,markAuthenticationRequired,remember,access,start,tick,seal,open,stop(){if(timer)clearInterval(timer);timer=null;}};
+ return {protectManual,solarPreview,linkedDevices,registerLinkedDevice,list,mutate,identity,restoreSession,connectBrowser,logoutBrowser,markAuthenticationRequired,remember,access,start,tick,seal,open,stop(){if(timer)clearInterval(timer);timer=null;++wakeEpoch;if(wakeTimer)wakeClearTimeout(wakeTimer);wakeTimer=null;}};
 };

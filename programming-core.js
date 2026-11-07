@@ -20,7 +20,8 @@ const usesSolar=s=>solarTime(s?.start)||solarTime(s?.end);
 function timeAt(s,date,time,end=false){return solarTime(time)?s.solar?.days?.[date]?.[time]??null:localTime(date,time,end);}
 function windowFor(s,date){
  const start=timeAt(s,date,s.start);let end=null;
- if(s.end){
+ if(s.autoOffSeconds&&start!==null)end=start+s.autoOffSeconds*1000;
+ else if(s.end){
   const explicit=s.repeat==='date'&&s.endDate;
   end=timeAt(s,explicit||date,s.end,true);
   if(!explicit&&start!==null&&end!==null&&end<=start)end=timeAt(s,addDays(date,1),s.end,true);
@@ -40,7 +41,7 @@ function datesFor(s,from,to){
  return dates;
 }
 function windows(s,from,to){
- return datesFor(s,from,to).map(date=>windowFor(s,date)).filter(w=>w.start!==null&&(!s.end||w.end!==null&&w.end>w.start));
+ return datesFor(s,from,to).map(date=>windowFor(s,date)).filter(w=>w.start!==null&&(!(s.end||s.autoOffSeconds)||w.end!==null&&w.end>w.start));
 }
 function events(s,from,to){
  return windows(s,from,to).flatMap(w=>[{at:w.start,state:s.action==='off'?'off':'on',pulse:s.action==='pulse'},...(w.end?[{at:w.end,state:'off',pulse:false}]:[])]).filter(e=>e.at>from&&e.at<=to).sort((a,b)=>a.at-b.at);
@@ -59,6 +60,8 @@ function validate(input,device,now=Date.now()){
  if(!['date','weekly','interval'].includes(input.repeat))err('Scegli una data o i giorni della settimana.');
  if(!solarTime(input.start)&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.start||''))err('Indica un orario valido oppure alba o tramonto.');
  const end=input.end||null;
+ const seconds=input.autoOffSeconds;
+ if(seconds!==undefined&&(!Number.isInteger(seconds)||seconds<1||seconds>86399||input.action!=='on'||end))err('Il timer richiede un’accensione e una durata da 1 secondo a 1439 minuti e 59 secondi, senza un altro orario di spegnimento.');
  if(end&&((!solarTime(end)&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(end))||input.action!=='on'||end===input.start))err('Lo spegnimento facoltativo deve avere un orario diverso dall’accensione.');
  if(input.outlets!==undefined&&!Array.isArray(input.outlets))err('Canali non validi.');
  if(input.days!==undefined&&!Array.isArray(input.days))err('Giorni non validi.');
@@ -69,6 +72,7 @@ function validate(input,device,now=Date.now()){
  const name=typeof input.name==='string'?input.name.trim():'';
  if(name.length>100)err('Nome troppo lungo.');
  const s={name:name||device.name||'Programmazione',deviceId:device.deviceid,deviceName:device.name||device.deviceid,kind:channels?'multi':'single',outlets,action:input.action,repeat:input.repeat,date:input.repeat==='date'?input.date:null,days:input.repeat==='weekly'?[...new Set(input.days||[])].sort():[],start:input.start,end,...(input.repeat==='date'&&end&&input.endDate?{endDate:input.endDate}:{}),enabled:input.enabled!==false,timeZone:ZONE};
+ if(seconds!==undefined)s.autoOffSeconds=seconds;
  if(s.repeat!=='date'){
   if(input.startDate!==undefined&&!validDate(input.startDate))err('Scegli una data di inizio valida per la ripetizione.');
   if(input.startDate)s.startDate=input.startDate;
@@ -104,7 +108,7 @@ function validate(input,device,now=Date.now()){
  if(s.enabled&&!nextEvent(s,now))err('Questa data non ha più comandi futuri. Scegli una nuova data oppure la ripetizione Ogni giorno.');
  return s;
 }
-function currentWindow(s,at){return s.enabled&&s.action==='on'&&s.end?windows(s,at-DAY,at).find(w=>w.start<=at&&w.end>at)||null:null;}
+function currentWindow(s,at){return s.enabled&&s.action==='on'&&(s.end||s.autoOffSeconds)?windows(s,at-DAY,at).find(w=>w.start<=at&&w.end>at)||null:null;}
 function activeWindow(s,at){return Boolean(currentWindow(s,at));}
 function plan(s,all,now){
  // Recupera al massimo l'ultimo giorno: nessuna vecchia accensione viene riprodotta.
@@ -112,7 +116,7 @@ function plan(s,all,now){
  if(!last)return {event:null,outlets:[],reason:'Orario saltato durante un’interruzione prolungata.'};
  if(last.state==='on'&&now-last.at>5*60000)return {event:null,outlets:[],reason:'Accensione saltata: ritardo superiore a 5 minuti.'};
  const selected=s.kind==='multi'?s.outlets:[null];
- const outlets=selected.filter(outlet=>last.state!=='off'||!all.some(other=>other.id!==s.id&&other.deviceId===s.deviceId&&activeWindow(other,now)&&(other.kind==='single'||other.outlets.includes(outlet))));
+ const outlets=selected.filter(outlet=>last.state!=='off'||!(activeWindow(s,now)||all.some(other=>other.id!==s.id&&other.deviceId===s.deviceId&&activeWindow(other,now)&&(other.kind==='single'||other.outlets.includes(outlet)))));
  return {event:last,outlets,reason:outlets.length?'':'Spegnimento evitato: un’altra fascia è ancora attiva.'};
 }
 module.exports={ZONE,NEVER,DAY,dateKey,addDays,localTime,validDate,solarTime,usesSolar,timeAt,windowFor,datesFor,windows,events,nextEvent,validate,currentWindow,activeWindow,plan};
