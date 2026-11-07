@@ -156,7 +156,12 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
   });return {ok:true,deviceId:verified.id,name:verified.name};
  }
  const expandedSchedules=records=>records.flatMap(record=>record.kind==='scene'?(record.targets||[]).map((target,i)=>({...record,...target,id:record.id+':'+i,parentId:record.id})):[record]);
- function completedOnce(s){return s.repeat==='date'&&!s.recoveryAt&&s.nextAt===core.NEVER&&(s.last?.status==='succeeded'||s.last?.status==='skipped'&&s.last.message?.startsWith('Spegnimento evitato:'));}
+ function completedOnce(s){
+  // A finite recurrence is complete only after its final command, including
+  // an OFF after midnight. Suspended schedules and uncertain outcomes stay visible.
+  const finite=s.repeat==='date'||core.validDate(s.until);
+  return finite&&s.enabled!==false&&!s.recoveryAt&&s.nextAt===core.NEVER&&(s.last?.status==='succeeded'||s.last?.status==='skipped'&&s.last.message?.startsWith('Spegnimento evitato:'));
+ }
  function automaticActivation(s,time){
   if(s.action!=='on'||!(s.end||s.autoOffSeconds)||!s.enabled)return null;
   const targets=s.kind==='scene'?s.targets:[s];
