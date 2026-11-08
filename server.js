@@ -239,7 +239,7 @@ app.use("/app", express.static(path.join(__dirname, "public"), { index: "index.h
 // Compatibilità con i file caricati accanto a server.js su GitHub.
 // Sono esposti soltanto gli asset elencati, mai il codice del backend.
 const WEBAPP_ASSETS = [
-  "index.html", "sonoff.html.html", "app.css", "text-size.js", "scene-pages.js", "room-map.js", "room-map.css", "account-auth.js", "account-auth.css", "manifest.webmanifest", "sw.js",
+  "index.html", "sonoff.html.html", "app.css", "text-size.js", "scene-pages.js", "room-map.js", "room-map.css", "account-auth.js", "account-auth.css", "menu-bar.js", "menu-bar.css", "manifest.webmanifest", "sw.js",
   "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png",
   "icons/icon-maskable.png", "icons/apple-touch-icon.png"
 ];
