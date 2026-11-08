@@ -17,16 +17,13 @@
 @keyframes menu-bar-pulse{50%{opacity:.6}}
 @media(prefers-reduced-motion:reduce){.menu-bar-item,.menu-bar-item.running .menu-bar-icon{animation:none;transition:none}}
 
-/* Spazio per non coprire il contenuto (anche nelle plance a tutto schermo) */
-body.has-menu-bar .main-content,
-body.has-menu-bar.scenes-paged .main-content,
-body.has-menu-bar.rooms-paged .main-content,
-body.has-menu-bar.room-map-active .main-content{padding-bottom:calc(var(--menu-bar-height) + 12px + env(safe-area-inset-bottom))}
+/* Spazio per non coprire il contenuto (anche nelle plance e nella mappa a tutto schermo).
+   Selettore con #mainContent: deve vincere sulle regole della mappa stanza (room-map.css). */
+body.has-menu-bar #mainContent,
+body.has-menu-bar.room-map-active #mainContent{padding-bottom:calc(var(--menu-bar-height) + 12px + env(safe-area-inset-bottom))}
 @media(min-width:760px){
- body.has-menu-bar .main-content,
- body.has-menu-bar.scenes-paged .main-content,
- body.has-menu-bar.rooms-paged .main-content,
- body.has-menu-bar.room-map-active .main-content{padding-bottom:calc(var(--menu-bar-height) + 28px + env(safe-area-inset-bottom))}
+ body.has-menu-bar #mainContent,
+ body.has-menu-bar.room-map-active #mainContent{padding-bottom:calc(var(--menu-bar-height) + 28px + env(safe-area-inset-bottom))}
 }
 
 /* Gestione nelle impostazioni */
