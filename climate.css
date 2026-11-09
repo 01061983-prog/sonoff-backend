@@ -73,3 +73,7 @@
 .climate-empty-icon{width:48px;height:48px;border-radius:14px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center}
 .climate-foot{margin-top:22px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
 .climate-foot .climate-hint{max-width:620px}
+.climate-schedules{margin:28px 0 8px;display:flex;flex-direction:column;gap:14px}
+.climate-schedules-head h2{font-size:1.125rem}
+.climate-sched-card h3{font-size:1rem}
+#climateSchedulesStatus.error{color:var(--danger)}

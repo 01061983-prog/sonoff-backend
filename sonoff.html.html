@@ -21,8 +21,8 @@
   <link rel="stylesheet" href="app.css?v=46">
   <script src="menu-bar.js?v=54"></script>
   <link rel="stylesheet" href="menu-bar.css?v=53">
-  <script src="climate.js?v=2"></script>
-  <link rel="stylesheet" href="climate.css?v=1">
+  <script src="climate.js?v=3"></script>
+  <link rel="stylesheet" href="climate.css?v=2">
   <style>
     #startupScreen{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:28px;background:#f6f8f6;color:#24382f;text-align:center;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:auto}
     #startupScreen[hidden]{display:none}body.app-starting>main{visibility:hidden}
@@ -125,12 +125,16 @@
         <div class="editor-footer"><button type="button" class="secondary-button" onclick="cancelProgramming()">Annulla</button><button type="submit" id="saveProgrammingBtn" class="primary-button"><span data-icon="check"></span>Salva programmazione</button></div>
       </div>
     </form>
+    <section id="climateSchedules" class="climate-schedules" aria-labelledby="climateSchedulesHeading" hidden>
+      <div class="climate-schedules-head"><h2 id="climateSchedulesHeading">Clima · programmi degli split</h2><p class="climate-hint">Orari salvati direttamente sugli split Daikin: funzionano anche senza la plancia aperta.</p></div>
+      <p id="climateSchedulesStatus" class="page-note" role="status" aria-live="polite"></p><div id="climateSchedulesContent"></div>
+    </section>
     <p class="page-note">Le fasce attive mantengono accese le proprie luci anche durante uno spegnimento manuale dalla plancia. Se salvi o riattivi una fascia già iniziata, le luci si accendono subito; impulsi e cancelli sono esclusi. Le programmazioni concluse, singole o con una data finale, spariscono dall’elenco, mentre gli esiti incerti restano visibili.</p><div id="programmingList" class="programming-list"></div>
     <details class="programming-help"><summary>Come funzionano le programmazioni</summary><p>I timer funzionano anche con la webapp chiusa. Ogni fascia invia un comando esplicito: i comandi manuali restano validi fino al prossimo orario programmato.</p><p>Le fasce dello stesso account sullo stesso canale possono sovrapporsi: una fascia non spegne la luce mentre un’altra la richiede accesa.</p><p>In caso di interruzione, i comandi ON/OFF non completati vengono riallineati allo stato previsto quando tornano disponibili connessione e dati. Il recupero rispetta le altre fasce attive. Impulsi e cancelli senza stato verificabile non vengono ripetuti automaticamente. Server, eWeLink e dispositivo devono essere disponibili.</p><p>Nel cambio all’ora solare, per gli orari ripetuti si usa la prima occorrenza per l’accensione e l’ultima per lo spegnimento finale; un orario settimanale inesistente nel cambio all’ora legale viene saltato.</p></details>
     <button id="disconnectProgrammingBtn" class="secondary-button" hidden onclick="disconnectProgramming()">Disattiva tutti i timer e scollega l’esecuzione automatica</button>
   </section>
   <section id="climateView" class="view" style="display:none" aria-labelledby="climateHeading">
-    <div class="page-heading"><div><p class="eyebrow">DAIKIN ONECTA</p><h1 id="climateHeading">Clima<span class="green-dot">.</span></h1><p class="heading-sub">Gli split dell’oratorio: accensione, modalità, temperatura, ventilazione, programmi e consumi.</p></div><button id="climateRefresh" class="secondary-button" type="button" hidden>Aggiorna stati</button></div>
+    <div class="page-heading"><div><p class="eyebrow">DAIKIN ONECTA</p><h1 id="climateHeading">Clima<span class="green-dot">.</span></h1><p class="heading-sub">Gli split dell’oratorio: accensione, modalità, temperatura, ventilazione e consumi. I programmi orari sono in Programmazione.</p></div><button id="climateRefresh" class="secondary-button" type="button" hidden>Aggiorna stati</button></div>
     <p id="climateStatus" class="page-note" role="status" aria-live="polite"></p>
     <div id="climateContent"></div>
   </section>
@@ -1125,6 +1129,7 @@
         document.title = VIEW_NAMES[name] + " · " + (window.AppAccounts?.state.account?.name || "eWeLink Oratorio");
         if (name === "rooms") renderRooms();
         if (name === "programming") void openProgramming();
+        if (name === "programming") window.Climate?.open();
         if (name === "climate") window.Climate?.open();
         window.scrollTo({top: 0, behavior: "instant"});
     }

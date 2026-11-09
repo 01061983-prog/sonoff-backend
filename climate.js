@@ -14,14 +14,14 @@
  const HANDLED=new Set(['onOffMode','operationMode','name','temperatureControl','fanControl','sensoryData','schedule','holidayMode','consumptionData','demandControl','blockScheduleV2']);
  const state={flash:null,status:null,data:null,busy:false,loading:false,open:new Set(),pendingTemp:new Map(),editing:null,lastLoad:0};
  const timers=new Map();
- let content,statusEl,refreshBtn;
+ let content,statusEl,refreshBtn,schedBox,schedContent;
 
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const label=(group,v)=>LABELS[group]?.[v]||String(v).replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase());
  const num=v=>Number.isFinite(v)?(Math.round(v*10)/10).toLocaleString('it-IT'):'—';
  const base=()=>typeof BACKEND_URL!=='undefined'?BACKEND_URL:location.origin;
  const req=(path,body)=>apiRequest(path,body);
- function say(text,error){if(!statusEl)return;statusEl.textContent=text||'';statusEl.classList.toggle('error',Boolean(error));}
+ function say(text,error){for(const el of [statusEl,document.getElementById('climateSchedulesStatus')]){if(!el)continue;el.textContent=text||'';el.classList.toggle('error',Boolean(error));}}
 
  function units(){
   const list=[];
@@ -164,7 +164,6 @@
    }
    html+='</section>';
   }
-  html+=details(u,'schedule','Programmi orari',()=>scheduleSection(u));
   html+=details(u,'holiday','Modalità vacanza',()=>holidaySection(u));
   if(u.mp.consumptionData?.value?.electrical)html+=details(u,'energy','Consumi',()=>energySection(u));
   html+=details(u,'info','Nome e informazioni',()=>infoSection(u));
@@ -183,13 +182,13 @@
   const ids=md.currentSchedule?.values||Object.keys(md.schedules||{}),cur=md.currentSchedule?.value,enabled=md.enabled?.value===true;
   const name=id=>md.schedules?.[id]?.name?.value||'Programma '+(Number(id)+1||id);
   const dis=state.busy?'disabled':'';
-  let html=`<p class="climate-hint">${enabled?'Programma attivo: <strong>'+esc(name(cur))+'</strong>.':'Nessun programma attivo: lo split segue i comandi manuali.'}</p>`;
+  let html=`<div data-schedule-box><p class="climate-hint">${enabled?'Programma attivo: <strong>'+esc(name(cur))+'</strong>.':'Nessun programma attivo: lo split segue i comandi manuali.'}</p>`;
   if(sc.nextAction?.startTime)html+=`<p class="climate-hint">Prossima azione: ${esc(label('period',sc.nextAction.actionPeriod))} alle ${esc(sc.nextAction.startTime.slice(0,5))} → ${esc(label('operationMode',sc.nextAction.operationMode))}${sc.nextAction.roomTemperature!==undefined?' '+num(sc.nextAction.roomTemperature)+' °C':''}.</p>`;
   html+=`<div class="climate-row"><label class="climate-label">Programma <select data-act="schedule-pick" data-unit="${esc(u.key)}" ${dis}>${ids.map(id=>`<option value="${esc(id)}" ${id===cur?'selected':''}>${esc(name(id))}</option>`).join('')}</select></label>
    <button type="button" class="${enabled?'secondary-button':'primary-button'}" data-act="schedule-enable" data-unit="${esc(u.key)}" data-mode="${esc(m)}" data-enabled="${!enabled}" ${dis}>${enabled?'Disattiva programmi':'Attiva programma'}</button>
    <button type="button" class="secondary-button" data-act="schedule-edit" data-unit="${esc(u.key)}" data-mode="${esc(m)}" ${dis}>Modifica orari</button></div>`;
   if(state.editing?.unit===u.key)html+=scheduleEditor(u,md);
-  return html;
+  return html+'</div>';
  }
  function scheduleEditor(u,md){
   const ed=state.editing,sched=md.schedules?.[ed.id];
@@ -248,6 +247,7 @@
  }
 
  function render(){
+  renderSchedules();
   if(!content)return;
   if(refreshBtn){refreshBtn.hidden=!state.status?.linked;refreshBtn.disabled=state.loading||state.busy;}
   const st=state.status;
@@ -263,10 +263,21 @@
    +`<footer class="climate-foot"><p class="climate-hint">Daikin consente 200 richieste al giorno: lo stato si aggiorna all’apertura della pagina, con “Aggiorna stati” e ogni 10 minuti mentre la pagina è aperta. I comandi dati dal telecomando compaiono al prossimo aggiornamento.</p><button type="button" class="secondary-button" data-act="disconnect" ${state.busy?'disabled':''}>Scollega Daikin</button></footer>`;
  }
 
+ function renderSchedules(){
+  if(!schedBox)return;
+  const st=state.status;
+  schedBox.hidden=!st?.configured;
+  if(!st?.configured)return;
+  if(!st.linked){schedContent.innerHTML='<p class="climate-hint">Collega prima l’account Daikin dalla pagina Clima.</p><button type="button" class="secondary-button" data-act="goto-climate">Apri Clima</button>';return;}
+  if(!state.data){schedContent.innerHTML=state.loading?'<p class="climate-hint">Lettura dei programmi degli split…</p>':'';return;}
+  const list=units();
+  schedContent.innerHTML=list.length?`<div class="climate-grid">${list.map(u=>`<article class="climate-card climate-sched-card${u.online?'':' is-offline'}"><header class="climate-head"><div><h3>${esc(u.name)}</h3><p class="climate-sub">${u.online?(u.mp.onOffMode?.value==='on'?'Acceso · '+esc(label('operationMode',mode(u))):'Spento'):'Non in linea'}</p></div></header>${scheduleSection(u)}</article>`).join('')}</div>`:'<p class="climate-hint">Nessuno split trovato.</p>';
+ }
  const unitByKey=k=>units().find(u=>u.key===k);
  function onClick(e){
   const b=e.target.closest('[data-act]');if(!b||b.tagName==='FORM'||b.tagName==='SELECT')return;
   const u=b.dataset.unit?unitByKey(b.dataset.unit):null,act=b.dataset.act;
+  if(act==='goto-climate'){if(typeof setView==='function')setView('climate');return;}
   if(act==='connect'){location.href=base()+'/daikin/connect';return;}
   if(act==='disconnect'){if(confirm('Scollegare l’account Daikin dalla plancia? Gli split continueranno a funzionare con l’app Onecta e il telecomando.')){void (async()=>{try{await req('/api/daikin/disconnect',{});state.status=null;state.data=null;say('Account Daikin scollegato.');await load(false);}catch(err){if(!err.auth)say(err.message,true);}})();}return;}
   if(!u)return;
@@ -281,9 +292,9 @@
    timers.set(u.key,setTimeout(()=>{const v=state.pendingTemp.get(u.key);state.pendingTemp.delete(u.key);const fresh=unitByKey(u.key);if(fresh&&v!==setpoint(fresh)?.value)void command(fresh,'temperatureControl',v,`/operationModes/${mode(fresh)}/setpoints/roomTemperature`);else render();},1500));
    return;
   }
-  if(act==='schedule-enable'){const id=b.closest('.climate-details-body').querySelector('[data-act="schedule-pick"]').value;return void post('/api/daikin/schedule/current',{gatewayId:u.gw.id,embeddedId:u.mp.embeddedId,mode:b.dataset.mode,scheduleId:id,enabled:b.dataset.enabled==='true'},b.dataset.enabled==='true'?'Programma attivato.':'Programmi disattivati.');}
+  if(act==='schedule-enable'){const id=b.closest('[data-schedule-box]').querySelector('[data-act="schedule-pick"]').value;return void post('/api/daikin/schedule/current',{gatewayId:u.gw.id,embeddedId:u.mp.embeddedId,mode:b.dataset.mode,scheduleId:id,enabled:b.dataset.enabled==='true'},b.dataset.enabled==='true'?'Programma attivato.':'Programmi disattivati.');}
   if(act==='schedule-edit'){
-   const md=u.mp.schedule.value.modes[b.dataset.mode],id=b.closest('.climate-details-body').querySelector('[data-act="schedule-pick"]').value;
+   const md=u.mp.schedule.value.modes[b.dataset.mode],id=b.closest('[data-schedule-box]').querySelector('[data-act="schedule-pick"]').value;
    state.editing={unit:u.key,mode:b.dataset.mode,id,actions:structuredClone(md.schedules?.[id]?.actions||{})};render();return;
   }
   if(act==='schedule-cancel'){state.editing=null;render();return;}
@@ -330,8 +341,9 @@
  const CACHE_VIEW_MS=5*60*1000;
  document.addEventListener('DOMContentLoaded',()=>{
   content=document.getElementById('climateContent');statusEl=document.getElementById('climateStatus');refreshBtn=document.getElementById('climateRefresh');
+  schedBox=document.getElementById('climateSchedules');schedContent=document.getElementById('climateSchedulesContent');
+  for(const el of [content,schedContent].filter(Boolean)){el.addEventListener('click',onClick);el.addEventListener('submit',onSubmit);el.addEventListener('change',onChange);el.addEventListener('toggle',onToggle,true);}
   if(!content)return;
-  content.addEventListener('click',onClick);content.addEventListener('submit',onSubmit);content.addEventListener('change',onChange);content.addEventListener('toggle',onToggle,true);
   refreshBtn?.addEventListener('click',()=>void load(true));
   const params=new URLSearchParams(location.search),result=params.get('daikin');
   if(result||location.hash==='#clima'){
