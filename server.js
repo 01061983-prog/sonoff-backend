@@ -42,6 +42,7 @@ function returnUrl(value) {
 const DAY = 24 * 60 * 60 * 1000;
 const refreshJobs = new Map();
 let programming = null;
+let pushNotify = null;
 let daikinModule = null;
 let appAccounts = null;
 const APP_AUTH_ENABLED = process.env.EWELINK_APP_AUTH_ENABLED === "true";
@@ -241,7 +242,7 @@ app.use("/app", express.static(path.join(__dirname, "public"), { index: "index.h
 // Compatibilità con i file caricati accanto a server.js su GitHub.
 // Sono esposti soltanto gli asset elencati, mai il codice del backend.
 const WEBAPP_ASSETS = [
-  "index.html", "sonoff.html.html", "app.css", "text-size.js", "scene-pages.js", "room-map.js", "room-map.css", "account-auth.js", "account-auth.css", "menu-bar.js", "menu-bar.css", "climate.js", "climate.css", "manifest.webmanifest", "sw.js",
+  "index.html", "sonoff.html.html", "app.css", "text-size.js", "scene-pages.js", "room-map.js", "room-map.css", "account-auth.js", "account-auth.css", "menu-bar.js", "menu-bar.css", "push-settings.js", "climate.js", "climate.css", "manifest.webmanifest", "sw.js",
   "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png",
   "icons/icon-maskable.png", "icons/apple-touch-icon.png"
 ];
@@ -892,7 +893,9 @@ app.post("/api/toggle-multi", requireLogin, route(async (req, res) => {
 // Programmazione autonoma: disabilitata finché non viene attivata su Render.
 // I token sono conservati soltanto dopo il consenso esplicito al primo salvataggio.
 if (process.env.EWELINK_PROGRAMMING_ENABLED === "true") {
-  programming = require("./programming")({daikin:()=>daikinModule,db:getSceneDatabase, api, listDevices, appid:APPID, secret:APPSECRET, saveSession, authorizeOwner:owner=>appAccounts?appAccounts.authorizeOwner(owner):null, solarFetch:fetch, getScene:getProgrammingScene, runScene:runProgrammingScene, region:new URL(API_BASE).hostname.split("-")[0]});
+  pushNotify = require("./push-notify")({db:getSceneDatabase, identity:req=>requireProgramming().identity(req), requireLogin, route, cloudError});
+  pushNotify.install(app);
+  programming = require("./programming")({onExecuted:(s,status,message)=>pushNotify.scheduleExecuted(s,status,message),daikin:()=>daikinModule,db:getSceneDatabase, api, listDevices, appid:APPID, secret:APPSECRET, saveSession, authorizeOwner:owner=>appAccounts?appAccounts.authorizeOwner(owner):null, solarFetch:fetch, getScene:getProgrammingScene, runScene:runProgrammingScene, region:new URL(API_BASE).hostname.split("-")[0]});
   programming.start();
 }
 function requireProgramming() {

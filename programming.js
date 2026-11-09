@@ -1,7 +1,7 @@
 'use strict';
 const crypto=require('crypto');
 const core=require('./programming-core');
-module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch,authorizeOwner=async()=>null,isImpulseDevice=id=>id==='1000ac81a0',wakeSetTimeout=setTimeout,wakeClearTimeout=clearTimeout}){
+module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch,authorizeOwner=async()=>null,isImpulseDevice=id=>id==='1000ac81a0',wakeSetTimeout=setTimeout,wakeClearTimeout=clearTimeout,onExecuted=()=>{}}){
  const astronomy=require('./astronomy')({db,fetch:solarFetch,now});
  const recovery=require('./programming-recovery')({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,api,runScene,getScene,completedOnce});
  const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
@@ -373,6 +373,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
    }
   }catch(e){status='unknown';message=e.status===401?'Accesso scaduto: ricollega eWeLink.':String(e.message||'Esito non confermato.').slice(0,250);}
   await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data?.last?.id===claim){const next={...data,last:{...data.last,status,message,finishedAt:now(),until:0}};const success=status==='succeeded'||status==='skipped'&&message.startsWith('Spegnimento evitato:');await recovery.finishIntent(t,s,claim,success);if(recovery.eligible(s)){if(success){delete next.recoveryAt;delete next.recovery;}else{next.recoveryAt=now()+60000;next.recovery={since:s.nextAt,message:'Ripristino automatico in attesa di connessione e stato verificabili.'};}}if(completedOnce(next)){t.set(db().collection('ewelinkProgrammingHistory').doc(hash(next.owner+':'+ref.id)),{...next,id:ref.id,archivedAt:now(),enabled:false});t.delete(ref);}else t.set(ref,next);}});
+  try{onExecuted({...s,id:ref.id},status,message);}catch{}
  }
  let busy=false,timer=null,wakeTimer=null,wakeEpoch=0;
  // One wake for the nearest deadline, rather than reading Firestore every second.
