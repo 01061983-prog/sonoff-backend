@@ -27,6 +27,7 @@ app.use(cors({
 app.use(express.json({ limit: "768kb" }));
 app.use(cookieParser());
 app.use((_req, res, next) => { res.set("Cache-Control", "no-store"); next(); });
+require("./spartiti-import")(app); // import brani da link per oratoriosluigi.altervista.org/spartiti
 
 function sign(text) {
   return crypto.createHmac("sha256", APPSECRET).update(text).digest("base64");
