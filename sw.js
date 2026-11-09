@@ -1,8 +1,8 @@
 // Solo interfaccia statica. Le API, il login e i comandi non entrano nella cache.
 const CACHE_PREFIX = "san-luigi-plancia-";
-const CACHE_NAME = CACHE_PREFIX + "2026-11-09-menu-bar-map-v53";
+const CACHE_NAME = CACHE_PREFIX + "2026-11-09-climate-v54";
 const ROOT = new URL("./", self.location.href);
-const ASSETS = ["index.html", "app.css", "text-size.js", "scene-pages.js", "room-map.js", "room-map.css", "account-auth.js", "account-auth.css", "menu-bar.js", "menu-bar.css", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable.png", "icons/apple-touch-icon.png"].map(path => new URL(path, ROOT).href);
+const ASSETS = ["index.html", "app.css", "text-size.js", "scene-pages.js", "room-map.js", "room-map.css", "account-auth.js", "account-auth.css", "menu-bar.js", "menu-bar.css", "climate.js", "climate.css", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable.png", "icons/apple-touch-icon.png"].map(path => new URL(path, ROOT).href);
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)));

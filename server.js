@@ -239,7 +239,7 @@ app.use("/app", express.static(path.join(__dirname, "public"), { index: "index.h
 // Compatibilità con i file caricati accanto a server.js su GitHub.
 // Sono esposti soltanto gli asset elencati, mai il codice del backend.
 const WEBAPP_ASSETS = [
-  "index.html", "sonoff.html.html", "app.css", "text-size.js", "scene-pages.js", "room-map.js", "room-map.css", "account-auth.js", "account-auth.css", "menu-bar.js", "menu-bar.css", "manifest.webmanifest", "sw.js",
+  "index.html", "sonoff.html.html", "app.css", "text-size.js", "scene-pages.js", "room-map.js", "room-map.css", "account-auth.js", "account-auth.css", "menu-bar.js", "menu-bar.css", "climate.js", "climate.css", "manifest.webmanifest", "sw.js",
   "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png",
   "icons/icon-maskable.png", "icons/apple-touch-icon.png"
 ];
@@ -901,6 +901,9 @@ app.get("/api/locations", requireLogin, route(async(req,res) => res.json(require
 app.get("/api/solar", requireLogin, route(async(req,res) => res.json(await requireProgramming().solarPreview(req))));
 app.get("/api/programming", requireLogin, route(async(req,res) => res.json(await requireProgramming().list(req))));
 app.post("/api/programming", requireLogin, route(async(req,res) => res.json(await requireProgramming().mutate(req))));
+
+// Split Daikin tramite Onecta Cloud API (credenziali DAIKIN_* su Render).
+require("./daikin-onecta")({db:getSceneDatabase,home:HOME,requireLogin,route,cloudError}).install(app);
 
 app.use((error, _req, res, _next) => {
   res.status(error.type === "entity.parse.failed" ? 400 : 500).json({

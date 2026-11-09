@@ -2,7 +2,7 @@
 (()=>{
  'use strict';
  const key='ewelink_text_size_v1',sizes=[100,125,150,175,200];
- const startKey='ewelink_start_view_v1',views=['scenes','rooms','devices','home'];
+ const startKey='ewelink_start_view_v1',views=['scenes','rooms','devices','home','climate'];
  let startView='scenes';
  try{const saved=localStorage.getItem(startKey);if(views.includes(saved))startView=saved;}catch{}
  window.AppPreferences={initialView:()=>startView};

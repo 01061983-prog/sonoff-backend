@@ -1,0 +1,75 @@
+/* Pagina Clima (split Daikin) */
+#climateStatus.error{color:var(--danger)}
+.climate-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:18px;align-items:start}
+.climate-card{background:var(--bg-card);border:1px solid var(--border-soft);border-radius:18px;padding:18px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:14px}
+.climate-card.is-on{border-color:#bad5c6;box-shadow:0 6px 24px #147d5a14}
+.climate-card.is-offline{opacity:.7}
+.climate-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.climate-head h2{font-size:1.125rem}
+.climate-sub{font-size:.75rem;color:var(--text-soft);margin-top:4px}
+.climate-power{flex-direction:column;gap:4px;min-width:76px;min-height:64px;border-radius:16px;font-size:.6875rem;color:var(--text-soft)}
+.climate-power .icon{width:24px;height:24px}
+.climate-power.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.climate-power.on:hover:not(:disabled){background:var(--accent-dark);border-color:var(--accent-dark)}
+.climate-alert{background:var(--danger-soft);color:var(--danger);border-radius:10px;padding:8px 12px;font-size:.75rem;font-weight:600}
+.climate-sensors{display:flex;gap:10px}
+.climate-sensors>div{flex:1;background:var(--bg-soft);border-radius:12px;padding:9px 12px;display:flex;flex-direction:column;gap:2px}
+.climate-sensors span{font-size:.625rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft);font-weight:650}
+.climate-sensors strong{font-size:1.0625rem}
+.climate-block{display:flex;flex-direction:column;gap:8px}
+.climate-block h3{font-size:.75rem;letter-spacing:.04em;text-transform:uppercase;color:#6c7a70}
+.climate-block h3 small{text-transform:none;letter-spacing:0;font-weight:500;color:var(--accent)}
+.climate-chips{display:flex;flex-wrap:wrap;gap:6px}
+.climate-chip{min-height:38px;padding:7px 12px;border-radius:999px;font-size:.75rem;gap:6px}
+.climate-chip.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-dark)}
+.climate-temp{display:flex;align-items:center;justify-content:center;gap:18px}
+.climate-temp output{font-size:2.25rem;font-weight:650;letter-spacing:-.04em;min-width:110px;text-align:center}
+.climate-temp output small{font-size:.9rem;margin-left:2px;color:var(--text-soft)}
+.climate-step{width:52px;height:52px;border-radius:50%;font-size:1.5rem;padding:0}
+.climate-hint{font-size:.6875rem;color:#68766b;line-height:1.5}
+.climate-label{font-size:.6875rem;color:#68766b;font-weight:600;display:flex;flex-direction:column;gap:4px}
+.climate-levels{display:flex;gap:6px}
+.climate-level{flex:1;flex-direction:column;gap:3px;min-height:56px;padding:6px 4px;font-size:.6875rem;justify-content:flex-end}
+.climate-level span{display:block;width:10px;height:var(--h);min-height:4px;background:currentColor;border-radius:3px;opacity:.55}
+.climate-level.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-dark)}
+.climate-toggles{display:flex;flex-direction:column;gap:8px}
+.climate-toggle{justify-content:flex-start;font-size:.75rem}
+.climate-switch{width:34px;height:20px;border-radius:20px;background:#d7e0da;position:relative;transition:background .18s;flex-shrink:0}
+.climate-switch::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .18s}
+.climate-toggle.active .climate-switch{background:var(--accent)}
+.climate-toggle.active .climate-switch::after{transform:translateX(14px)}
+.climate-details{border-top:1px solid var(--border-soft);padding-top:10px}
+.climate-details summary{cursor:pointer;font-weight:650;font-size:.8125rem;padding:6px 0;list-style-position:inside}
+.climate-details-body{display:flex;flex-direction:column;gap:10px;padding-top:8px}
+.climate-row{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.climate-row .primary-button{margin-top:0}
+.climate-card select,.climate-card input:not([type=checkbox]){min-height:40px;border:1px solid var(--border-soft);border-radius:10px;padding:6px 10px;background:#fff;color:var(--text-main)}
+.climate-editor{background:var(--bg-soft);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.climate-editor h4{margin:0;font-size:.8125rem}
+.climate-days{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.climate-day{background:#fff;border-radius:10px;padding:8px 10px;font-size:.75rem}
+.climate-day ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.climate-day li{display:grid;grid-template-columns:42px 1fr auto;gap:6px;align-items:center}
+.climate-day li span:first-child{font-weight:650}
+.climate-x{min-height:28px;width:28px;padding:0;border-radius:50%;font-size:1rem}
+.climate-add{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;align-items:end}
+.climate-add label{font-size:.6875rem;color:#68766b;font-weight:600;display:flex;flex-direction:column;gap:4px}
+.climate-add .climate-check{flex-direction:row;align-items:center;min-height:40px}
+.climate-energy,.climate-info{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin:0}
+.climate-energy div,.climate-info div{background:var(--bg-soft);border-radius:10px;padding:8px 10px}
+.climate-energy dt,.climate-info dt{font-size:.625rem;color:var(--text-soft);font-weight:650;text-transform:uppercase;letter-spacing:.05em}
+.climate-energy dd,.climate-info dd{margin:2px 0 0;font-weight:650;font-size:.875rem}
+.climate-legend{font-weight:500;display:inline-flex;gap:6px;align-items:center}
+.climate-legend i{display:inline-block;width:10px;height:10px;border-radius:2px}
+.climate-legend i.h,.climate-bar .h{background:#e08a3c}
+.climate-legend i.c,.climate-bar .c{background:#3c8fe0}
+.climate-bars{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;height:110px;align-items:end;padding-bottom:16px}
+.climate-bar{height:100%;display:flex;flex-direction:column-reverse;position:relative;background:var(--bg-soft);border-radius:4px;overflow:visible}
+.climate-bar span{display:block;width:100%}
+.climate-bar span:first-child{border-radius:0 0 4px 4px}
+.climate-bar.none{opacity:.4}
+.climate-bar small{position:absolute;bottom:-16px;left:0;right:0;text-align:center;font-size:.5625rem;color:var(--text-soft)}
+.climate-empty{background:var(--bg-card);border:1px solid var(--border-soft);border-radius:18px;padding:28px;max-width:560px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.climate-empty-icon{width:48px;height:48px;border-radius:14px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center}
+.climate-foot{margin-top:22px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.climate-foot .climate-hint{max-width:620px}

@@ -14,13 +14,15 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <script src="account-auth.js?v=46"></script>
   <link rel="stylesheet" href="account-auth.css?v=39">
-  <script src="text-size.js?v=46"></script>
+  <script src="text-size.js?v=47"></script>
   <script src="scene-pages.js?v=46"></script>
   <script src="room-map.js?v=48"></script>
   <link rel="stylesheet" href="room-map.css?v=48">
   <link rel="stylesheet" href="app.css?v=46">
-  <script src="menu-bar.js?v=52"></script>
+  <script src="menu-bar.js?v=54"></script>
   <link rel="stylesheet" href="menu-bar.css?v=53">
+  <script src="climate.js?v=1"></script>
+  <link rel="stylesheet" href="climate.css?v=1">
   <style>
     #startupScreen{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:28px;background:#f6f8f6;color:#24382f;text-align:center;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:auto}
     #startupScreen[hidden]{display:none}body.app-starting>main{visibility:hidden}
@@ -48,10 +50,11 @@
     <button id="roomsNavBtn" class="nav-item" data-view="rooms" aria-label="Stanze" aria-controls="roomsSubmenu" aria-expanded="false"><span data-icon="building"></span><span>Stanze</span><span class="submenu-chevron" aria-hidden="true">⌄</span></button>
     <div id="roomsSubmenu" class="scene-submenu" hidden><button class="submenu-item" onclick="openRooms()">Apri stanze</button><button id="editCurrentRoomBtn" class="submenu-item" data-room-edit onclick="editRoom(selectedRoomId)" hidden>Modifica stanza aperta</button><button class="submenu-item" data-room-edit onclick="editRoom(null)">Crea nuova stanza</button><button class="submenu-item" data-room-edit onclick="manageRooms()">Modifica o elimina stanze</button></div>
     <button class="nav-item" data-view="programming" aria-label="Programmazione"><span data-icon="calendar"></span><span>Programmazione</span></button>
+    <button class="nav-item" data-view="climate" aria-label="Clima"><span data-icon="thermo"></span><span>Clima</span></button>
     <button class="nav-item" data-view="install" aria-label="La tua webapp"><span data-icon="download"></span><span>La tua webapp</span></button>
   </nav>
   <details class="text-size-settings" id="textSizeSettings"><summary>Impostazioni app <span aria-hidden="true">⚙</span></summary>
-    <div class="text-size-content"><label for="appStartView">All’avvio apri</label><select id="appStartView"><option value="scenes">Scenari</option><option value="rooms">Stanze</option><option value="devices">Dispositivi</option><option value="home">Panoramica</option></select><p id="appStartStatus" class="text-size-status" role="status">La pagina iniziale si salva automaticamente su questo dispositivo.</p><h3>Dimensione caratteri</h3><label for="textSizeRange">Grandezza del testo: <output id="textSizeValue" for="textSizeRange">100%</output></label>
+    <div class="text-size-content"><label for="appStartView">All’avvio apri</label><select id="appStartView"><option value="scenes">Scenari</option><option value="rooms">Stanze</option><option value="devices">Dispositivi</option><option value="home">Panoramica</option><option value="climate">Clima</option></select><p id="appStartStatus" class="text-size-status" role="status">La pagina iniziale si salva automaticamente su questo dispositivo.</p><h3>Dimensione caratteri</h3><label for="textSizeRange">Grandezza del testo: <output id="textSizeValue" for="textSizeRange">100%</output></label>
       <div class="text-size-controls"><button id="textSizeDecrease" type="button" aria-label="Riduci i caratteri">A−</button><input id="textSizeRange" type="range" min="100" max="200" step="25" value="100" aria-label="Dimensione dei caratteri"><button id="textSizeIncrease" type="button" aria-label="Ingrandisci i caratteri">A+</button></div>
       <div class="text-size-preview" aria-label="Anteprima della dimensione dei caratteri"><span class="text-size-preview-label">Anteprima</span><strong class="text-size-preview-title">Luci del portico</strong><span class="text-size-preview-state">Acceso</span><p>Programmazione attiva fino all’alba.</p></div>
       <button id="textSizeReset" type="button">Ripristina dimensione normale</button>
@@ -125,6 +128,11 @@
     <p class="page-note">Le fasce attive mantengono accese le proprie luci anche durante uno spegnimento manuale dalla plancia. Se salvi o riattivi una fascia già iniziata, le luci si accendono subito; impulsi e cancelli sono esclusi. Le programmazioni concluse, singole o con una data finale, spariscono dall’elenco, mentre gli esiti incerti restano visibili.</p><div id="programmingList" class="programming-list"></div>
     <details class="programming-help"><summary>Come funzionano le programmazioni</summary><p>I timer funzionano anche con la webapp chiusa. Ogni fascia invia un comando esplicito: i comandi manuali restano validi fino al prossimo orario programmato.</p><p>Le fasce dello stesso account sullo stesso canale possono sovrapporsi: una fascia non spegne la luce mentre un’altra la richiede accesa.</p><p>In caso di interruzione, i comandi ON/OFF non completati vengono riallineati allo stato previsto quando tornano disponibili connessione e dati. Il recupero rispetta le altre fasce attive. Impulsi e cancelli senza stato verificabile non vengono ripetuti automaticamente. Server, eWeLink e dispositivo devono essere disponibili.</p><p>Nel cambio all’ora solare, per gli orari ripetuti si usa la prima occorrenza per l’accensione e l’ultima per lo spegnimento finale; un orario settimanale inesistente nel cambio all’ora legale viene saltato.</p></details>
     <button id="disconnectProgrammingBtn" class="secondary-button" hidden onclick="disconnectProgramming()">Disattiva tutti i timer e scollega l’esecuzione automatica</button>
+  </section>
+  <section id="climateView" class="view" style="display:none" aria-labelledby="climateHeading">
+    <div class="page-heading"><div><p class="eyebrow">DAIKIN ONECTA</p><h1 id="climateHeading">Clima<span class="green-dot">.</span></h1><p class="heading-sub">Gli split dell’oratorio: accensione, modalità, temperatura, ventilazione, programmi e consumi.</p></div><button id="climateRefresh" class="secondary-button" type="button" hidden>Aggiorna stati</button></div>
+    <p id="climateStatus" class="page-note" role="status" aria-live="polite"></p>
+    <div id="climateContent"></div>
   </section>
   <section id="installView" class="view" style="display:none" aria-labelledby="installHeading"><div class="page-heading"><div><p class="eyebrow">SEMPRE A PORTATA DI MANO</p><h1 id="installHeading">La tua webapp<span class="green-dot">.</span></h1><p class="heading-sub">Lo stesso spazio, sul telefono, sul tablet e sul computer.</p></div></div><article class="install-hero"><span class="install-app-icon" data-icon="building"></span><div><h2>eWeLink Oratorio, sulla tua schermata.</h2><p>Apri la plancia dalla sua icona, in una finestra dedicata.</p><button id="installBtn" class="primary-button" hidden><span data-icon="download"></span>Installa la webapp</button><p id="installedLabel" class="success-label" hidden>La plancia è aperta come app.</p></div></article><div class="install-guides"><article class="guide-card"><span data-icon="smartphone"></span><h3>iPhone e iPad</h3><p>Apri il sito in Safari, tocca <strong>Condividi</strong> e scegli <strong>Aggiungi alla schermata Home</strong>.</p></article><article class="guide-card"><span data-icon="tablet"></span><h3>Tablet e telefoni Android</h3><p>Apri il sito in Chrome. Nel menu scegli <strong>Installa app</strong> o <strong>Aggiungi a schermata Home</strong>, se disponibile.</p></article><article class="guide-card"><span data-icon="monitor"></span><h3>Computer</h3><p>In Chrome o Edge usa l’opzione di installazione nel menu del browser. Su Safari per Mac usa <strong>File → Aggiungi al Dock</strong>, se disponibile.</p></article></div><div class="info-strip"><span data-icon="wifi"></span><span>Serve Internet per leggere gli stati e comandare i dispositivi. Telefono, tablet e computer mantengono accessi indipendenti allo stesso account; gli scenari collegati a Firebase sono condivisi fra i dispositivi della stessa casa eWeLink.</span></div><article class="account-card migration-card"><div><h3>Trasferisci i tuoi scenari</h3><p>Esportali da questo browser e importali sul nuovo sito o su un altro dispositivo.</p></div><div class="scene-actions"><button class="secondary-button" onclick="exportScenes()">Esporta scenari</button><button class="secondary-button" onclick="document.getElementById('sceneImport').click()">Importa scenari</button><input id="sceneImport" type="file" accept="application/json,.json" hidden aria-label="File degli scenari da importare"></div></article><article class="account-card"><div><h3>Il tuo account</h3><p>Esci da questo dispositivo. Gli altri dispositivi e i timer restano collegati.</p></div><button class="secondary-button" onclick="logout()">Esci dall’account</button></article></section>
   <footer class="app-footer"><span>eWeLink Oratorio <span class="footer-separator">/</span> Uno spazio da vivere.</span><span>Plancia luci e accessi</span></footer>
@@ -1049,6 +1057,9 @@
     }
 
     const ICONS = {
+        thermo: '<path d="M14 14.76V4a2 2 0 0 0-4 0v10.76a4 4 0 1 0 4 0Z"/><path d="M12 9v8"/><path d="M18 5h3M18 9h3M18 13h2"/>',
+        snow: '<path d="M12 2v20M4.9 6.5l14.2 11M4.9 17.5l14.2-11M9 4l3 2 3-2M9 20l3-2 3 2"/>',
+        fan: '<path d="M12 12c0-3 1-7 4-7s3 3 1 5-5 2-5 2Zm0 0c3 0 7 1 7 4s-3 3-5 1-2-5-2-5Zm0 0c0 3-1 7-4 7s-3-3-1-5 5-2 5-2Zm0 0c-3 0-7-1-7-4s3-3 5-1 2 5 2 5Z"/>',
         building: '<path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-7h6v7M9 10h.01M15 10h.01M12 4V1m-2 2h4"/>',
         grid: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
         bulb: '<path d="M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0c-1 1-1 2-1 2H9s0-1-1-2Z"/>',
@@ -1083,7 +1094,7 @@
     let lastSyncTime = null;
     let activeDeviceFilter = "all";
     let installPrompt = null;
-    const VIEW_NAMES = { home: "Panoramica", devices: "Dispositivi", scenes: "Scenari", rooms:"Stanze", programming: "Programmazione", install: "La tua webapp" };
+    const VIEW_NAMES = { home: "Panoramica", devices: "Dispositivi", scenes: "Scenari", rooms:"Stanze", programming: "Programmazione", climate: "Clima", install: "La tua webapp" };
 
     function hydrateIcons() {
         document.querySelectorAll("[data-icon]").forEach(el => { el.innerHTML = icon(el.dataset.icon); });
@@ -1103,7 +1114,7 @@
         if (!VIEW_NAMES[name]) return;
         if (!keepNavigation) closeNavigation();
         document.body.dataset.view = name;
-        const views = { home: "homeView", devices: "devicesView", scenes: "settingsView", rooms:"roomsView", programming: "programmingView", install: "installView" };
+        const views = { home: "homeView", devices: "devicesView", scenes: "settingsView", rooms:"roomsView", programming: "programmingView", climate: "climateView", install: "installView" };
         for (const [key, id] of Object.entries(views)) document.getElementById(id).style.display = key === name ? "block" : "none";
         document.querySelectorAll(".nav-item[data-view]").forEach(button => {
             button.classList.toggle("active", button.dataset.view === name);
@@ -1114,6 +1125,7 @@
         document.title = VIEW_NAMES[name] + " · " + (window.AppAccounts?.state.account?.name || "eWeLink Oratorio");
         if (name === "rooms") renderRooms();
         if (name === "programming") void openProgramming();
+        if (name === "climate") window.Climate?.open();
         window.scrollTo({top: 0, behavior: "instant"});
     }
     function deviceOn(dev) {

@@ -8,6 +8,7 @@
   rooms:{label:'Stanze',icon:'building'},
   devices:{label:'Dispositivi',icon:'bulb'},
   programming:{label:'Programmazione',short:'Programmi',icon:'calendar'},
+ climate:{label:'Clima',icon:'thermo'},
   home:{label:'Panoramica',icon:'grid'},
   install:{label:'La tua webapp',short:'Webapp',icon:'download'}
  };
