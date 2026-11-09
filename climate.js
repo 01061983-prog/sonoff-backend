@@ -273,7 +273,7 @@
  });
  // ---- Integrazione con Programmazione: gli split come dispositivi programmabili.
  const progId=u=>'daikin:'+u.gw.id+':'+u.mp.embeddedId;
- const progUnit=id=>units().find(u=>progId(u)===id);
+ const progUnit=id=>id==='daikin:all'?units()[0]:units().find(u=>progId(u)===id);
  function progOptions(sel,list,cur,group,keep='Lascia com’è'){return `<option value="">${keep}</option>`+list.map(v=>`<option value="${esc(v)}" ${v===cur?'selected':''}>${esc(label(group,v))}</option>`).join('');}
  function renderProgramming(box,id,saved){
   const u=progUnit(id);
@@ -282,7 +282,8 @@
   const v=saved||{operationMode:mode(u),roomTemperature:setpoint(u)?.value};
   const m=v.operationMode||mode(u),sp=setpoint(u,m),fan=fanMode(u,m);
   const fixed=fan?.fanSpeed?.modes?.fixed,levels=[];if(fixed)for(let i=fixed.minValue||1;i<=(fixed.maxValue||5);i+=fixed.stepValue||1)levels.push(i);
-  let html=`<fieldset class="programming-daikin"><legend>Impostazioni dello split all’accensione</legend>
+  const all=id==='daikin:all';
+  let html=`<fieldset class="programming-daikin"><legend>${all?'Impostazioni di tutti gli split all’accensione':'Impostazioni dello split all’accensione'}</legend>${all?`<p class="page-note">Le stesse impostazioni vengono inviate a tutti gli split: ${esc(units().map(x=>x.name).join(', '))}.</p>`:''}
    <label for="dkMode">Modalità</label><select id="dkMode" data-dk="operationMode">${progOptions(null,u.mp.operationMode?.values||[],v.operationMode,'operationMode','Come l’ultima usata')}</select>`;
   if(sp)html+=`<label for="dkTemp">Temperatura (${num(sp.minValue)}–${num(sp.maxValue)} °C)</label><input id="dkTemp" data-dk="roomTemperature" type="number" min="${sp.minValue}" max="${sp.maxValue}" step="${sp.stepValue||0.5}" value="${esc(v.roomTemperature??'')}" placeholder="Lascia com’è">`;
   else if(v.operationMode)html+=`<p class="page-note">In ${esc(label('operationMode',m).toLowerCase())} la temperatura non si imposta.</p>`;
@@ -306,7 +307,7 @@
   return [set.operationMode&&label('operationMode',set.operationMode),set.roomTemperature!==undefined&&num(set.roomTemperature)+' °C',set.fanSpeed&&'ventola '+label('fanSpeed',set.fanSpeed).toLowerCase()+(set.fanLevel?' '+set.fanLevel:''),set.vertical&&'su/giù '+label('direction',set.vertical).toLowerCase(),set.horizontal&&'dx/sx '+label('direction',set.horizontal).toLowerCase(),set.powerfulMode==='on'&&'Powerful'].filter(Boolean).join(' · ');
  }
  window.Climate={open,reload:()=>load(true),
-  programmingUnits:()=>units().map(u=>({id:progId(u),name:u.name,online:u.online})),
-  programmingUnit:id=>progUnit(id)?{id,name:progUnit(id).name}:null,
+  programmingUnits:()=>{const list=units().map(u=>({id:progId(u),name:u.name,online:u.online}));return list.length>1?[{id:'daikin:all',name:`Tutti gli split (${list.length})`,online:list.some(u=>u.online)},...list]:list;},
+  programmingUnit:id=>progUnit(id)?{id,name:id==='daikin:all'?'Tutti gli split':progUnit(id).name}:null,
   renderProgramming,programmingSettings,describeSettings};
 })();

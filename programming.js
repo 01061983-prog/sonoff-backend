@@ -240,7 +240,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
     if(!['on','off'].includes(input.action))throw error(400,'invalid_schedule','Per uno split scegli accensione o spegnimento.');
     const unit=await daikin().prepareSchedule(req,input);
     clean=core.validate({...input,outlets:undefined},{deviceid:input.deviceId,name:unit.name,params:{switch:'off'}},now());
-    clean={...clean,targetType:'daikin',kind:'daikin',outlets:[],daikin:unit.settings,daikinOwner:unit.owner};
+    clean={...clean,targetType:'daikin',kind:'daikin',outlets:[],daikin:unit.settings,daikinOwner:unit.owner,daikinUnits:unit.units};
    }else{
     clean=core.validate(input,devices.find(d=>d.deviceid===input?.deviceId),now());
     clean.targetType='device';
@@ -273,7 +273,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
     delete next.solarError;delete next.solarPendingAt;next.solarRefreshAt=clean.enabled&&core.usesSolar(clean)&&clean.repeat!=='date'?now()+7*core.DAY:core.NEVER;
    }
    if(op==='save'&&next.kind!=='scene')for(const key of ['sceneId','workspaceId','sceneSignature','targets'])delete next[key];
-   if(op==='save'&&next.kind!=='daikin')for(const key of ['daikin','daikinOwner'])delete next[key];
+   if(op==='save'&&next.kind!=='daikin')for(const key of ['daikin','daikinOwner','daikinUnits'])delete next[key];
    next.nextAt=core.nextEvent(next,now())?.at||core.NEVER;
    const activation=automaticActivation(next,now());
    if(activation){next.activation=activation;next.nextAt=now();}

@@ -78,7 +78,17 @@ module.exports = function createDaikin({ db, home, requireLogin, route, cloudErr
     try { return await job; } finally { refreshing.delete(owner); }
   }
 
+  const recent = []; // richieste dell'ultimo minuto (limite Daikin 20/min)
+  async function pace() {
+    for (;;) {
+      const t = Date.now();
+      while (recent.length && t - recent[0] > 60000) recent.shift();
+      if (recent.length < 18) { recent.push(t); return; }
+      await new Promise(r => setTimeout(r, 60000 - (t - recent[0]) + 250));
+    }
+  }
   async function call(owner, method, path, body) {
+    await pace();
     if (rate?.retryUntil > Date.now()) throw fail(429, 'daikin_rate_limit', `Limite richieste Daikin raggiunto: riprova tra ${Math.ceil((rate.retryUntil - Date.now()) / 1000)} secondi.`);
     const send = async token => fetch(API + path, {
       method,
@@ -261,75 +271,106 @@ module.exports = function createDaikin({ db, home, requireLogin, route, cloudErr
     }));
   }
   // ---- Programmazioni: validazione al salvataggio ed esecuzione all'orario.
+  // deviceId "daikin:<gateway>:<embedded>" per uno split, "daikin:all" per tutti.
+  const ALL = 'daikin:all';
   const unitId = id => {
     const m = /^daikin:([\w-]{1,80}):([\w-]{1,40})$/.exec(String(id || ''));
     if (!m) throw fail(400, 'invalid_schedule', 'Split Daikin non valido.');
     return { gatewayId: m[1], embeddedId: m[2] };
   };
+  const climateUnits = owner => (caches.get(owner)?.devices || []).flatMap(g => (g.managementPoints || []).filter(m => m.managementPointType === 'climateControl').map(m => ({ gatewayId: g.id, embeddedId: m.embeddedId, mp: m })));
+  function validateSettings(mp, raw, action) {
+    const settings = {};
+    const name = mp.name?.value || 'Split';
+    const bad = msg => { throw fail(400, 'invalid_schedule', `${name}: ${msg}`); };
+    if (action !== 'on') return settings;
+    const modes = mp.operationMode?.values || [];
+    const mode = raw.operationMode || mp.operationMode?.value;
+    if (raw.operationMode) { if (!modes.includes(raw.operationMode)) bad('modalità non disponibile.'); settings.operationMode = raw.operationMode; }
+    const sp = mp.temperatureControl?.value?.operationModes?.[mode]?.setpoints?.roomTemperature;
+    if (raw.roomTemperature !== undefined && raw.roomTemperature !== null && raw.roomTemperature !== '') {
+      const t = Number(raw.roomTemperature);
+      if (!sp) bad('in questa modalità la temperatura non si imposta.');
+      if (!Number.isFinite(t) || t < sp.minValue || t > sp.maxValue) bad(`temperatura fuori intervallo (${sp.minValue}–${sp.maxValue} °C).`);
+      settings.roomTemperature = t;
+    }
+    const fan = mp.fanControl?.value?.operationModes?.[mode];
+    const pick = (key, node, label) => {
+      if (raw[key] === undefined || raw[key] === '') return;
+      if (!node?.values?.includes(raw[key])) bad(label + ' non disponibile in questa modalità.');
+      settings[key] = raw[key];
+    };
+    pick('fanSpeed', fan?.fanSpeed?.currentMode, 'velocità ventola');
+    if (settings.fanSpeed === 'fixed' && raw.fanLevel !== undefined && raw.fanLevel !== '') {
+      const f = fan.fanSpeed.modes?.fixed, l = Number(raw.fanLevel);
+      if (!f || !Number.isInteger(l) || l < f.minValue || l > f.maxValue) bad('livello ventola non valido.');
+      settings.fanLevel = l;
+    }
+    pick('vertical', fan?.fanDirection?.vertical?.currentMode, 'direzione verticale');
+    pick('horizontal', fan?.fanDirection?.horizontal?.currentMode, 'direzione orizzontale');
+    for (const key of ['powerfulMode', 'econoMode', 'streamerMode']) {
+      if (raw[key] === undefined || raw[key] === '') continue;
+      if (!mp[key]?.values?.includes(raw[key])) bad('funzione non disponibile.');
+      settings[key] = raw[key];
+    }
+    return settings;
+  }
   async function prepareSchedule(req, input) {
     needConfig();
-    const owner = ownerOf(req), { gatewayId, embeddedId } = unitId(input.deviceId);
+    const owner = ownerOf(req);
     await devices(owner, false);
-    const mp = managementPoint(owner, gatewayId, embeddedId);
     const raw = input.daikin && typeof input.daikin === 'object' ? input.daikin : {};
-    const settings = {};
-    const bad = msg => { throw fail(400, 'invalid_schedule', msg); };
-    if (input.action === 'on') {
-      const modes = mp.operationMode?.values || [];
-      const mode = raw.operationMode ?? mp.operationMode?.value;
-      if (raw.operationMode !== undefined && raw.operationMode !== '') { if (!modes.includes(raw.operationMode)) bad('Modalità non disponibile su questo split.'); settings.operationMode = raw.operationMode; }
-      const sp = mp.temperatureControl?.value?.operationModes?.[mode]?.setpoints?.roomTemperature;
-      if (raw.roomTemperature !== undefined && raw.roomTemperature !== null && raw.roomTemperature !== '') {
-        const t = Number(raw.roomTemperature);
-        if (!sp) bad('In questa modalità la temperatura non si imposta.');
-        if (!Number.isFinite(t) || t < sp.minValue || t > sp.maxValue) bad(`Temperatura fuori intervallo (${sp.minValue}–${sp.maxValue} °C).`);
-        settings.roomTemperature = t;
-      }
-      const fan = mp.fanControl?.value?.operationModes?.[mode];
-      const pick = (key, node, label) => {
-        if (raw[key] === undefined || raw[key] === '') return;
-        if (!node?.values?.includes(raw[key])) bad(label + ' non disponibile in questa modalità.');
-        settings[key] = raw[key];
-      };
-      pick('fanSpeed', fan?.fanSpeed?.currentMode, 'Velocità ventola');
-      if (settings.fanSpeed === 'fixed' && raw.fanLevel !== undefined && raw.fanLevel !== '') {
-        const f = fan.fanSpeed.modes?.fixed, l = Number(raw.fanLevel);
-        if (!f || !Number.isInteger(l) || l < f.minValue || l > f.maxValue) bad('Livello ventola non valido.');
-        settings.fanLevel = l;
-      }
-      pick('vertical', fan?.fanDirection?.vertical?.currentMode, 'Direzione verticale');
-      pick('horizontal', fan?.fanDirection?.horizontal?.currentMode, 'Direzione orizzontale');
-      for (const key of ['powerfulMode', 'econoMode', 'streamerMode']) {
-        if (raw[key] === undefined || raw[key] === '') continue;
-        if (!mp[key]?.values?.includes(raw[key])) bad('Funzione non disponibile su questo split.');
-        settings[key] = raw[key];
-      }
+    if (input.deviceId === ALL) {
+      const list = climateUnits(owner);
+      if (!list.length) throw fail(400, 'invalid_schedule', 'Nessuno split Daikin trovato.');
+      let settings = {};
+      for (const u of list) settings = validateSettings(u.mp, raw, input.action); // stesse impostazioni valide per ogni split
+      return { name: `Tutti gli split (${list.length})`, settings, owner, units: list.map(u => 'daikin:' + u.gatewayId + ':' + u.embeddedId) };
     }
-    return { name: mp.name?.value || 'Split', settings, owner };
+    const { gatewayId, embeddedId } = unitId(input.deviceId);
+    const mp = managementPoint(owner, gatewayId, embeddedId);
+    return { name: mp.name?.value || 'Split', settings: validateSettings(mp, raw, input.action), owner, units: [input.deviceId] };
   }
-  async function runSchedule(s, state) {
-    needConfig();
-    const owner = s.daikinOwner || 'default', { gatewayId, embeddedId } = unitId(s.deviceId);
+  async function runUnit(owner, id, state, set) {
+    const { gatewayId, embeddedId } = unitId(id);
     const base = `/gateway-devices/${encodeURIComponent(gatewayId)}/management-points/${encodeURIComponent(embeddedId)}/characteristics/`;
+    const mp = managementPoint(owner, gatewayId, embeddedId);
+    const name = mp.name?.value || 'Split';
     const patch = (ch, value, path) => call(owner, 'PATCH', base + ch, { value, ...(path ? { path } : {}) });
     lastPower.set(owner + ':' + gatewayId + ':' + embeddedId, Date.now());
-    if (state === 'off') { await patch('onOffMode', 'off'); caches.delete(owner); return 'Split spento tramite Daikin.'; }
-    const set = s.daikin || {};
-    let mode = set.operationMode;
-    if (!mode) { await devices(owner, false); mode = managementPoint(owner, gatewayId, embeddedId).operationMode?.value; }
+    if (state === 'off') { await patch('onOffMode', 'off'); return name + ' spento'; }
+    const mode = set.operationMode || mp.operationMode?.value;
+    const fan = `/operationModes/${mode}/fan`;
+    const current = (ch, path) => { const n = mp[ch]; if (!path) return n?.value; let v = n?.value; for (const p of path.split('/').filter(Boolean)) v = v?.[p]; return v?.value; };
     const steps = [['onOffMode', 'on']];
     if (set.operationMode) steps.push(['operationMode', set.operationMode]);
     if (set.roomTemperature !== undefined) steps.push(['temperatureControl', set.roomTemperature, `/operationModes/${mode}/setpoints/roomTemperature`]);
-    if (set.fanSpeed) steps.push(['fanControl', set.fanSpeed, `/operationModes/${mode}/fanSpeed/currentMode`]);
-    if (set.fanLevel !== undefined) steps.push(['fanControl', set.fanLevel, `/operationModes/${mode}/fanSpeed/modes/fixed`]);
-    if (set.vertical) steps.push(['fanControl', set.vertical, `/operationModes/${mode}/fanDirection/vertical/currentMode`]);
-    if (set.horizontal) steps.push(['fanControl', set.horizontal, `/operationModes/${mode}/fanDirection/horizontal/currentMode`]);
+    if (set.fanSpeed) steps.push(['fanControl', set.fanSpeed, fan + 'Speed/currentMode']);
+    if (set.fanLevel !== undefined) steps.push(['fanControl', set.fanLevel, fan + 'Speed/modes/fixed']);
+    if (set.vertical) steps.push(['fanControl', set.vertical, fan + 'Direction/vertical/currentMode']);
+    if (set.horizontal) steps.push(['fanControl', set.horizontal, fan + 'Direction/horizontal/currentMode']);
     for (const key of ['powerfulMode', 'econoMode', 'streamerMode']) if (set[key]) steps.push([key, set[key]]);
-    let done = 0;
-    try { for (const [ch, value, path] of steps) { await patch(ch, value, path); done++; } }
-    catch (e) { caches.delete(owner); throw new Error(`Split: ${done}/${steps.length} impostazioni accettate. ${e.message}`.slice(0, 250)); }
+    let sent = 0;
+    for (const [ch, value, path] of steps) {
+      if (ch !== 'onOffMode' && current(ch, path) === value) continue; // già impostato: nessuna richiesta
+      await patch(ch, value, path); sent++;
+    }
+    return name + ' acceso';
+  }
+  async function runSchedule(s, state) {
+    needConfig();
+    const owner = s.daikinOwner || 'default';
     caches.delete(owner);
-    return `Split acceso: ${done} impostazioni accettate da Daikin.`;
+    await devices(owner, false); // stato aggiornato: salta le impostazioni già uguali
+    const ids = s.deviceId === ALL ? climateUnits(owner).map(u => 'daikin:' + u.gatewayId + ':' + u.embeddedId) : [s.deviceId];
+    const ok = [], failed = [];
+    for (const id of ids) {
+      try { ok.push(await runUnit(owner, id, state, s.daikin || {})); }
+      catch (e) { failed.push((e.message || 'errore').slice(0, 120)); }
+    }
+    caches.delete(owner);
+    if (failed.length) throw new Error(`${ok.length}/${ids.length} split eseguiti. ${failed.join(' · ')}`.slice(0, 250));
+    return ids.length > 1 ? `${ok.length} split ${state === 'off' ? 'spenti' : 'accesi'} tramite Daikin.` : ok[0] + ' tramite Daikin.';
   }
   return { install, configured, prepareSchedule, runSchedule };
 };
