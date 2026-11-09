@@ -5,6 +5,8 @@
  const startKey='ewelink_start_view_v1',views=['scenes','rooms','devices','home','climate'];
  let startView='scenes';
  try{const saved=localStorage.getItem(startKey);if(views.includes(saved))startView=saved;}catch{}
+ // Ritorno dal collegamento Daikin: apri direttamente la pagina Clima.
+ if(/[?&]daikin=/.test(location.search)||location.hash==='#clima')startView='climate';
  window.AppPreferences={initialView:()=>startView};
  const normalize=value=>sizes.includes(Number(value))?Number(value):100;
  let size=100;

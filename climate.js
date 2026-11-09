@@ -324,6 +324,7 @@
  }
 
  function open(){
+  if(state.cleanUrl){state.cleanUrl();state.cleanUrl=null;}
   if(Date.now()-state.lastLoad>CACHE_VIEW_MS||!state.data)void load(false);else render();
  }
  const CACHE_VIEW_MS=5*60*1000;
@@ -335,9 +336,9 @@
   const params=new URLSearchParams(location.search),result=params.get('daikin');
   if(result||location.hash==='#clima'){
    const msg={ok:'Account Daikin collegato.',denied:'Autorizzazione Daikin annullata.',expired:'Collegamento Daikin scaduto: riprova.'}[result];
-   params.delete('daikin');history.replaceState(null,'',location.pathname+(params.size?'?'+params:''));
-   if(result==='ok')state.flash=msg;
-   setTimeout(()=>{if(typeof setView==='function')setView('climate');if(msg&&result!=='ok')say(msg,true);},0);
+   if(msg)state.flash=msg;
+   state.cleanUrl=()=>{params.delete('daikin');history.replaceState(null,'',location.pathname+(params.size?'?'+params:''));};
+   if(document.body.dataset.view==='climate')open();
   }
   setInterval(()=>{if(document.body.dataset.view==='climate'&&document.visibilityState==='visible'&&state.status?.linked&&!state.busy&&Date.now()-state.lastLoad>=10*60*1000)void load(false);},60000);
  });
