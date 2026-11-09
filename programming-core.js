@@ -116,7 +116,7 @@ function plan(s,all,now){
  if(!last)return {event:null,outlets:[],reason:'Orario saltato durante un’interruzione prolungata.'};
  if(last.state==='on'&&now-last.at>5*60000)return {event:null,outlets:[],reason:'Accensione saltata: ritardo superiore a 5 minuti.'};
  const selected=s.kind==='multi'?s.outlets:[null];
- const outlets=selected.filter(outlet=>last.state!=='off'||!(activeWindow(s,now)||all.some(other=>other.id!==s.id&&other.deviceId===s.deviceId&&activeWindow(other,now)&&(other.kind==='single'||other.outlets.includes(outlet)))));
+ const outlets=selected.filter(outlet=>last.state!=='off'||!(activeWindow(s,now)||all.some(other=>other.id!==s.id&&other.deviceId===s.deviceId&&activeWindow(other,now)&&(other.kind==='single'||other.kind==='daikin'||other.outlets.includes(outlet)))));
  return {event:last,outlets,reason:outlets.length?'':'Spegnimento evitato: un’altra fascia è ancora attiva.'};
 }
 module.exports={ZONE,NEVER,DAY,dateKey,addDays,localTime,validDate,solarTime,usesSolar,timeAt,windowFor,datesFor,windows,events,nextEvent,validate,currentWindow,activeWindow,plan};

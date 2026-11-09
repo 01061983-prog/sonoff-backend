@@ -41,6 +41,7 @@ function returnUrl(value) {
 const DAY = 24 * 60 * 60 * 1000;
 const refreshJobs = new Map();
 let programming = null;
+let daikinModule = null;
 let appAccounts = null;
 const APP_AUTH_ENABLED = process.env.EWELINK_APP_AUTH_ENABLED === "true";
 
@@ -890,7 +891,7 @@ app.post("/api/toggle-multi", requireLogin, route(async (req, res) => {
 // Programmazione autonoma: disabilitata finché non viene attivata su Render.
 // I token sono conservati soltanto dopo il consenso esplicito al primo salvataggio.
 if (process.env.EWELINK_PROGRAMMING_ENABLED === "true") {
-  programming = require("./programming")({db:getSceneDatabase, api, listDevices, appid:APPID, secret:APPSECRET, saveSession, authorizeOwner:owner=>appAccounts?appAccounts.authorizeOwner(owner):null, solarFetch:fetch, getScene:getProgrammingScene, runScene:runProgrammingScene, region:new URL(API_BASE).hostname.split("-")[0]});
+  programming = require("./programming")({daikin:()=>daikinModule,db:getSceneDatabase, api, listDevices, appid:APPID, secret:APPSECRET, saveSession, authorizeOwner:owner=>appAccounts?appAccounts.authorizeOwner(owner):null, solarFetch:fetch, getScene:getProgrammingScene, runScene:runProgrammingScene, region:new URL(API_BASE).hostname.split("-")[0]});
   programming.start();
 }
 function requireProgramming() {
@@ -903,7 +904,8 @@ app.get("/api/programming", requireLogin, route(async(req,res) => res.json(await
 app.post("/api/programming", requireLogin, route(async(req,res) => res.json(await requireProgramming().mutate(req))));
 
 // Split Daikin tramite Onecta Cloud API (credenziali DAIKIN_* su Render).
-require("./daikin-onecta")({db:getSceneDatabase,home:HOME,requireLogin,route,cloudError}).install(app);
+daikinModule=require("./daikin-onecta")({db:getSceneDatabase,home:HOME,requireLogin,route,cloudError});
+daikinModule.install(app);
 
 app.use((error, _req, res, _next) => {
   res.status(error.type === "entity.parse.failed" ? 400 : 500).json({

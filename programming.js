@@ -1,7 +1,7 @@
 'use strict';
 const crypto=require('crypto');
 const core=require('./programming-core');
-module.exports=function createProgramming({db,api,listDevices,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch,authorizeOwner=async()=>null,isImpulseDevice=id=>id==='1000ac81a0',wakeSetTimeout=setTimeout,wakeClearTimeout=clearTimeout}){
+module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch,authorizeOwner=async()=>null,isImpulseDevice=id=>id==='1000ac81a0',wakeSetTimeout=setTimeout,wakeClearTimeout=clearTimeout}){
  const astronomy=require('./astronomy')({db,fetch:solarFetch,now});
  const recovery=require('./programming-recovery')({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,api,runScene,getScene,completedOnce});
  const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
@@ -234,6 +234,13 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
     const first=scene.actions[0],firstDevice=devices.find(d=>d.deviceid===first.deviceId);
     clean=core.validate({...input,deviceId:first.deviceId,outlets:targets[0].outlets,action:targets[0].action},firstDevice,now());
     clean={...clean,targetType:'scene',kind:'scene',deviceId:null,outlets:[],deviceName:scene.name,name:typeof input.name==='string'&&input.name.trim()?input.name.trim():scene.name,action:input.action,sceneId:scene.id,workspaceId:scene.workspaceId,sceneSignature:scene.signature,targets};
+   }else if(input?.targetType==='daikin'){
+    // Split Daikin: stesso motore di orari, comandi inviati tramite Onecta.
+    if(!daikin())throw error(503,'daikin_unavailable','Integrazione Daikin non disponibile.');
+    if(!['on','off'].includes(input.action))throw error(400,'invalid_schedule','Per uno split scegli accensione o spegnimento.');
+    const unit=await daikin().prepareSchedule(req,input);
+    clean=core.validate({...input,outlets:undefined},{deviceid:input.deviceId,name:unit.name,params:{switch:'off'}},now());
+    clean={...clean,targetType:'daikin',kind:'daikin',outlets:[],daikin:unit.settings,daikinOwner:unit.owner};
    }else{
     clean=core.validate(input,devices.find(d=>d.deviceid===input?.deviceId),now());
     clean.targetType='device';
@@ -266,6 +273,7 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
     delete next.solarError;delete next.solarPendingAt;next.solarRefreshAt=clean.enabled&&core.usesSolar(clean)&&clean.repeat!=='date'?now()+7*core.DAY:core.NEVER;
    }
    if(op==='save'&&next.kind!=='scene')for(const key of ['sceneId','workspaceId','sceneSignature','targets'])delete next[key];
+   if(op==='save'&&next.kind!=='daikin')for(const key of ['daikin','daikinOwner'])delete next[key];
    next.nextAt=core.nextEvent(next,now())?.at||core.NEVER;
    const activation=automaticActivation(next,now());
    if(activation){next.activation=activation;next.nextAt=now();}
@@ -333,7 +341,10 @@ module.exports=function createProgramming({db,api,listDevices,appid,secret,saveS
    const lateScene=s.kind==='scene'&&s.action==='run'&&time-s.nextAt>5*60000;
    let active=lateScene?[]:plans.filter(({p})=>p.event&&p.outlets.length);
    message=lateScene?'Scenario saltato: ritardo superiore a 5 minuti.':plans.find(({p})=>p.reason)?.p.reason||'Nessun comando necessario.';
-   if(active.length){
+   if(active.length&&s.kind==='daikin'){
+    if(!daikin())throw new Error('Integrazione Daikin non disponibile.');
+    await recovery.renew(ref,claim,s);message=await daikin().runSchedule(s,active[0].p.event.state);status='succeeded';
+   }else if(active.length){
     const credentials=await access(s.owner,{scheduled:true}),devices=await listDevices(credentials.accessToken);
     let actions=active.map(({target,p})=>{
      const device=devices.find(d=>d.deviceid===target.deviceId);

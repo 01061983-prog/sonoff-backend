@@ -21,8 +21,8 @@
   <link rel="stylesheet" href="app.css?v=46">
   <script src="menu-bar.js?v=54"></script>
   <link rel="stylesheet" href="menu-bar.css?v=53">
-  <script src="climate.js?v=3"></script>
-  <link rel="stylesheet" href="climate.css?v=2">
+  <script src="climate.js?v=4"></script>
+  <link rel="stylesheet" href="climate.css?v=3">
   <style>
     #startupScreen{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:28px;background:#f6f8f6;color:#24382f;text-align:center;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:auto}
     #startupScreen[hidden]{display:none}body.app-starting>main{visibility:hidden}
@@ -102,6 +102,7 @@
       <div id="programmingDetails" hidden>
         <label class="programming-step" for="programmingAction"><span>2</span> Che cosa deve fare?</label>
         <select id="programmingAction"><option value="on">Accendere</option><option value="off">Spegnere</option><option value="pulse">Inviare un impulso</option></select>
+        <div id="programmingDaikin" hidden></div>
         <p id="programmingPulseNote" class="page-note" hidden>L’autoritorno deve essere già configurato sul Sonoff. Il timer invia un solo comando ON. Puoi programmarlo all’alba o al tramonto; per entrambi crea due programmazioni. Su un cancello la direzione dipende dalla centralina, non dallo stato del relè.</p>
         <label class="programming-step" for="programmingRepeat"><span>3</span> In quale giorno?</label>
         <select id="programmingRepeat"><option value="date">Una data precisa</option><option value="daily">Ogni giorno</option><option value="weekly">Nei giorni scelti della settimana</option><option value="interval">Ogni X giorni</option></select>
@@ -125,10 +126,6 @@
         <div class="editor-footer"><button type="button" class="secondary-button" onclick="cancelProgramming()">Annulla</button><button type="submit" id="saveProgrammingBtn" class="primary-button"><span data-icon="check"></span>Salva programmazione</button></div>
       </div>
     </form>
-    <section id="climateSchedules" class="climate-schedules" aria-labelledby="climateSchedulesHeading" hidden>
-      <div class="climate-schedules-head"><h2 id="climateSchedulesHeading">Clima · programmi degli split</h2><p class="climate-hint">Orari salvati direttamente sugli split Daikin: funzionano anche senza la plancia aperta.</p></div>
-      <p id="climateSchedulesStatus" class="page-note" role="status" aria-live="polite"></p><div id="climateSchedulesContent"></div>
-    </section>
     <p class="page-note">Le fasce attive mantengono accese le proprie luci anche durante uno spegnimento manuale dalla plancia. Se salvi o riattivi una fascia già iniziata, le luci si accendono subito; impulsi e cancelli sono esclusi. Le programmazioni concluse, singole o con una data finale, spariscono dall’elenco, mentre gli esiti incerti restano visibili.</p><div id="programmingList" class="programming-list"></div>
     <details class="programming-help"><summary>Come funzionano le programmazioni</summary><p>I timer funzionano anche con la webapp chiusa. Ogni fascia invia un comando esplicito: i comandi manuali restano validi fino al prossimo orario programmato.</p><p>Le fasce dello stesso account sullo stesso canale possono sovrapporsi: una fascia non spegne la luce mentre un’altra la richiede accesa.</p><p>In caso di interruzione, i comandi ON/OFF non completati vengono riallineati allo stato previsto quando tornano disponibili connessione e dati. Il recupero rispetta le altre fasce attive. Impulsi e cancelli senza stato verificabile non vengono ripetuti automaticamente. Server, eWeLink e dispositivo devono essere disponibili.</p><p>Nel cambio all’ora solare, per gli orari ripetuti si usa la prima occorrenza per l’accensione e l’ultima per lo spegnimento finale; un orario settimanale inesistente nel cambio all’ora legale viene saltato.</p></details>
     <button id="disconnectProgrammingBtn" class="secondary-button" hidden onclick="disconnectProgramming()">Disattiva tutti i timer e scollega l’esecuzione automatica</button>
@@ -1760,7 +1757,7 @@
             const description=s.autoOffSeconds?`Accendi ${programmingTimeLabel(s.start)}; spegni dopo ${programmingTimerLabel(s.autoOffSeconds)}${s.solar?' · '+s.solar.location.name:''}`:s.solar?`${s.end?'Accendi':s.action==='off'?'Spegni':s.action==='pulse'?'Impulso':'Esegui'} ${programmingTimeLabel(s.start)}${s.end?'; spegni '+programmingTimeLabel(s.end)+' alla prima occorrenza successiva':''} · ${s.solar.location.name}`:time;
             const next=s.enabled&&s.nextAt<8640000000000000?new Date(s.nextAt).toLocaleString('it-IT',{timeZone:'Europe/Rome',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',...(s.autoOffSeconds?{second:'2-digit'}:{})}):null;
             const outcome=programmingOutcome(s,next);
-            return `<article class="programming-card"><div class="programming-card-top"><h2>${escapeHtml(s.name)}</h2><span class="programming-badge ${outcome.attention?'is-warning':s.enabled?'is-enabled':''}">${escapeHtml(outcome.label)}</span></div><p class="programming-device">${s.kind==='scene'?'Scenario · ':''}${escapeHtml(s.deviceName)}${s.kind==='multi'?' · '+s.outlets.map(o=>'CH '+(o+1)).join(', '):''}</p><p class="programming-time">${escapeHtml(s.action==='on'&&s.start==='sunset'&&s.end==='sunrise'?'Crepuscolare automatico · '+description:description)}</p>${s.solarError?`<p class="programming-validation" role="status">${escapeHtml(s.solarError)}</p>`:''}<p>${escapeHtml(when)}</p>${next?`<p class="page-note">Prossimo comando: ${escapeHtml(next)}</p>`:''}${s.last?`<p class="programming-result ${outcome.attention?'is-warning':''}" role="status">${escapeHtml(outcome.message)}</p>${outcome.note?`<p class="page-note">${escapeHtml(outcome.note)}</p>`:''}`:''}<div class="scene-actions"><button onclick="editProgramming(${jsArg(s.id)})">Modifica</button><button onclick="changeProgramming('toggle',${jsArg(s.id)})">${s.enabled?'Sospendi':'Riattiva'}</button><button class="btn-ghost-danger" onclick="changeProgramming('delete',${jsArg(s.id)})">Elimina</button></div></article>`;
+            return `<article class="programming-card"><div class="programming-card-top"><h2>${escapeHtml(s.name)}</h2><span class="programming-badge ${outcome.attention?'is-warning':s.enabled?'is-enabled':''}">${escapeHtml(outcome.label)}</span></div><p class="programming-device">${s.kind==='scene'?'Scenario · ':s.kind==='daikin'?'Clima · ':''}${escapeHtml(s.deviceName)}${s.kind==='daikin'&&s.action==='on'&&window.Climate?.describeSettings(s.daikin)?' · '+escapeHtml(window.Climate.describeSettings(s.daikin)):''}${s.kind==='multi'?' · '+s.outlets.map(o=>'CH '+(o+1)).join(', '):''}</p><p class="programming-time">${escapeHtml(s.action==='on'&&s.start==='sunset'&&s.end==='sunrise'?'Crepuscolare automatico · '+description:description)}</p>${s.solarError?`<p class="programming-validation" role="status">${escapeHtml(s.solarError)}</p>`:''}<p>${escapeHtml(when)}</p>${next?`<p class="page-note">Prossimo comando: ${escapeHtml(next)}</p>`:''}${s.last?`<p class="programming-result ${outcome.attention?'is-warning':''}" role="status">${escapeHtml(outcome.message)}</p>${outcome.note?`<p class="page-note">${escapeHtml(outcome.note)}</p>`:''}`:''}<div class="scene-actions"><button onclick="editProgramming(${jsArg(s.id)})">Modifica</button><button onclick="changeProgramming('toggle',${jsArg(s.id)})">${s.enabled?'Sospendi':'Riattiva'}</button><button class="btn-ghost-danger" onclick="changeProgramming('delete',${jsArg(s.id)})">Elimina</button></div></article>`;
         }).join(''):'<div class="empty-state"><h3>Nessuna programmazione</h3><p>Scegli un dispositivo e imposta il primo orario.</p></div>';
     }
     function editProgramming(id){
@@ -1774,6 +1771,8 @@
         }
         const devicesGroup=document.createElement('optgroup');devicesGroup.label='Dispositivi';
         for(const device of currentDevices.filter(d=>Array.isArray(d.params?.switches)||['on','off'].includes(d.params?.switch))){const option=document.createElement('option');option.value=device.deviceid;option.textContent=device.name+(device.online?'':' · offline');devicesGroup.appendChild(option);}select.appendChild(devicesGroup);
+        const splits=window.Climate?.programmingUnits()||[];
+        if(splits.length){const group=document.createElement('optgroup');group.label='Clima (split Daikin)';for(const u of splits){const option=document.createElement('option');option.value=u.id;option.textContent=u.name+(u.online?'':' · offline');group.appendChild(option);}select.appendChild(group);}
         const s=programmingEditing;
         programmingElement('EditorTitle').textContent=s?'Modifica programmazione':'Nuova programmazione';
         select.value=s?.kind==='scene'?'scene:'+s.sceneId:s?.deviceId||'';programmingElement('Name').value=s?.name||'';
@@ -1807,13 +1806,15 @@
     function programmingTarget(){
         const value=programmingElement('Device').value;
         if(value.startsWith('scene:'))return {scene:sceneSyncMode==='live'&&cloudScenes?.find(s=>s.id===value.slice(6))};
+        if(value.startsWith('daikin:'))return {daikin:window.Climate?.programmingUnit(value)};
         return {device:currentDevices.find(d=>d.deviceid===value)};
     }
     function programmingDeviceChanged(selected=[],savedAction){
-        const {device,scene}=programmingTarget(),actionSelect=programmingElement('Action'),previous=savedAction||actionSelect.value;
-        const choices=scene?(scene.mode==='toggle'?[['on','Accendere lo scenario'],['off','Spegnere lo scenario']]:[['run','Eseguire lo scenario']]):[['on','Accendere'],['off','Spegnere'],['pulse','Inviare un impulso']];
+        const {device,scene,daikin}=programmingTarget(),actionSelect=programmingElement('Action'),previous=savedAction||actionSelect.value;
+        const choices=daikin?[['on','Accendere lo split'],['off','Spegnere lo split']]:scene?(scene.mode==='toggle'?[['on','Accendere lo scenario'],['off','Spegnere lo scenario']]:[['run','Eseguire lo scenario']]):[['on','Accendere'],['off','Spegnere'],['pulse','Inviare un impulso']];
         actionSelect.innerHTML=choices.map(([value,label])=>`<option value="${value}">${label}</option>`).join('');actionSelect.value=choices.some(([value])=>value===previous)?previous:choices[0][0];
-        programmingElement('Details').hidden=!device&&!scene;programmingElement('SceneNote').hidden=!scene;
+        programmingElement('Details').hidden=!device&&!scene&&!daikin;programmingElement('SceneNote').hidden=!scene;
+        const daikinBox=programmingElement('Daikin');if(daikin)window.Climate.renderProgramming(daikinBox,daikin.id,programmingEditing?.deviceId===daikin.id?programmingEditing.daikin:null);else daikinBox.innerHTML='';
         const multi=Array.isArray(device?.params.switches);programmingElement('Channels').hidden=!multi;
         programmingElement('ChannelOptions').innerHTML=multi?device.params.switches.filter(c=>Number.isInteger(c.outlet)).map(c=>`<label class="programming-checkbox"><input name="programmingOutlet" type="checkbox" value="${c.outlet}" ${selected.includes(c.outlet)?'checked':''}>Canale ${c.outlet+1}</label>`).join(''):'';
         programmingFieldsChanged();
@@ -1877,8 +1878,8 @@
         return errors;
     }
     function programmingDraftIssues(){
-        const {device,scene}=programmingTarget(),value=id=>programmingElement(id).value;
-        return validateProgrammingDraft({target:Boolean(device||scene),multi:Array.isArray(device?.params?.switches),allowedOutlets:device?.params?.switches?.map(c=>c.outlet)||[],outlets:[...document.querySelectorAll('[name="programmingOutlet"]:checked')].map(e=>Number(e.value)),timer:value('Action')==='on'&&programmingElement('HasTimer').checked,timerMinutes:value('TimerMinutes'),timerSeconds:value('TimerSeconds'),action:value('Action'),repeat:value('Repeat'),startDate:value('StartDate'),intervalDays:value('IntervalDays'),durationMode:value('DurationMode'),durationWeeks:value('DurationWeeks'),until:value('Until'),days:[...document.querySelectorAll('[name="programmingDay"]:checked')].map(e=>Number(e.value)),date:value('Date'),endDate:value('EndDate'),startType:value('StartType'),endType:value('EndType'),start:value('Start'),finish:value('End'),end:value('Action')==='on'&&programmingElement('HasEnd').checked,enabled:programmingEditing?.enabled!==false,solar:programmingUsesSolar(),custom:programmingElement('CustomLocation').checked,location:value('Location'),latitude:value('Latitude'),longitude:value('Longitude'),province:value('Province'),municipalityKnown:italianMunicipalities.some(m=>m.id===value('Municipality')),locationsLoading:italianLocationLoading,name:value('Name'),connected:programmingData.connected,consent:programmingElement('Consent').checked,today:new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),crossError:programmingElement('Validation').hidden?'':programmingElement('Validation').textContent,crossField:!programmingElement('UseToday').hidden?'Date':programmingUsesSolar()?'EndType':'EndDate'});
+        const {device,scene,daikin}=programmingTarget(),value=id=>programmingElement(id).value;
+        return validateProgrammingDraft({target:Boolean(device||scene||daikin),multi:Array.isArray(device?.params?.switches),allowedOutlets:device?.params?.switches?.map(c=>c.outlet)||[],outlets:[...document.querySelectorAll('[name="programmingOutlet"]:checked')].map(e=>Number(e.value)),timer:value('Action')==='on'&&programmingElement('HasTimer').checked,timerMinutes:value('TimerMinutes'),timerSeconds:value('TimerSeconds'),action:value('Action'),repeat:value('Repeat'),startDate:value('StartDate'),intervalDays:value('IntervalDays'),durationMode:value('DurationMode'),durationWeeks:value('DurationWeeks'),until:value('Until'),days:[...document.querySelectorAll('[name="programmingDay"]:checked')].map(e=>Number(e.value)),date:value('Date'),endDate:value('EndDate'),startType:value('StartType'),endType:value('EndType'),start:value('Start'),finish:value('End'),end:value('Action')==='on'&&programmingElement('HasEnd').checked,enabled:programmingEditing?.enabled!==false,solar:programmingUsesSolar(),custom:programmingElement('CustomLocation').checked,location:value('Location'),latitude:value('Latitude'),longitude:value('Longitude'),province:value('Province'),municipalityKnown:italianMunicipalities.some(m=>m.id===value('Municipality')),locationsLoading:italianLocationLoading,name:value('Name'),connected:programmingData.connected,consent:programmingElement('Consent').checked,today:new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),crossError:programmingElement('Validation').hidden?'':programmingElement('Validation').textContent,crossField:!programmingElement('UseToday').hidden?'Date':programmingUsesSolar()?'EndType':'EndDate'});
     }
     function focusProgrammingField(field){
         const container=programmingElement(field),control=container.matches('input,select,button')?container:container.querySelector('input,select,button');
@@ -1910,6 +1911,7 @@
     function programmingDateToday(){programmingElement('Date').value=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());programmingElement('EndDate').dataset.userSet='';programmingElement('RequestError').hidden=true;programmingFieldsChanged();}
     function programmingFieldsChanged(){
         const action=programmingElement('Action').value,weekly=programmingElement('Repeat').value!=='date',end=action==='on'&&programmingElement('HasEnd').checked;
+        programmingElement('Daikin').hidden=!programmingElement('Device').value.startsWith('daikin:')||action!=='on';
         const timer=action==='on'&&programmingElement('HasTimer').checked;
         programmingElement('TimerRow').hidden=!timer;
         for(const id of ['TimerMinutes','TimerSeconds']){programmingElement(id).disabled=!timer;programmingElement(id).required=timer;}
@@ -1967,8 +1969,8 @@
         programmingValidationShown=true;const issues=programmingDraftIssues();renderProgrammingFeedback(issues);
         if(issues.length){programmingElement('Alerts').scrollIntoView({behavior:'smooth',block:'start'});programmingElement('Alerts').focus({preventScroll:true});return;}
         if(!programmingData.connected&&!programmingElement('Consent').checked){setMessage('Consenti l’esecuzione a webapp chiusa per attivare il timer.','error');return;}
-        const action=programmingElement('Action').value,{scene}=programmingTarget();
-        const schedule={name:programmingElement('Name').value,...(scene?{targetType:'scene',sceneId:scene.id,workspaceId:sceneWorkspace.id}:{targetType:'device',deviceId:programmingElement('Device').value}),action,repeat:programmingElement('Repeat').value,date:programmingElement('Date').value,days:[...document.querySelectorAll('[name="programmingDay"]:checked')].map(input=>Number(input.value)),outlets:[...document.querySelectorAll('[name="programmingOutlet"]:checked')].map(input=>Number(input.value)),start:programmingElement('StartType').value==='fixed'?programmingElement('Start').value:programmingElement('StartType').value,end:action==='on'&&programmingElement('HasEnd').checked?(programmingElement('EndType').value==='fixed'?programmingElement('End').value:programmingElement('EndType').value):null,enabled:programmingEditing?.enabled!==false};
+        const action=programmingElement('Action').value,{scene,daikin}=programmingTarget();
+        const schedule={name:programmingElement('Name').value,...(scene?{targetType:'scene',sceneId:scene.id,workspaceId:sceneWorkspace.id}:daikin?{targetType:'daikin',deviceId:daikin.id,daikin:action==='on'?window.Climate.programmingSettings(programmingElement('Daikin')):{}}:{targetType:'device',deviceId:programmingElement('Device').value}),action,repeat:programmingElement('Repeat').value,date:programmingElement('Date').value,days:[...document.querySelectorAll('[name="programmingDay"]:checked')].map(input=>Number(input.value)),outlets:[...document.querySelectorAll('[name="programmingOutlet"]:checked')].map(input=>Number(input.value)),start:programmingElement('StartType').value==='fixed'?programmingElement('Start').value:programmingElement('StartType').value,end:action==='on'&&programmingElement('HasEnd').checked?(programmingElement('EndType').value==='fixed'?programmingElement('End').value:programmingElement('EndType').value):null,enabled:programmingEditing?.enabled!==false};
         if(action==='on'&&programmingElement('HasTimer').checked)schedule.autoOffSeconds=Number(programmingElement('TimerMinutes').value)*60+Number(programmingElement('TimerSeconds').value);
         if(schedule.repeat!=='date'){
             schedule.startDate=programmingElement('StartDate').value;schedule.durationMode=programmingElement('DurationMode').value;
