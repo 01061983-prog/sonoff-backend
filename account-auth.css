@@ -74,3 +74,21 @@ body.account-admin-page>main,body.account-admin-page>#navigationDialog,body.acco
 #accountSignup select{width:100%;min-height:48px;box-sizing:border-box;border:1px solid #bacfc2;border-radius:12px;background:#fff;color:#21392f;padding:12px;font:inherit;font-size:1rem}
 #accountSignup .account-password-options{display:flex;justify-content:space-between;align-items:center;gap:10px}
 #accountSignup .account-password-options small{color:#54685e;font-size:.8rem}#accountSignup #accountSignupShowPassword{width:auto;min-height:44px;margin:0;padding:4px;font-size:.85rem}
+
+/* PACE · neutral business identity; authentication behavior remains unchanged. */
+#accountGate{background:#f4f5f7;color:#252b35;padding:clamp(16px,4vw,48px);background-image:radial-gradient(ellipse at 5% 0%,#ff7a2112,transparent 50%)}
+#accountGate .app-login-card{border-color:#e3e6eb;border-radius:28px;box-shadow:0 20px 80px #20242c0b;padding:clamp(24px,4vw,36px)}
+.pace-login-brand{display:flex;align-items:center;gap:13px;margin-bottom:26px}.pace-login-brand img{border-radius:15px}.pace-login-brand>span{font-size:2rem;font-weight:800;letter-spacing:-.055em;line-height:1;color:#252b35}.pace-login-brand small{display:block;font-size:.57rem;letter-spacing:.15em;font-weight:650;color:#687180;margin-top:8px}
+#accountGate .account-eyebrow{text-align:left;color:#a84010;font-size:.65rem;letter-spacing:.13em;margin:0 0 4px}#accountGate .app-login-card h1{text-align:left;font-size:clamp(1.85rem,6vw,2.3rem);line-height:1.13;letter-spacing:-.04em;margin:8px 0 14px}
+#accountGate .app-login-card input:not([type=checkbox]),#accountInvite input,#providerAccounts input{border-color:#cbd0d9;color:#252b35}.account-small,.account-divider{color:#687180}.account-link{color:#a84010}.account-remember input,#accountAdmin .account-enabled input{accent-color:#b94712}
+#accountToolbar button,#providerQuickButton{color:#96380c;border-color:#e6d4c8;box-shadow:0 3px 12px #20242c08}#providerQuickPanel,#providerAccounts{background:#f7f8fa;border-color:#e3e6eb;color:#252b35}.provider-row{border-color:#e3e6eb}.provider-row>span{color:#a84010}#providerAdd{border-color:#e3e6eb}
+#accountAdmin,#accountSignup,#accountAdmin dialog{color:#252b35;background:#f7f8fa;border-color:#e3e6eb}.account-row{border-color:#e3e6eb}body.account-admin-page{background:#f7f8fa}.account-row .account-badge{background:#e8f3ec;color:#11623c}
+.pace-login-signature{text-align:center;font-size:.73rem;color:#687180;margin:20px 0 0}.pace-login-signature strong{color:#a84010;font-weight:700}#accountGate .pace-login-signature{order:20}
+#accountGate .app-login-card .primary-button{background:#b94712;border-color:#b94712;color:#fff}#accountGate .app-login-card .primary-button:hover:not(:disabled){background:#96380c;border-color:#96380c}
+@media(max-width:500px){.pace-login-brand{margin-bottom:22px}#accountGate .app-login-card{border-radius:24px}}
+@media(min-width:900px){
+ #accountGate .app-login-card:not(:has(#accountCredentials[hidden])){display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1fr);grid-template-rows:auto auto auto 1fr auto auto;column-gap:48px;width:min(960px,100%);padding:44px;align-items:start}
+ #accountGate .app-login-card>.pace-login-brand,#accountGate .app-login-card>.account-eyebrow,#accountGate .app-login-card>h1,#accountGate .app-login-card>#accountMessage,#accountGate .app-login-card>#accountRetry,#accountGate .app-login-card>.pace-login-signature{grid-column:1}
+ #accountGate #accountCredentials{grid-column:2;grid-row:1/span 6;border-left:1px solid #e3e6eb;padding-left:40px;box-sizing:border-box}
+ #accountGate .app-login-card>.pace-login-brand{margin-bottom:64px}#accountGate .app-login-card>#accountMessage{margin-top:16px;max-width:300px;color:#687180}#accountGate .app-login-card>#accountRetry{align-self:end;width:auto;justify-self:start;padding-left:0}#accountGate .pace-login-signature{text-align:left;margin-top:20px}
+}

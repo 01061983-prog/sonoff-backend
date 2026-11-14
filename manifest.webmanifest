@@ -1,30 +1,30 @@
 {
   "id": "./",
-  "name": "eWeLink Oratorio",
-  "short_name": "eWeLink Oratorio",
-  "description": "Luci, cancello e scenari condivisi dell’oratorio.",
+  "name": "PACE",
+  "short_name": "PACE",
+  "description": "Property Automation & Control Environment · Dispositivi, spazi e automazioni.",
   "lang": "it",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f6f8f6",
-  "theme_color": "#147d5a",
+  "background_color": "#20242c",
+  "theme_color": "#20242c",
   "prefer_related_applications": false,
   "icons": [
     {
-      "src": "icons/icon-192.png",
+      "src": "icons/icon-192.png?v=65",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/icon-512.png",
+      "src": "icons/icon-512.png?v=65",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/icon-maskable.png",
+      "src": "icons/icon-maskable.png?v=65",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
