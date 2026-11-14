@@ -70,11 +70,34 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
    // l'identità da una casa, da sharedBy o dal proprietario di un device condiviso.
    const devices=await listDevices(accessToken,undefined,{includeOwnership:true});
    const owners=new Set(devices.filter(d=>d.itemType===1&&typeof d.ownerApikey==='string'&&d.ownerApikey).map(d=>d.ownerApikey));
-   if(owners.size!==1)throw error(503,'identity_unavailable','Impossibile verificare l’identità dell’account eWeLink con le autorizzazioni disponibili.');
+   if(owners.size!==1)throw Object.assign(error(503,'identity_unavailable','Impossibile verificare l’identità dell’account eWeLink con le autorizzazioni disponibili.'),{oauthIdentityAbsent:owners.size===0});
    owner=accountOwner([...owners][0]);
   }
   for(const[k,v]of identityCache)if(v.until<now())identityCache.delete(k);
   identityCache.set(key,{owner,until:now()+5*60000});req.programmingOwner=owner;return owner;
+ }
+ // Called only after the callback verifies its signed state and the app session.
+ // OAuth grants need not expose a user identifier (official OAuth response schema).
+ async function resolveOAuthOwner(req,providerData,account){
+  const c=providerData,token=req.cookies.ewelink_access;
+  if(!account||account.status!=='active'||typeof account.uid!=='string'||!account.uid||!/^[a-f0-9]{64}$/.test(account.id||''))throw error(403,'app_oauth_account','Accedi alla tua plancia prima di collegare eWeLink.');
+  if(typeof c?.accessToken!=='string'||!c.accessToken||c.accessToken!==token||typeof c.refreshToken!=='string'||!c.refreshToken||c.region!==undefined&&c.region!==region)throw error(503,'identity_unavailable','Risposta di autorizzazione eWeLink non valida. Riparti dalla tua plancia.');
+  const scoped=hash(appid+':'+region+':oauth-grant:app-account:'+account.id);
+  let owner;
+  // Keep the same storage scope on subsequent grants, even if the provider later
+  // adds optional identity fields. This scope identifies our account, not eWeLink's.
+  if(account.providerOwner===scoped){
+   await listDevices(token,undefined,{includeOwnership:true});owner=scoped;
+  }else{
+   try{owner=await identity({cookies:{ewelink_access:token}},c);}
+   catch(e){
+    if(e.code!=='identity_unavailable'||e.oauthIdentityAbsent!==true)throw e;
+    // An existing legacy binding cannot be replaced with an unverifiable identity.
+    if(account.providerOwner)throw error(409,'app_provider_unverifiable','Impossibile verificare il precedente collegamento eWeLink. Contatta l’amministratore.');
+    owner=scoped;
+   }
+  }
+  identityCache.set(hash(token),{owner,until:now()+5*60000});req.programmingOwner=owner;return owner;
  }
  async function remember(req,{browserLogin=false}={}){
   const owner=await identity(req),credentials=tokens(req.cookies);
@@ -415,5 +438,5 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   }finally{busy=false;await armWake();}
  }
  function start(){if(timer)return;timer=setInterval(()=>{void tick().catch(()=>console.error('Controllo programmazioni non riuscito.'));},30000);timer.unref?.();void tick().catch(()=>console.error('Avvio programmazioni non riuscito.'));}
- return {protectManual,solarPreview,linkedDevices,registerLinkedDevice,list,mutate,identity,restoreSession,connectBrowser,logoutBrowser,markAuthenticationRequired,remember,access,start,tick,seal,open,stop(){if(timer)clearInterval(timer);timer=null;++wakeEpoch;if(wakeTimer)wakeClearTimeout(wakeTimer);wakeTimer=null;}};
+ return {protectManual,solarPreview,linkedDevices,registerLinkedDevice,list,mutate,identity,resolveOAuthOwner,restoreSession,connectBrowser,logoutBrowser,markAuthenticationRequired,remember,access,start,tick,seal,open,stop(){if(timer)clearInterval(timer);timer=null;++wakeEpoch;if(wakeTimer)wakeClearTimeout(wakeTimer);wakeTimer=null;}};
 };

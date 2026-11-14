@@ -259,7 +259,7 @@ app.get("/app", (_req, res) => res.redirect(HOME));
 app.get("/app/", (_req, res) => res.redirect(HOME));
 
 
-app.get("/", (_req, res) => res.json({ ok: true, message: "Backend Sonoff OAuth attivo" }));
+app.get("/", (_req, res) => res.json({ ok: true, message: "Backend Sonoff OAuth attivo", oauthLinkVersion: 2 }));
 
 app.get("/login", route(async (req, res) => {
   if (appAccounts) {
@@ -322,8 +322,8 @@ app.get("/oauth/callback", route(async (req, res) => {
   const body = { code: req.query.code, redirectUrl: REDIRECT_URL, grantType: "authorization_code" };
   const data = await api("/v2/user/oauth/token", null, body, "Sign " + sign(JSON.stringify(body)));
   saveSession(req, res, data.data || {});
-  if(appAccounts){const owner=await programming.identity({cookies:{ewelink_access:req.cookies.ewelink_access}},data.data);await appAccounts.bind(req.appAccount,owner);}
-  if (programming) await programming.connectBrowser(req, res, data.data);
+  if(appAccounts){const owner=await programming.resolveOAuthOwner(req,data.data,req.appAccount);await appAccounts.bind(req.appAccount,owner);}
+  if (programming) await programming.connectBrowser(req, res, appAccounts ? undefined : data.data);
   res.redirect(returnUrl(pending.returnUrl));
 }));
 
