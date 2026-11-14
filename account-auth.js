@@ -33,29 +33,28 @@
   const primary=!state.selectedProvider||state.selectedProvider===state.primaryProvider;
   return {name:state.selectedProviderLabel||state.account?.name||'La tua plancia',person:primary?state.account?.person||'':'',logo:primary?state.account?.logo||'':''};
  }
- function providerBadge(c){const name=c.name||c.label||'Account',initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(p=>[...p][0]).join('').toLocaleUpperCase('it');return '<span class="provider-avatar">'+(c.logo?'<img src="'+esc(c.logo)+'" alt=""><span hidden aria-hidden="true">'+esc(initials)+'</span>':'<span aria-hidden="true">'+esc(initials)+'</span>')+'</span>';}
- function providerImages(container){container.querySelectorAll('.provider-avatar img').forEach(image=>{image.onerror=()=>{image.hidden=true;if(image.nextElementSibling)image.nextElementSibling.hidden=false;};});}
+ const defaultCustomerLogo='icons/icon.svg';
+ function providerBadge(c){return '<span class="provider-avatar"><img src="'+esc(c.logo||defaultCustomerLogo)+'" alt=""></span>';}
+ function providerImages(container){container.querySelectorAll('.provider-avatar img').forEach(image=>{image.onerror=()=>{image.onerror=null;image.src=defaultCustomerLogo;};});}
  function customerIdentity(){
   const header=document.querySelector('.topbar');if(!header)return;
   header.classList.add('customer-branded');
   let identity=$('customerIdentity');
   if(!identity){
    identity=document.createElement('div');identity.id='customerIdentity';identity.className='customer-identity';identity.setAttribute('role','group');identity.setAttribute('aria-label','Identità della plancia');
-   identity.innerHTML='<span class="customer-logo-frame"><span id="customerInitials" class="customer-initials" aria-hidden="true"></span><img id="customerLogo" class="customer-logo" alt="" hidden></span><span class="customer-copy"><strong id="customerName"></strong><span id="customerOwner" class="customer-owner" hidden></span><span id="customerProviderName" class="customer-provider" hidden></span></span>';
+   identity.innerHTML='<span class="customer-logo-frame"><img id="customerLogo" class="customer-logo" alt="Logo PACE"></span><span class="customer-copy"><strong id="customerName"></strong><span id="customerOwner" class="customer-owner" hidden></span><span id="customerProviderName" class="customer-provider" hidden></span></span>';
    header.insertBefore(identity,$('providerQuick')||null);
   }
   const identityData=displayIdentity(),name=String(identityData.name||'La tua plancia').trim(),person=String(identityData.person||'').trim();
   $('customerName').textContent=name;
   const owner=$('customerOwner');owner.hidden=!person||person.toLocaleLowerCase('it')===name.toLocaleLowerCase('it');owner.textContent=owner.hidden?'':'Titolare: '+person;
   const provider=$('customerProviderName');provider.hidden=!state.selectedProviderLabel||state.selectedProviderLabel===name;provider.textContent=provider.hidden?'':'eWeLink · '+state.selectedProviderLabel;
-  const image=$('customerLogo'),initials=$('customerInitials'),source=identityData.logo||'';
-  initials.textContent=name.split(/\s+/).filter(Boolean).slice(0,2).map(part=>[...part][0]).join('').toLocaleUpperCase('it');
-  image.alt='Logo di '+name;
-  if(!source){identity.classList.remove('has-wide-logo');image.hidden=true;image.removeAttribute('src');initials.hidden=false;}
-  else if(image.getAttribute('src')!==source){
-   image.hidden=true;initials.hidden=false;
-   image.onload=()=>{if(image.getAttribute('src')===source){identity.classList.toggle('has-wide-logo',image.naturalWidth>image.naturalHeight*1.8);image.hidden=false;initials.hidden=true;}};
-   image.onerror=()=>{if(image.getAttribute('src')===source){identity.classList.remove('has-wide-logo');image.hidden=true;initials.hidden=false;}};
+  const image=$('customerLogo'),source=identityData.logo||defaultCustomerLogo;
+  image.alt=identityData.logo?'Logo di '+name:'Logo PACE';image.hidden=false;
+  if(image.getAttribute('src')!==source){
+   identity.classList.remove('has-wide-logo');
+   image.onload=()=>{if(image.getAttribute('src')===source)identity.classList.toggle('has-wide-logo',image.naturalWidth>image.naturalHeight*1.8);};
+   image.onerror=()=>{image.onerror=null;identity.classList.remove('has-wide-logo');image.alt='Logo PACE';image.src=defaultCustomerLogo;};
    image.src=source;
   }
   const toolbar=$('accountToolbar');if(toolbar&&toolbar.parentElement!==header)header.append(toolbar);
