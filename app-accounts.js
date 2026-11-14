@@ -12,7 +12,8 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
  const adminRef=()=>db().collection('ewelinkAppSettings').doc('administrator');
  const accountId=email=>hash(appid+':account:'+email.toLowerCase().trim());
  const disabledMessage='Plancia disattivata. Contatta l’amministratore.';
- const publicProfile=a=>({id:a.id,name:a.name,email:a.email,status:a.status,role:a.role||'user',linked:!!a.providerOwner,logo:a.logo||''});
+ const needsSetup=a=>(a.role||'user')!=='admin'&&!a.providerOwner&&a.setupDone!==true;
+ const publicProfile=a=>({id:a.id,name:a.name,person:a.person||'',email:a.email,status:a.status,role:a.role||'user',linked:!!a.providerOwner,logo:a.logo||'',needsSetup:needsSetup(a)});
  function originCheck(req){if(req.headers?.origin!==origin)throw fail(403,'app_origin','Richiesta non autorizzata: riapri la plancia dal suo indirizzo ufficiale.');}
  function csrf(req){originCheck(req);const expected=mac(req.cookies?.[COOKIE]||'');const supplied=req.headers?.['x-app-csrf']||'';if(supplied.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected)))throw fail(403,'app_csrf','Sessione aggiornata. Ricarica la pagina prima di riprovare.');}
  function desktop(req){return !/Mobile|Android|iPhone|iPad|Tablet/i.test(req.headers?.['user-agent']||'');}
@@ -58,7 +59,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
    if(renew&&a.status!=='active')throw fail(403,'app_pending','Account in attesa di ammissione da parte dell’amministratore.');
    const bootstrap=email===adminEmail&&(!root.exists||root.data().uid===d.uid);
    if(email===adminEmail&&root.exists&&root.data().uid!==d.uid)throw fail(403,'app_admin_identity','Identità amministratore non corrispondente.');
-   const next={...(a||{}),email,uid:d.uid,name:a?.name||d.name||email.split('@')[0],status:bootstrap?'active':a?.status||'pending',role:bootstrap?'admin':'user',createdAt:a?.createdAt||now(),updatedAt:now()};
+   const next={...(a||{}),email,uid:d.uid,name:a?.name||d.name||email.split('@')[0],person:a?.person||String(d.name||'').trim().slice(0,120),status:bootstrap?'active':a?.status||'pending',role:bootstrap?'admin':'user',createdAt:a?.createdAt||now(),updatedAt:now()};
    t.set(ref,next);if(bootstrap&&!root.exists)t.set(ar,{uid:d.uid,email,createdAt:now()});return {...next,id};
   });
   return profile;
@@ -89,19 +90,20 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
    if(current?.status!=='active')throw fail(403,'app_blocked','Account non attivo.');
    if(l.exists&&!l.data().deleted&&l.data().accountId!==a.id)throw fail(409,'app_provider_taken','Questo account eWeLink è già collegato a un’altra plancia.');
    if(current.providerOwner&&current.providerOwner!==owner)throw fail(409,'app_provider_changed','La plancia è già collegata a un altro account eWeLink. Contatta l’amministratore.');
-   t.set(lr,{accountId:a.id,deleted:false,updatedAt:now()});t.set(pr,{providerOwner:owner,updatedAt:now()},{merge:true});
+   t.set(lr,{accountId:a.id,deleted:false,updatedAt:now()});t.set(pr,{providerOwner:owner,setupDone:true,updatedAt:now()},{merge:true});
   });
  }
- // Rimozione definitiva: libera l’email, conserva una copia d’archivio e blocca i timer dell’account eWeLink collegato.
+ // Rimozione definitiva: cancella profilo e accesso, libera l’email e blocca i timer dell’account eWeLink collegato.
  async function remove(a){
-  const pr=profiles().doc(a.id);let uid=null;
+  const pr=profiles().doc(a.id);let uid=null,email=null;
   await db().runTransaction(async t=>{
-   const p=await t.get(pr);if(!p.exists)return;const current=p.data();uid=current.uid||null;
+   const p=await t.get(pr);if(!p.exists)return;const current=p.data();uid=current.uid||null;email=current.email||null;
    const lr=current.providerOwner?links().doc(current.providerOwner):null,l=lr?await t.get(lr):null;
-   t.set(db().collection('ewelinkAppDeletedAccounts').doc(a.id+'-'+now()),{...current,id:a.id,deletedAt:now()});
    if(lr&&(!l.exists||l.data().accountId===a.id))t.set(lr,{accountId:a.id,deleted:true,updatedAt:now()});
    t.delete(pr);
   });
+  // Copie d’archivio create dalle versioni precedenti: eliminate insieme alla plancia.
+  if(email){const old=await db().collection('ewelinkAppDeletedAccounts').where('email','==',email).get();for(const d of old.docs)await d.ref.delete();}
   if(uid){await auth().revokeRefreshTokens(uid).catch(()=>{});await auth().deleteUser(uid).catch(()=>{});}
  }
  async function providerAccount(owner){const s=await links().doc(owner).get();if(!s.exists)return null;if(s.data().deleted)throw fail(403,'app_blocked','Plancia rimossa: comandi automatici bloccati.');return read(s.data().accountId);}
@@ -169,11 +171,19 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   }else throw fail(400,'app_operation','Operazione account non valida.');
   await audit(actor,b.op,a.id);return {ok:true};
  }
+ async function setup(req){
+  const a=await session(req,{allowActAs:false});csrf(req);
+  const name=String(req.body?.name||'').trim();
+  if(!name||name.length>80)throw fail(400,'app_name','Inserisci il nome della plancia (massimo 80 caratteri).');
+  await profiles().doc(a.id).set({name,logo:accountLogo(req.body?.logo??''),setupDone:true,updatedAt:now()},{merge:true});
+  return {ok:true,account:publicProfile(await read(a.id))};
+ }
  function install(app,wrap){
   app.get('/api/app/config',(_req,res)=>res.json({ok:true,enabled:true,firebase:webConfig}));
   app.get('/api/app/session',wrap(async(req,res)=>{try{res.json(await status(req));}catch(e){if(e.code==='app_auth_required'){if(req.cookies?.[COOKIE])res.clearCookie(COOKIE,opts);return res.json({ok:true,authenticated:false});}if(e.code==='app_actas_expired')res.clearCookie(ACT,opts);throw e;}}));
   app.post('/api/app/login',wrap(async(req,res)=>res.json(await login(req,res))));
   app.post('/api/app/renew',wrap(async(req,res)=>res.json(await login(req,res,{renew:true}))));
+  app.post('/api/app/setup',wrap(async(req,res)=>res.json(await setup(req))));
   app.post('/api/app/logout',wrap(async(req,res)=>{csrf(req);res.clearCookie(COOKIE,opts);res.clearCookie(ACT,opts);res.json({ok:true});}));
   app.get('/api/app/accounts',wrap(async(req,res)=>res.json(await manage(req,res))));
   app.post('/api/app/accounts',wrap(async(req,res)=>res.json(await manage(req,res))));
