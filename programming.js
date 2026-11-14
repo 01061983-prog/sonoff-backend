@@ -48,9 +48,16 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   return hash(appid+':'+r+':'+uid);
  }
  const identityCache=new Map();
- async function identity(req){
-  if(req.programmingOwner)return req.programmingOwner;
+ async function identity(req,providerData){
   const accessToken=req.cookies.ewelink_access,key=hash(accessToken||'');
+  // This argument comes only from the server-to-server OAuth token exchange.
+  // Resolve it before /profile, which is not available to every OAuth APPID.
+  if(providerData?.user?.apikey!==undefined){
+   if(!accessToken||providerData.accessToken!==undefined&&providerData.accessToken!==accessToken)throw error(503,'identity_unavailable','La risposta eWeLink non corrisponde al nuovo accesso. Riprova il collegamento.');
+   const owner=accountOwner(providerData.user.apikey,providerData.region||region);
+   identityCache.set(key,{owner,until:now()+5*60000});req.programmingOwner=owner;return owner;
+  }
+  if(req.programmingOwner)return req.programmingOwner;
   const cached=identityCache.get(key);if(cached&&cached.until>now())return cached.owner;
   let owner;
   try{
@@ -93,7 +100,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   // Il profilo del nuovo token verifica l'account: non usare un owner fornito dal client.
   delete req.programmingOwner;
   // providerData viene soltanto dallo scambio OAuth eseguito sul server.
-  if(providerData?.user?.apikey)req.programmingOwner=accountOwner(providerData.user.apikey,providerData.region||region);
+  await identity(req,providerData);
   const owner=await remember(req,{browserLogin:true});
   const session=crypto.randomBytes(32).toString('hex'),validUntil=now()+60*core.DAY;
   await browserRef(session).set({kind:'browser',owner,validUntil,createdAt:now()});
