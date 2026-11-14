@@ -95,7 +95,7 @@
    await a.sendEmailVerification(c.user);await a.signOut(fbAuth);
    $('accountSignup').close();$('accountEmail').value=email;$('accountPassword').value='';
    message('Ti abbiamo inviato un’email a '+email+'. Apri il link di conferma (controlla anche la posta indesiderata), poi torna qui e premi Accedi con email e password. Al primo accesso completerai l’iscrizione.');
-  }catch(e){note.textContent=translate(e);}
+  }catch(e){note.textContent=e.code==='auth/email-already-in-use'?'Questa email ha già un accesso, anche se la plancia non è ancora configurata. Chiudi questa finestra e usa Accedi oppure Continua con Google. Se non ricordi la password, usa Password dimenticata.':translate(e);}
   finally{busy=false;form.querySelectorAll('button').forEach(b=>b.disabled=false);}
  }
  let setupLogo='';
@@ -134,10 +134,11 @@
   const bar=document.createElement('div');bar.id='accountToolbar';bar.innerHTML='<span id="accountIdentity" hidden></span><button id="accountReturn" hidden>Torna alla gestione</button><button id="accountManage" hidden>Gestione account</button>';document.body.append(bar);
   $('accountRetry').onclick=()=>location.reload();
   $('accountForm').addEventListener('submit',e=>{e.preventDefault();void run(async()=>exchange((await (await signInPersistence()).signInWithEmailAndPassword(fbAuth,$('accountEmail').value.trim(),$('accountPassword').value)).user));});
-  $('accountGoogle').onclick=()=>void run(async()=>{const a=await signInPersistence();await exchange((await a.signInWithPopup(fbAuth,new a.GoogleAuthProvider())).user);});
+  $('accountGoogle').onclick=()=>void run(async()=>{message('Accesso con Google in corso…');const a=await signInPersistence();await exchange((await a.signInWithPopup(fbAuth,new a.GoogleAuthProvider())).user);});
   const redirect = $('accountGoogleRedirect');
   redirect.hidden = !config?.firebase?.authDomain || config.firebase.authDomain !== location.host;
   redirect.onclick=()=>void run(async()=>{
+   message('Apertura di Google…');
    const a=await signInPersistence(true);
    sessionStorage.setItem('ewelink_auth_remember',$('accountRemember').checked?'yes':'no');
    await a.signInWithRedirect(fbAuth,new a.GoogleAuthProvider());
@@ -245,8 +246,8 @@
   try{
    const data=await request('/api/app/accounts');
    accounts=data.accounts;
-   $('accountList').innerHTML=accounts.map(a=>`<article class="account-row"><div>${a.logo?`<img class="account-row-logo" src="${esc(a.logo)}" alt="">`:''}<h2>${esc(a.name)}</h2>${a.person&&a.person!==a.name?`<p>${esc(a.person)}</p>`:''}<p>${esc(a.email)}</p><span class="account-badge">${esc({active:'Ammesso',pending:'In attesa',blocked:'Disattivata',deleted:'Archiviata'}[a.status]||a.status)}</span><span>${a.linked?'eWeLink collegato':'eWeLink da collegare'}</span></div><div class="account-actions"><label class="account-enabled"><input type="checkbox" data-account-op="toggle" data-account-id="${a.id}" ${a.status==='active'?'checked':''} ${a.id===state.actor.id?'disabled':''}> Abilitato</label><button class="secondary-button" data-account-op="enter" data-account-id="${a.id}">Apri plancia</button><button class="secondary-button" data-account-op="edit" data-account-id="${a.id}">Modifica</button>${a.id!==state.actor.id?`<button class="secondary-button" data-account-op="delete" data-account-id="${a.id}">Rimuovi</button>`:''}</div></article>`).join('');
-   message.textContent=accounts.length+' account';
+   $('accountList').innerHTML=accounts.map(a=>`<article class="account-row"><div>${a.logo?`<img class="account-row-logo" src="${esc(a.logo)}" alt="">`:''}<h2>${esc(a.name)}</h2>${a.person&&a.person!==a.name?`<p>${esc(a.person)}</p>`:''}<p>${esc(a.email)}</p>${a.registrationIncomplete?`<p class="account-small">Registrazione da completare${a.emailVerified===false?' · email da confermare':''}. Personalizza la plancia con Modifica.</p>`:''}<span class="account-badge">${esc({active:'Ammesso',pending:'In attesa',blocked:'Disattivata',deleted:'Archiviata'}[a.status]||a.status)}</span><span>${a.linked?'eWeLink collegato':'eWeLink da collegare'}</span></div><div class="account-actions"><label class="account-enabled"><input type="checkbox" data-account-op="toggle" data-account-id="${a.id}" ${a.status==='active'?'checked':''} ${a.id===state.actor.id?'disabled':''}> Abilitato</label><button class="secondary-button" data-account-op="enter" data-account-id="${a.id}">Apri plancia</button><button class="secondary-button" data-account-op="edit" data-account-id="${a.id}">Modifica</button>${a.id!==state.actor.id?`<button class="secondary-button" data-account-op="delete" data-account-id="${a.id}">Rimuovi</button>`:''}</div></article>`).join('');
+   message.textContent=accounts.length+' account'+(data.registrationWarning?' · '+data.registrationWarning:'');
   }catch(e){message.textContent=e.message;}
  }
  async function adminMutation(body,destination){

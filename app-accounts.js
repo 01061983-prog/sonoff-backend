@@ -13,7 +13,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
  const accountId=email=>hash(appid+':account:'+email.toLowerCase().trim());
  const disabledMessage='Plancia disattivata. Contatta l’amministratore.';
  const needsSetup=a=>(a.role||'user')!=='admin'&&!a.providerOwner&&a.setupDone!==true;
- const publicProfile=a=>({id:a.id,name:a.name,person:a.person||'',email:a.email,status:a.status,role:a.role||'user',linked:!!a.providerOwner,logo:a.logo||'',needsSetup:needsSetup(a)});
+ const publicProfile=a=>({id:a.id,name:a.name,person:a.person||'',email:a.email,status:a.status,role:a.role||'user',linked:!!a.providerOwner,logo:a.logo||'',needsSetup:needsSetup(a),registrationIncomplete:a.registrationIncomplete===true,...(typeof a.emailVerified==='boolean'?{emailVerified:a.emailVerified}:{})});
  function originCheck(req){if(req.headers?.origin!==origin)throw fail(403,'app_origin','Richiesta non autorizzata: riapri la plancia dal suo indirizzo ufficiale.');}
  function csrf(req){originCheck(req);const expected=mac(req.cookies?.[COOKIE]||'');const supplied=req.headers?.['x-app-csrf']||'';if(supplied.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected)))throw fail(403,'app_csrf','Sessione aggiornata. Ricarica la pagina prima di riprovare.');}
  function desktop(req){return !/Mobile|Android|iPhone|iPad|Tablet/i.test(req.headers?.['user-agent']||'');}
@@ -59,7 +59,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
    if(renew&&a.status!=='active')throw fail(403,'app_pending','Account in attesa di ammissione da parte dell’amministratore.');
    const bootstrap=email===adminEmail&&(!root.exists||root.data().uid===d.uid);
    if(email===adminEmail&&root.exists&&root.data().uid!==d.uid)throw fail(403,'app_admin_identity','Identità amministratore non corrispondente.');
-   const next={...(a||{}),email,uid:d.uid,name:a?.name||d.name||email.split('@')[0],person:a?.person||String(d.name||'').trim().slice(0,120),status:bootstrap?'active':a?.status||'pending',role:bootstrap?'admin':'user',createdAt:a?.createdAt||now(),updatedAt:now()};
+   const next={...(a||{}),email,uid:d.uid,name:a?.name||d.name||email.split('@')[0],person:a?.person||String(d.name||'').trim().slice(0,120),emailVerified:true,registrationIncomplete:false,status:bootstrap?'active':a?.status||'pending',role:bootstrap?'admin':'user',createdAt:a?.createdAt||now(),updatedAt:now()};
    t.set(ref,next);if(bootstrap&&!root.exists)t.set(ar,{uid:d.uid,email,createdAt:now()});return {...next,id};
   });
   return profile;
@@ -137,9 +137,34 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   if(bytes.subarray(0,8).toString('hex')!=='89504e470d0a1a0a')throw fail(400,'app_logo','Logo PNG non valido.');
   return value;
  }
+ async function registrationList(){
+  const rows=await profiles().get(),records=new Map(rows.docs.map(s=>[s.id,{...s.data(),id:s.id}]));
+  let pageToken,warning='';
+  try{
+   do{
+    const page=await auth().listUsers(1000,pageToken);
+    for(const user of page.users){
+     const email=String(user.email||'').trim().toLowerCase();
+     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254||email===adminEmail)continue;
+     const id=accountId(email),existing=records.get(id);
+     if(existing){if(existing.uid===user.uid)existing.emailVerified=user.emailVerified===true;continue;}
+     const ref=profiles().doc(id);
+     const record=await db().runTransaction(async t=>{
+      const snap=await t.get(ref);if(snap.exists)return {...snap.data(),id};
+      // Recover an interrupted registration without granting access or changing credentials.
+      const person=String(user.displayName||'').trim().slice(0,120);
+      const next={email,uid:user.uid,name:person.slice(0,80)||email.split('@')[0],person,status:user.disabled?'blocked':'pending',role:'user',registrationIncomplete:true,emailVerified:user.emailVerified===true,createdAt:Number.isFinite(Date.parse(user.metadata?.creationTime))?Date.parse(user.metadata.creationTime):now(),updatedAt:now()};
+      t.set(ref,next);return {...next,id};
+     });records.set(id,record);
+    }
+    pageToken=page.pageToken;
+   }while(pageToken);
+  }catch{warning='Non è stato possibile verificare tutti gli accessi Firebase. Le plance già salvate sono conservate: aggiorna l’elenco per riprovare.';}
+  return {ok:true,accounts:[...records.values()].map(publicProfile).sort((a,b)=>a.name.localeCompare(b.name)),...(warning?{registrationWarning:warning}:{})};
+ }
  async function manage(req,res){
   const actor=await admin(req);
-  if(req.method==='GET'){const rows=await profiles().get();return {ok:true,accounts:rows.docs.map(s=>publicProfile({...s.data(),id:s.id})).sort((a,b)=>a.name.localeCompare(b.name))};}
+  if(req.method==='GET')return registrationList();
   csrf(req);const b=req.body||{};
   if(b.op==='stop-view'){res.clearCookie(ACT,opts);await audit(actor,'stop-view',actor.id);return {ok:true};}
   if(b.op==='invite'){
