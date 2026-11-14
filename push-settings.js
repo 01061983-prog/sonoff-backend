@@ -5,7 +5,7 @@
  const supported=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
  const isIos=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
  const standalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
- let section=null,busy=false;
+ let section=null,busy=false,appReady=false,refreshEpoch=0;
  const $=id=>document.getElementById(id);
 
  function label(){
@@ -21,21 +21,33 @@
 
  async function refresh(){
   if(!section)return;
-  const toggle=$('pushEnabled'),test=$('pushTest');
+  const toggle=$('pushEnabled'),test=$('pushTest'),epoch=++refreshEpoch;
+  test.hidden=true;$('pushRetry').hidden=true;
+  if(!appReady){toggle.disabled=true;setStatus('Attendo l’accesso alla plancia…','');return;}
   if(!supported()){
    toggle.disabled=true;toggle.checked=false;test.hidden=true;
    setStatus(isIos&&!standalone()?'Su iPhone e iPad le notifiche funzionano solo dall’app installata: tocca Condividi → “Aggiungi alla schermata Home”, poi apri l’app dall’icona e torna qui.':'Questo browser non supporta le notifiche push.','warn');
    return;
   }
-  const sub=await currentSubscription(),permission=Notification.permission;if(busy)return;
-  toggle.disabled=busy;toggle.checked=Boolean(sub)&&permission==='granted';test.hidden=!toggle.checked;
-  if(permission==='denied')setStatus('Le notifiche sono bloccate per questa app. Riattivale dalle impostazioni del telefono (Notifiche) e poi torna qui.','warn');
-  else if(toggle.checked)setStatus('Attive su questo dispositivo: ricevi un avviso quando una programmazione viene eseguita o non riesce.','ok');
-  else setStatus('Disattivate su questo dispositivo. Ogni telefono o tablet si attiva separatamente.','');
+  toggle.disabled=true;
+  try{
+   const sub=await currentSubscription(),permission=Notification.permission;
+   const status=sub&&permission==='granted'?await call('/api/push/status',{endpoint:sub.endpoint}):{subscribed:false};
+   if(busy||epoch!==refreshEpoch)return;
+   toggle.disabled=false;toggle.checked=Boolean(sub)&&permission==='granted'&&status.subscribed;test.hidden=!toggle.checked;
+   const name=window.AppAccounts?.state.selectedProviderLabel||'questo account eWeLink';
+   if(permission==='denied')setStatus('Le notifiche sono bloccate per questa app. Riattivale dalle impostazioni del telefono, poi torna qui.','warn');
+   else if(toggle.checked)setStatus('Notifiche attive per '+name+' su questo dispositivo. Restano attive anche quando passi a un altro account.','ok');
+   else setStatus('Notifiche disattivate per '+name+'. Puoi attivarle qui senza modificare gli altri account.','');
+  }catch(error){
+   if(epoch!==refreshEpoch||busy)return;
+   toggle.disabled=true;test.hidden=true;$('pushRetry').hidden=false;
+   setStatus('Impossibile verificare le notifiche di questo account. Le iscrizioni sono state conservate. '+(error.message||''),'warn');
+  }
  }
 
  async function enable(){
-  const permission=await Notification.requestPermission();
+  const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();
   if(permission!=='granted')throw new Error(permission==='denied'?'Permesso negato: riattiva le notifiche dalle impostazioni del telefono.':'Permesso non concesso.');
   const reg=await registration(),{publicKey}=await call('/api/push/key');
   let sub=await reg.pushManager.getSubscription();
@@ -44,31 +56,35 @@
  }
  async function disable(){
   const sub=await currentSubscription();if(!sub)return;
-  try{await call('/api/push/unsubscribe',{endpoint:sub.endpoint});}finally{await sub.unsubscribe().catch(()=>{});}
+  // The native subscription belongs to the installation and can serve other accounts.
+  // Remove only this owner's server association; do not unsubscribe the browser.
+  await call('/api/push/unsubscribe',{endpoint:sub.endpoint});
  }
 
  function build(){
   const content=document.querySelector('#textSizeSettings .text-size-content');if(!content)return;
   section=document.createElement('section');section.className='push-settings';section.setAttribute('aria-labelledby','pushSettingsTitle');
   section.innerHTML=`<h3 id="pushSettingsTitle">Notifiche</h3>
-   <label class="menu-bar-toggle"><input id="pushEnabled" type="checkbox"><span>Avvisami quando viene eseguito un programma</span></label>
+   <label class="menu-bar-toggle"><input id="pushEnabled" type="checkbox"><span>Avvisami per questo account eWeLink</span></label>
    <p id="pushStatus" class="text-size-status" role="status"></p>
-   <button id="pushTest" type="button" hidden>Invia notifica di prova</button>`;
+   <button id="pushTest" type="button" hidden>Invia notifica di prova</button><button id="pushRetry" type="button" hidden>Verifica stato notifiche</button>`;
   const menuBar=content.querySelector('.menu-bar-settings'),sizeTitle=[...content.querySelectorAll('h3')].find(h=>/Dimensione/i.test(h.textContent));
   content.insertBefore(section,menuBar||sizeTitle||null);
   $('pushEnabled').addEventListener('change',async e=>{
    const on=e.target.checked;if(busy)return;busy=true;e.target.disabled=true;setStatus(on?'Attivazione in corso…':'Disattivazione in corso…','');
-   try{if(on)await enable();else await disable();busy=false;await refresh();if(on)setStatus('Notifiche attivate su questo dispositivo. Prova con “Invia notifica di prova”.','ok');}
+   try{if(on)await enable();else await disable();busy=false;await refresh();if(on)setStatus('Notifiche attivate per questo account. Gli altri collegamenti restano invariati. Prova con “Invia notifica di prova”.','ok');}
    catch(error){busy=false;await refresh();setStatus(error.message||'Operazione non riuscita.','warn');}
   });
   $('pushTest').addEventListener('click',async e=>{
    const button=e.currentTarget;button.disabled=true;setStatus('Invio della notifica di prova…','');
    try{const sub=await currentSubscription();if(!sub)throw new Error('Questo dispositivo non è iscritto.');await call('/api/push/test',{endpoint:sub.endpoint});setStatus('Notifica di prova inviata: dovrebbe arrivare tra pochi secondi.','ok');}
-   catch(error){setStatus(error.message||'Invio non riuscito.','warn');}
+   catch(error){await refresh();setStatus(error.message||'Invio non riuscito.','warn');}
    finally{button.disabled=false;}
   });
   $('textSizeSettings')?.addEventListener('toggle',()=>{if($('textSizeSettings').open)void refresh();});
-  void refresh();
+  $('pushRetry').addEventListener('click',()=>void refresh());
+  if(appReady)void refresh();
  }
+ window.PushSettings={accountReady(){appReady=true;void refresh();}};
  document.addEventListener('DOMContentLoaded',build);
 })();

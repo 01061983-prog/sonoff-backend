@@ -6,7 +6,7 @@
 const crypto = require('crypto');
 const webpush = require('web-push');
 
-module.exports = function createPush({ db, identity, requireLogin, route, cloudError }) {
+module.exports = function createPush({ db, identity, requireLogin, route, cloudError, accountLabel=()=>'' }) {
   const subs = () => db().collection('pushSubscriptions');
   const configRef = () => db().collection('appConfig').doc('webPush');
   let keysPromise = null;
@@ -29,7 +29,13 @@ module.exports = function createPush({ db, identity, requireLogin, route, cloudE
     return keysPromise;
   }
 
-  const idFor = endpoint => crypto.createHash('sha256').update(endpoint).digest('hex');
+  const idFor = (endpoint,owner) => crypto.createHash('sha256').update(owner===undefined?endpoint:owner+':'+endpoint).digest('hex');
+  const own = (snap,owner,endpoint) => snap?.exists && snap.data().owner===owner && snap.data().endpoint===endpoint;
+  async function subscriptionFor(owner,endpoint){
+    const [current,legacy]=await Promise.all([subs().doc(idFor(endpoint,owner)).get(),subs().doc(idFor(endpoint)).get()]);
+    return own(current,owner,endpoint)?current:own(legacy,owner,endpoint)?legacy:null;
+  }
+  function endpointOf(req){const endpoint=req.body?.endpoint;if(typeof endpoint!=='string'||!/^https:\/\//.test(endpoint)||endpoint.length>=2000)throw cloudError(400,'invalid_subscription','Iscrizione alle notifiche non valida.');return endpoint;}
   function validSubscription(s) {
     return s && typeof s.endpoint === 'string' && /^https:\/\//.test(s.endpoint) && s.endpoint.length < 2000
       && typeof s.keys?.p256dh === 'string' && typeof s.keys?.auth === 'string'
@@ -39,7 +45,9 @@ module.exports = function createPush({ db, identity, requireLogin, route, cloudE
   async function deliver(doc, payload) {
     const data = doc.data();
     try {
-      await webpush.sendNotification({ endpoint: data.endpoint, keys: data.keys }, JSON.stringify(payload), { TTL: 3600, urgency: 'normal' });
+      const account=String(data.accountLabel||'').slice(0,80);
+      const message=account?{...payload,title:account+' · '+payload.title}:payload;
+      await webpush.sendNotification({ endpoint: data.endpoint, keys: data.keys }, JSON.stringify(message), { TTL: 3600, urgency: 'normal' });
       return true;
     } catch (error) {
       // Iscrizione scaduta o revocata dal dispositivo: la rimuoviamo.
@@ -54,7 +62,8 @@ module.exports = function createPush({ db, identity, requireLogin, route, cloudE
     try {
       await keys();
       const snap = await subs().where('owner', '==', owner).get();
-      await Promise.all(snap.docs.map(doc => deliver(doc, payload)));
+      const unique=new Map();for(const doc of snap.docs){const d=doc.data(),previous=unique.get(d.endpoint);if(!previous||Number(d.updatedAt||0)>Number(previous.data().updatedAt||0))unique.set(d.endpoint,doc);}
+      await Promise.all([...unique.values()].map(doc => deliver(doc, payload)));
     } catch (error) {
       console.error('Notifiche push non disponibili:', error.message);
     }
@@ -67,7 +76,7 @@ module.exports = function createPush({ db, identity, requireLogin, route, cloudE
     void notify(s.owner, {
       title: (ok ? '✅ ' : '⚠️ ') + (s.name || 'Programmazione'),
       body: (ok ? 'Eseguito alle ' : 'Problema alle ') + time + ' · ' + String(message || '').slice(0, 160),
-      tag: 'schedule-' + (s.id || ''),
+      tag: 'schedule-' + idFor(String(s.owner)).slice(0,12) + '-' + (s.id || ''),
       url: './index.html'
     });
   }
@@ -79,22 +88,32 @@ module.exports = function createPush({ db, identity, requireLogin, route, cloudE
       if (!validSubscription(subscription)) throw cloudError(400, 'invalid_subscription', 'Iscrizione alle notifiche non valida.');
       const owner = await identity(req);
       const label = typeof req.body?.label === 'string' ? req.body.label.slice(0, 60) : '';
-      await subs().doc(idFor(subscription.endpoint)).set({ owner, endpoint: subscription.endpoint, keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth }, label, updatedAt: Date.now() }, { merge: true });
+      await db().runTransaction(async t=>{
+        const current=subs().doc(idFor(subscription.endpoint,owner)),legacy=subs().doc(idFor(subscription.endpoint));
+        const old=await t.get(legacy);
+        t.set(current,{owner,endpoint:subscription.endpoint,keys:{p256dh:subscription.keys.p256dh,auth:subscription.keys.auth},label,accountLabel:String(accountLabel(req)||'').slice(0,80),updatedAt:Date.now()});
+        if(own(old,owner,subscription.endpoint))t.delete(legacy);
+      });
       res.json({ ok: true });
+    }));
+    app.post('/api/push/status', requireLogin, route(async(req,res)=>{
+      const endpoint=endpointOf(req),owner=await identity(req);
+      res.json({ok:true,subscribed:Boolean(await subscriptionFor(owner,endpoint))});
     }));
     app.post('/api/push/unsubscribe', requireLogin, route(async (req, res) => {
-      const endpoint = req.body?.endpoint;
-      if (typeof endpoint !== 'string' || !endpoint) throw cloudError(400, 'invalid_subscription', 'Iscrizione alle notifiche non valida.');
-      const owner = await identity(req), ref = subs().doc(idFor(endpoint)), snap = await ref.get();
-      if (snap.exists && snap.data().owner === owner) await ref.delete();
-      res.json({ ok: true });
+      const endpoint=endpointOf(req),owner=await identity(req);
+      await db().runTransaction(async t=>{
+        const refs=[subs().doc(idFor(endpoint,owner)),subs().doc(idFor(endpoint))];
+        const snapshots=await Promise.all(refs.map(ref=>t.get(ref)));
+        snapshots.forEach((snap,i)=>{if(own(snap,owner,endpoint))t.delete(refs[i]);});
+      });
+      res.json({ok:true});
     }));
     app.post('/api/push/test', requireLogin, route(async (req, res) => {
-      const endpoint = req.body?.endpoint;
-      const owner = await identity(req), snap = typeof endpoint === 'string' && endpoint ? await subs().doc(idFor(endpoint)).get() : null;
-      if (!snap?.exists || snap.data().owner !== owner) throw cloudError(404, 'not_subscribed', 'Questo dispositivo non è iscritto alle notifiche.');
+      const endpoint=endpointOf(req),owner=await identity(req),snap=await subscriptionFor(owner,endpoint);
+      if(!snap)throw cloudError(404,'not_subscribed','Attiva le notifiche per questo account eWeLink su questo dispositivo.');
       await keys();
-      const sent = await deliver(snap, { title: '🔔 Notifiche attive', body: 'Riceverai un avviso quando una programmazione viene eseguita.', tag: 'push-test', url: './index.html' });
+      const sent = await deliver(snap, { title: '🔔 Notifiche attive', body: 'Riceverai un avviso quando una programmazione viene eseguita.', tag: 'push-test-'+idFor(owner).slice(0,12), url: './index.html' });
       if (!sent) throw cloudError(502, 'push_failed', 'Il servizio di notifiche del telefono non ha accettato il messaggio. Disattiva e riattiva le notifiche.');
       res.json({ ok: true });
     }));

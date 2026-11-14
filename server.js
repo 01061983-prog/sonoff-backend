@@ -905,7 +905,7 @@ app.post("/api/toggle-multi", requireLogin, route(async (req, res) => {
 // Programmazione autonoma: disabilitata finché non viene attivata su Render.
 // I token sono conservati soltanto dopo il consenso esplicito al primo salvataggio.
 if (process.env.EWELINK_PROGRAMMING_ENABLED === "true") {
-  pushNotify = require("./push-notify")({db:getSceneDatabase, identity:req=>requireProgramming().identity(req), requireLogin, route, cloudError});
+  pushNotify = require("./push-notify")({db:getSceneDatabase,accountLabel:req=>appAccounts?.selectedConnection(req,req.appAccount)?.label||'', identity:req=>requireProgramming().identity(req), requireLogin, route, cloudError});
   pushNotify.install(app);
   programming = require("./programming")({onExecuted:(s,status,message)=>pushNotify.scheduleExecuted(s,status,message),daikin:()=>daikinModule,db:getSceneDatabase, api, listDevices, appid:APPID, secret:APPSECRET, saveSession, authorizeOwner:owner=>appAccounts?appAccounts.authorizeOwner(owner):null, solarFetch:fetch, getScene:getProgrammingScene, runScene:runProgrammingScene, region:new URL(API_BASE).hostname.split("-")[0]});
   programming.start();

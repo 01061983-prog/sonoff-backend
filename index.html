@@ -14,14 +14,14 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <script src="account-auth.js?v=63"></script>
   <link rel="stylesheet" href="account-auth.css?v=63">
-  <script src="text-size.js?v=48"></script>
+  <script src="text-size.js?v=64"></script>
   <script src="scene-pages.js?v=46"></script>
   <script src="room-map.js?v=48"></script>
   <link rel="stylesheet" href="room-map.css?v=48">
   <link rel="stylesheet" href="app.css?v=46">
   <script src="menu-bar.js?v=61"></script>
   <link rel="stylesheet" href="menu-bar.css?v=53">
-  <script src="push-settings.js?v=59"></script>
+  <script src="push-settings.js?v=64"></script>
   <script src="climate.js?v=5"></script>
   <link rel="stylesheet" href="climate.css?v=3">
   <style>
@@ -55,7 +55,7 @@
     <button class="nav-item" data-view="install" aria-label="La tua webapp"><span data-icon="download"></span><span>La tua webapp</span></button>
   </nav>
   <details class="text-size-settings" id="textSizeSettings"><summary>Impostazioni app <span aria-hidden="true">⚙</span></summary>
-    <div class="text-size-content"><label for="appStartView">All’avvio apri</label><select id="appStartView"><option value="scenes">Scenari</option><option value="rooms">Stanze</option><option value="devices">Dispositivi</option><option value="home">Panoramica</option><option value="climate">Clima</option></select><p id="appStartStatus" class="text-size-status" role="status">La pagina iniziale si salva automaticamente su questo dispositivo.</p><h3>Dimensione caratteri</h3><label for="textSizeRange">Grandezza del testo: <output id="textSizeValue" for="textSizeRange">100%</output></label>
+    <div class="text-size-content"><label for="appStartView">All’avvio apri</label><select id="appStartView"><option value="scenes">Scenari</option><option value="rooms">Stanze</option><option value="devices">Dispositivi</option><option value="home">Panoramica</option><option value="climate">Clima</option></select><p id="appStartStatus" class="text-size-status" role="status">La pagina iniziale si salva per ciascun account eWeLink su questo dispositivo.</p><h3>Dimensione caratteri</h3><label for="textSizeRange">Grandezza del testo: <output id="textSizeValue" for="textSizeRange">100%</output></label>
       <div class="text-size-controls"><button id="textSizeDecrease" type="button" aria-label="Riduci i caratteri">A−</button><input id="textSizeRange" type="range" min="100" max="200" step="25" value="100" aria-label="Dimensione dei caratteri"><button id="textSizeIncrease" type="button" aria-label="Ingrandisci i caratteri">A+</button></div>
       <div class="text-size-preview" aria-label="Anteprima della dimensione dei caratteri"><span class="text-size-preview-label">Anteprima</span><strong class="text-size-preview-title">Luci del portico</strong><span class="text-size-preview-state">Acceso</span><p>Programmazione attiva fino all’alba.</p></div>
       <button id="textSizeReset" type="button">Ripristina dimensione normale</button>
@@ -2028,6 +2028,8 @@
                 document.getElementById('startupContinue').hidden=true;document.getElementById('mainContent').inert=true;
             }
         }
+        window.AppPreferences?.accountReady?.();
+        window.PushSettings?.accountReady?.();
         initApp();
         setTimeout(()=>{if(!startupComplete){startupStatus('La connessione sta richiedendo più tempo. Puoi attendere oppure aprire la plancia.');document.getElementById('startupContinue').hidden=false;}},12000);
         initProgramming();
