@@ -259,7 +259,7 @@ app.get("/app", (_req, res) => res.redirect(HOME));
 app.get("/app/", (_req, res) => res.redirect(HOME));
 
 
-app.get("/", (_req, res) => res.json({ ok: true, message: "Backend Sonoff OAuth attivo", oauthLinkVersion: 3 }));
+app.get("/", (_req, res) => res.json({ ok: true, message: "Backend Sonoff OAuth attivo", oauthLinkVersion: 4 }));
 
 app.get("/login", route(async (req, res) => {
   if (appAccounts) {
@@ -327,7 +327,7 @@ app.get("/oauth/callback", route(async (req, res) => {
   saveSession(req, res, data.data || {});
   if(appAccounts){
     const connection=pending.connection;
-    const selected=appAccounts.selectedConnection(req,req.appAccount);
+    const selected=connection?null:appAccounts.selectedConnection(req,req.appAccount);
     const expectedOwner=connection?.add?null:connection?.owner||selected?.owner;
     const slot=connection?.slot||selected?.slot||'';
     const identityAccount={...req.appAccount,providerOwner:expectedOwner,oauthConnectionSlot:slot};
