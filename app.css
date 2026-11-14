@@ -270,3 +270,6 @@ body .topbar.customer-branded #accountToolbar:not(:has(button:not([hidden]))){di
 @media(max-width:1000px){.customer-identity.has-wide-logo .customer-logo-frame{width:108px}}
 @media(max-width:600px){.customer-identity.has-wide-logo .customer-logo-frame{width:76px}}
 @media(max-width:360px){.customer-identity.has-wide-logo .customer-logo-frame{width:60px}}
+/* Keep delegated-account controls inside their own column. */
+body .topbar.customer-branded #accountToolbar{max-width:min(400px,35vw)}body .topbar.customer-branded #accountIdentity{max-width:100%;overflow-wrap:anywhere}
+@media(max-width:1000px){body .topbar.customer-branded #accountToolbar{max-width:100%}}
