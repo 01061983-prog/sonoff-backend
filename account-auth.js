@@ -25,8 +25,7 @@
   document.body.classList.add('account-locked');$('accountGate').hidden=false;message(text||'Accedi alla tua plancia. Il collegamento eWeLink si fa solo la prima volta.');
   document.querySelectorAll('dialog[open]').forEach(d=>d.close());
   if(typeof window.finishStartup==='function')window.finishStartup();
-  const splash=$('startupScreen');if(splash)splash.hidden=true;
-  document.body.classList.remove('app-starting');
+  if(window.PaceSplash)window.PaceSplash.finish();else{const splash=$('startupScreen');if(splash)splash.hidden=true;document.body.classList.remove('app-starting');}
   if(config&& !persistenceReady && !busy)void prepareGoogle().catch(()=>{});
  }
  function branding(){
@@ -83,6 +82,7 @@
  function completing(){
   $('accountGate').hidden=true;
   document.body.classList.add('account-locked','app-starting');
+  window.PaceSplash?.show();
   const splash=$('startupScreen');
   if(splash){splash.hidden=false;splash.setAttribute('aria-busy','true');}
   const status=$('startupStatus');if(status)status.textContent='Completamento dell’accesso…';
