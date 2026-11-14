@@ -28,16 +28,37 @@
   if(window.PaceSplash)window.PaceSplash.finish();else{const splash=$('startupScreen');if(splash)splash.hidden=true;document.body.classList.remove('app-starting');}
   if(config&& !persistenceReady && !busy)void prepareGoogle().catch(()=>{});
  }
+ function customerIdentity(){
+  const header=document.querySelector('.topbar');if(!header)return;
+  header.classList.add('customer-branded');
+  let identity=$('customerIdentity');
+  if(!identity){
+   identity=document.createElement('div');identity.id='customerIdentity';identity.className='customer-identity';identity.setAttribute('role','group');identity.setAttribute('aria-label','Identità della plancia');
+   identity.innerHTML='<span class="customer-logo-frame"><span id="customerInitials" class="customer-initials" aria-hidden="true"></span><img id="customerLogo" class="customer-logo" alt="" hidden></span><span class="customer-copy"><strong id="customerName"></strong><span id="customerOwner" class="customer-owner" hidden></span><span id="customerProviderName" class="customer-provider" hidden></span></span>';
+   header.insertBefore(identity,$('providerQuick')||null);
+  }
+  const name=String(state.account.name||'La tua plancia').trim(),person=String(state.account.person||'').trim();
+  $('customerName').textContent=name;
+  const owner=$('customerOwner');owner.hidden=!person||person.toLocaleLowerCase('it')===name.toLocaleLowerCase('it');owner.textContent=owner.hidden?'':'Titolare: '+person;
+  const provider=$('customerProviderName');provider.hidden=!state.selectedProviderLabel;provider.textContent=state.selectedProviderLabel?'eWeLink · '+state.selectedProviderLabel:'';
+  const image=$('customerLogo'),initials=$('customerInitials'),source=state.account.logo||'';
+  initials.textContent=name.split(/\s+/).filter(Boolean).slice(0,2).map(part=>[...part][0]).join('').toLocaleUpperCase('it');
+  image.alt='Logo di '+name;
+  if(!source){identity.classList.remove('has-wide-logo');image.hidden=true;image.removeAttribute('src');initials.hidden=false;}
+  else if(image.getAttribute('src')!==source){
+   image.hidden=true;initials.hidden=false;
+   image.onload=()=>{if(image.getAttribute('src')===source){identity.classList.toggle('has-wide-logo',image.naturalWidth>image.naturalHeight*1.8);image.hidden=false;initials.hidden=true;}};
+   image.onerror=()=>{if(image.getAttribute('src')===source){identity.classList.remove('has-wide-logo');image.hidden=true;initials.hidden=false;}};
+   image.src=source;
+  }
+  const toolbar=$('accountToolbar');if(toolbar&&toolbar.parentElement!==header)header.append(toolbar);
+ }
  function branding(){
   const name=state.account.name;
   document.title=name+' · PACE';
   const brand=document.querySelector('.brand-copy');if(brand){brand.textContent='PACE';const small=document.createElement('small');small.textContent=name;brand.append(small);}
   const space=document.querySelector('.workspace');if(space){space.textContent='';const label=document.createElement('span');label.textContent=name;space.append(label);}
-  if(state.account.logo){
-   const logo=document.querySelector('.customer-logo')||document.createElement('img');
-   logo.src=state.account.logo;logo.alt=name;logo.className='customer-logo';
-   document.querySelector('.topbar')?.append(logo);
-  }
+  customerIdentity();
   const foot=document.querySelector('footer');if(foot){foot.textContent='';const client=document.createElement('span');client.textContent=name+' · PACE';const signature=document.createElement('span');signature.textContent='powered by #gm83';foot.append(client,signature);}
  }
  function accepted(data){

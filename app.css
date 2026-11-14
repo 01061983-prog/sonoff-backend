@@ -245,3 +245,28 @@ body{background:var(--bg-page)}button:hover:not(:disabled){background:#fff4ec;bo
 .pace-menu-icon{width:44px;height:44px;border-radius:12px;flex-shrink:0}.brand{gap:12px}.install-app-icon{object-fit:contain;border-radius:22px;padding:0;background:transparent}.app-footer{color:var(--text-soft);gap:12px;flex-wrap:wrap}.app-footer>span:last-child{font-size:.75rem;letter-spacing:.02em}
 .menu-button{box-shadow:0 3px 12px #20242c08}.text-size-preview{border-color:#edc4a8}.text-size-preview-label{color:var(--accent)}.text-size-content input[type=range]{accent-color:var(--accent)}
 #textSizeSettings{background:#f7f8fa;border-color:#e3e6eb}
+
+/* PACE v67 · customer identity remains visible on every dashboard page. */
+body .topbar.customer-branded{display:grid;grid-template-columns:48px minmax(0,1fr) auto auto;align-items:center;column-gap:18px;row-gap:10px;flex:0 0 auto;height:auto;min-height:96px;padding-top:12px;padding-bottom:12px}
+.customer-branded>.menu-button{grid-column:1;grid-row:1;align-self:center}.customer-identity{grid-column:2;grid-row:1;display:flex;align-items:center;gap:14px;min-width:0}
+.customer-logo-frame{display:flex;align-items:center;justify-content:center;flex:0 0 auto;width:76px;height:68px;padding:7px;background:#fff;border:1px solid #e3e6eb;border-radius:16px;box-shadow:0 3px 12px #20242c05;overflow:hidden}
+.customer-identity .customer-logo{display:block;width:100%;height:100%;max-width:none;object-fit:contain;margin:0;border-radius:0}.customer-identity [hidden]{display:none!important}.customer-initials{font-size:1.4rem;font-weight:750;color:#a84010;letter-spacing:-.03em}
+.customer-copy{display:flex;flex-direction:column;gap:4px;min-width:0}.customer-copy strong{font-size:1.15rem;line-height:1.2;font-weight:750;letter-spacing:-.025em;color:#252b35;overflow-wrap:anywhere}.customer-owner{font-size:.76rem;line-height:1.3;color:#687180;overflow-wrap:anywhere}.customer-provider{display:none;font-size:.7rem;color:#a84010;line-height:1.3;overflow-wrap:anywhere}
+body .topbar.customer-branded #providerQuick{grid-column:3;grid-row:1;max-width:min(280px,28vw);min-width:0}
+body .topbar.customer-branded #providerQuickButton{max-width:100%;margin:0}body .topbar.customer-branded #providerQuickPanel{left:auto;right:0;max-width:calc(100vw - 32px)}
+body .topbar.customer-branded #accountToolbar{position:static;grid-column:4;grid-row:1;max-width:none;min-width:0;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin:0}
+body .topbar.customer-branded #accountToolbar:not(:has(button:not([hidden]))){display:none}body .topbar.customer-branded #accountToolbar button{margin:0;box-shadow:none}
+@media(max-width:1000px){body .topbar.customer-branded{grid-template-columns:44px minmax(0,1fr) auto;min-height:88px;column-gap:12px}.customer-logo-frame{width:66px;height:60px}.customer-identity{gap:12px}body .topbar.customer-branded #accountToolbar{grid-column:2/-1;grid-row:2}.customer-copy strong{font-size:1.05rem}}
+@media(pointer:coarse){body .topbar.customer-branded #accountToolbar:has(#accountReturn[hidden]){display:none}}
+@media(max-width:600px){
+ body .topbar.customer-branded{grid-template-columns:44px minmax(0,1fr) 44px;column-gap:10px;padding-top:10px;padding-bottom:10px;min-height:82px}
+ .customer-identity{gap:9px}.customer-logo-frame{width:54px;height:56px;padding:5px;border-radius:13px}.customer-copy{gap:3px}.customer-copy strong{font-size:.95rem;line-height:1.2}.customer-owner{font-size:.68rem;line-height:1.25}.customer-provider{display:block;font-size:.65rem}
+ body .topbar.customer-branded #providerQuick{max-width:44px;width:44px}body .topbar.customer-branded #providerQuickButton{width:44px;height:44px;min-height:44px;padding:8px;font-size:1.2rem;gap:0}body .topbar.customer-branded #providerQuickLabel,body .topbar.customer-branded #providerQuickButton>span:last-child{display:none}
+ body .topbar.customer-branded #providerQuickPanel{width:min(340px,calc(100vw - 32px));max-width:calc(100vw - 32px)}
+ body .topbar.customer-branded #accountToolbar{grid-column:1/-1;grid-row:2}body .topbar.customer-branded #accountManage{display:none}body .topbar.customer-branded #accountToolbar:has(#accountReturn[hidden]){display:none}
+}
+@media(max-width:360px){body .topbar.customer-branded{column-gap:7px}.customer-logo-frame{width:46px;height:50px}.customer-identity{gap:7px}.customer-copy strong{font-size:.88rem}}
+.customer-identity.has-wide-logo .customer-logo-frame{width:128px}
+@media(max-width:1000px){.customer-identity.has-wide-logo .customer-logo-frame{width:108px}}
+@media(max-width:600px){.customer-identity.has-wide-logo .customer-logo-frame{width:76px}}
+@media(max-width:360px){.customer-identity.has-wide-logo .customer-logo-frame{width:60px}}
