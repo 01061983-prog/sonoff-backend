@@ -28,6 +28,14 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   const primary=c.owner===a.providerOwner,name=primary&&c.label==='Account principale'?(a.name||c.label):c.label;
   return {id:c.owner,label:name,name,person:typeof c.person==='string'?c.person:primary?a.person||'':'',logo:typeof c.logo==='string'?c.logo:primary?a.logo||'':''};
  }
+ async function displayConnectionIdentity(a,c){
+  const local=connectionIdentity(a,c);if(!local)return null;
+  if(!c.brandingAccountId||!await isAdmin(a))return local;
+  const ref=await profiles().doc(c.brandingAccountId).get();
+  if(!ref.exists)return local;
+  const brand=ref.data();
+  return {...local,name:brand.name,person:brand.person||'',logo:brand.logo||'',brandingAccountId:c.brandingAccountId,localPerson:local.person,localLogo:local.logo};
+ }
  const climateKey=(a,owner)=>owner===a.providerOwner?a.id:hash(a.id+':daikin:'+owner);
  function climateOwner(req){const a=req.appAccount;if(!a)throw fail(403,'climate_account','Account non disponibile.');const c=selectedConnection(req,a);if(!c)throw fail(409,'climate_account','Collega e seleziona un account eWeLink per il clima.');return climateKey(a,c.owner);}
  async function climateScheduleOwner(s){
@@ -52,7 +60,11 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
  }
  async function manageProviders(req,res){
   const a=await session(req),list=connections(a),selected=selectedConnection(req,a);
-  if(req.method==='GET')return {ok:true,selected:selected?.owner||'',impersonating:!!req.appImpersonating,connections:list.map(c=>connectionIdentity(a,c))};
+  if(req.method==='GET'){
+   const adminBranding=!req.appImpersonating&&await isAdmin(req.appActor);
+   const brandingAccounts=adminBranding?(await profiles().get()).docs.map(s=>({id:s.id,name:s.data().name})).sort((x,y)=>x.name.localeCompare(y.name)):[];
+   return {ok:true,selected:selected?.owner||'',impersonating:!!req.appImpersonating,connections:await Promise.all(list.map(c=>displayConnectionIdentity(a,c))),...(adminBranding?{brandingAccounts}:{})};
+  }
   csrf(req);if(req.appReadOnly)throw fail(403,'app_readonly','Plancia disponibile soltanto in consultazione.');
   const b=req.body||{};
   if(b.op==='select'){await selectConnection(req,res,b.id);return {ok:true};}
@@ -60,6 +72,10 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   if(b.op==='rename'){
    const label=String(b.label||'').trim();if(!label||label.length>80)throw fail(400,'app_link_name','Inserisci un nome da 1 a 80 caratteri.');
    const identity={};if(Object.hasOwn(b,'logo'))identity.logo=accountLogo(b.logo);if(Object.hasOwn(b,'person')){const person=String(b.person||'').trim();if(person.length>120)throw fail(400,'app_link_name','Il nome del titolare deve contenere al massimo 120 caratteri.');identity.person=person;}
+   if(Object.hasOwn(b,'brandingAccountId')){
+    if(!await isAdmin(req.appActor))throw fail(403,'app_branding_admin','Solo l’amministratore può associare il logo di una plancia cliente.');
+    const id=String(b.brandingAccountId||'');if(id)await read(id);identity.brandingAccountId=id;
+   }
    await db().runTransaction(async t=>{const ref=profiles().doc(a.id),snap=await t.get(ref),current=snap.data(),rows=connections(current);if(!rows.some(c=>c.owner===b.id))throw fail(403,'app_provider_forbidden','Collegamento non disponibile.');t.set(ref,{providerConnections:rows.map(c=>c.owner===b.id?{...c,label,...identity}:c),updatedAt:now()},{merge:true});});return {ok:true};
   }
   if(!['add','reauthorize'].includes(b.op))throw fail(400,'app_operation','Operazione non valida.');
@@ -138,7 +154,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   }
   return {ok:true,account:publicProfile(await read(a.id))};
  }
- async function status(req){const a=await session(req,{active:false});return {ok:true,authenticated:true,account:publicProfile(a),actor:publicProfile(req.appActor),impersonating:!!req.appImpersonating,readOnly:!!req.appReadOnly,adminDesktop:desktop(req)&&await isAdmin(req.appActor),primaryProvider:a.providerOwner||'',selectedProvider:selectedConnection(req,a)?.owner||'',selectedProviderLabel:connectionIdentity(a,selectedConnection(req,a))?.label||'',selectedProviderIdentity:connectionIdentity(a,selectedConnection(req,a)),providerCount:connections(a).length,csrf:mac(req.cookies[COOKIE])};}
+ async function status(req){const a=await session(req,{active:false}),identity=await displayConnectionIdentity(a,selectedConnection(req,a));return {ok:true,authenticated:true,account:publicProfile(a),actor:publicProfile(req.appActor),impersonating:!!req.appImpersonating,readOnly:!!req.appReadOnly,adminDesktop:desktop(req)&&await isAdmin(req.appActor),primaryProvider:a.providerOwner||'',selectedProvider:selectedConnection(req,a)?.owner||'',selectedProviderLabel:connectionIdentity(a,selectedConnection(req,a))?.label||'',selectedProviderIdentity:identity,providerCount:connections(a).length,csrf:mac(req.cookies[COOKIE])};}
  async function bind(a,owner,{add=false,slot='',label,expectedOwner}={}){
   const pr=profiles().doc(a.id),lr=links().doc(owner);
   await db().runTransaction(async t=>{
