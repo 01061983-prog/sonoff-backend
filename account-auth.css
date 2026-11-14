@@ -69,3 +69,8 @@ body.account-admin-page>main,body.account-admin-page>#navigationDialog,body.acco
 #providerQuick .provider-quick-option small{white-space:nowrap;flex-shrink:0;font-size:.75rem}
 #providerQuickManage{width:100%;margin-top:10px;border:0;border-top:1px solid #e5ebe6;border-radius:0;min-height:48px;color:#126c4e;background:#fff;font-size:.85rem}
 @media(max-width:500px){#providerQuickButton{padding:10px;font-size:.9rem;gap:8px}#providerQuickPanel{width:280px;max-width:calc(100vw - 90px)}}
+
+#accountSignup [hidden]{display:none!important}
+#accountSignup select{width:100%;min-height:48px;box-sizing:border-box;border:1px solid #bacfc2;border-radius:12px;background:#fff;color:#21392f;padding:12px;font:inherit;font-size:1rem}
+#accountSignup .account-password-options{display:flex;justify-content:space-between;align-items:center;gap:10px}
+#accountSignup .account-password-options small{color:#54685e;font-size:.8rem}#accountSignup #accountSignupShowPassword{width:auto;min-height:44px;margin:0;padding:4px;font-size:.85rem}
