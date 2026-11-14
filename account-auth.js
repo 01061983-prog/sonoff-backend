@@ -45,6 +45,7 @@
   Object.assign(state,data);branding();
   const providerButton=$('providerAccountsBtn');if(providerButton)providerButton.hidden=false;
   const providerName=$('providerSelectedName');if(providerName)providerName.textContent=state.selectedProviderLabel||'Collega un account';
+  showQuickProvider();
   $('accountIdentity').textContent=state.account.name;
   $('accountManage').hidden=!state.adminDesktop;
   $('accountReturn').hidden=!state.impersonating;
@@ -287,10 +288,58 @@
    else message(e.message);
   }finally{adminBusy=false;if(list)list.inert=false;}
  }
+ let providerChoices=[],providerChoicesJob,quickSwitchBusy=false;
+ function closeQuickProvider(focus=false){
+  const panel=$('providerQuickPanel'),button=$('providerQuickButton');
+  if(panel)panel.hidden=true;if(button){button.setAttribute('aria-expanded','false');if(focus)button.focus();}
+ }
+ function renderQuickProviders(){
+  const list=$('providerQuickList');if(!list)return;
+  list.innerHTML=providerChoices.map(c=>`<button type="button" class="provider-quick-option${c.id===state.selectedProvider?' current':''}" data-quick-provider="${esc(c.id)}" ${c.id===state.selectedProvider?'disabled aria-current="true"':''}><span>${esc(c.label)}</span>${c.id===state.selectedProvider?'<small>In uso ✓</small>':'<span aria-hidden="true">→</span>'}</button>`).join('');
+ }
+ async function refreshQuickProviders(){
+  if(!providerChoicesJob)providerChoicesJob=request('/api/app/providers').then(data=>{providerChoices=data.connections;renderQuickProviders();return data;}).finally(()=>{providerChoicesJob=null;});
+  return providerChoicesJob;
+ }
+ function showQuickProvider(){
+  const wrapper=$('providerQuick');if(!wrapper)return;
+  wrapper.hidden=false;$('providerQuickLabel').textContent=state.selectedProviderLabel||'Collega eWeLink';
+  $('providerQuickButton').setAttribute('aria-label','Cambia account eWeLink. Attuale: '+(state.selectedProviderLabel||'nessuno'));
+  void refreshQuickProviders().catch(()=>{});
+ }
+ async function toggleQuickProvider(){
+  const panel=$('providerQuickPanel'),button=$('providerQuickButton');
+  if(!panel.hidden){closeQuickProvider();return;}
+  panel.hidden=false;button.setAttribute('aria-expanded','true');
+  $('providerQuickMessage').textContent=providerChoices.length?'Scegli l’account da usare.':'Caricamento account…';renderQuickProviders();
+  try{await refreshQuickProviders();$('providerQuickMessage').textContent=providerChoices.length?'Scegli l’account da usare.':'Collega il tuo primo account eWeLink.';}
+  catch(e){$('providerQuickMessage').textContent=e.message;}
+ }
+ async function quickSelectProvider(id){
+  if(quickSwitchBusy||id===state.selectedProvider)return;
+  quickSwitchBusy=true;$('providerQuickPanel').setAttribute('aria-busy','true');
+  $('providerQuickMessage').textContent='Cambio account…';
+  $('providerQuick').querySelectorAll('button').forEach(b=>b.disabled=true);
+  const controls=[document.querySelector('main'),$('menuBar'),$('accountToolbar'),$('navigationDialog')].filter(Boolean),inertBefore=controls.map(el=>el.inert);
+  controls.forEach(el=>el.inert=true);
+  try{await request('/api/app/providers',{op:'select',id});location.replace(dashboardUrl().href);}
+  catch(e){controls.forEach((el,i)=>el.inert=inertBefore[i]);$('providerQuickMessage').textContent=e.message;quickSwitchBusy=false;$('providerQuickPanel').setAttribute('aria-busy','false');$('providerQuick').querySelectorAll('button').forEach(b=>b.disabled=false);renderQuickProviders();}
+ }
+ function mountQuickProvider(){
+  const header=document.querySelector('.topbar');if(!header)return;
+  const wrapper=document.createElement('div');wrapper.id='providerQuick';wrapper.hidden=true;
+  wrapper.innerHTML='<button id="providerQuickButton" type="button" aria-expanded="false" aria-controls="providerQuickPanel"><span aria-hidden="true">⇄</span><span id="providerQuickLabel"></span><span aria-hidden="true">⌄</span></button><section id="providerQuickPanel" aria-label="Cambia account eWeLink" hidden><p id="providerQuickMessage" role="status"></p><div id="providerQuickList"></div><button id="providerQuickManage" type="button">Gestisci account eWeLink</button></section>';
+  header.append(wrapper);
+  $('providerQuickButton').onclick=()=>void toggleQuickProvider();
+  $('providerQuickList').onclick=e=>{const b=e.target.closest('[data-quick-provider]');if(b&&!b.disabled)void quickSelectProvider(b.dataset.quickProvider);};
+  $('providerQuickManage').onclick=()=>{closeQuickProvider();void openProviders();};
+  wrapper.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();closeQuickProvider(true);}});
+  document.addEventListener('click',e=>{if(!wrapper.contains(e.target)&&!quickSwitchBusy)closeQuickProvider();});
+ }
  async function openProviders(){
   const dialog=$('providerAccounts');dialog.showModal();$('providerMessage').textContent='Caricamento account…';
   try{
-   const data=await request('/api/app/providers');
+   const data=await request('/api/app/providers');providerChoices=data.connections;renderQuickProviders();
    $('providerList').innerHTML=data.connections.map(c=>`<article class="provider-row"><strong>${esc(c.label)}</strong>${c.id===data.selected?'<span>In uso su questo dispositivo</span>':`<button type="button" class="primary-button" data-provider-op="select" data-provider-id="${esc(c.id)}">Usa questo account</button>`}${!data.impersonating?`<button type="button" class="account-link" data-provider-op="reauthorize" data-provider-id="${esc(c.id)}">Ricollega eWeLink</button><form data-provider-rename="${esc(c.id)}"><label>Nome dell’account<input name="label" value="${esc(c.label)}" required maxlength="80"></label><button type="submit" class="secondary-button">Salva nome</button></form>`:''}</article>`).join('')||'<p>Nessun account eWeLink collegato.</p>';
    $('providerAdd').hidden=data.impersonating;
    $('providerMessage').textContent='Il cambio vale solo per questo dispositivo. I timer degli altri account continuano a funzionare.';
@@ -308,6 +357,7 @@
   finally{dialog.setAttribute('aria-busy','false');dialog.querySelectorAll('button').forEach(b=>b.disabled=false);}
  }
  function mountProviders(){
+  mountQuickProvider();
   const nav=document.querySelector('.nav-list');if(!nav)return;
   const button=document.createElement('button');button.id='providerAccountsBtn';button.type='button';button.className='nav-item';button.hidden=true;
   button.innerHTML='<span aria-hidden="true">⇄</span><span>Account eWeLink<small id="providerSelectedName"></small></span>';
