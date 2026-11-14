@@ -36,3 +36,14 @@ body.account-admin-page>main,body.account-admin-page>#navigationDialog,body.acco
 #accountLogoPreview,.account-row-logo{width:64px;height:64px;object-fit:contain}
 .customer-logo{width:44px;height:44px;object-fit:contain;margin-left:12px}
 @media(pointer:coarse){.account-admin-page #accountAdmin{display:block}}
+
+#accountSignup{width:min(440px,calc(100vw - 32px));max-height:92dvh;overflow:auto;box-sizing:border-box;padding:28px;border:1px solid #dce7df;border-radius:24px;background:#fff;color:#21392f}
+#accountSignup::backdrop{background:#132b2370}
+#accountSignup h2{margin:0;font-size:1.5rem}
+#accountSignup form{display:grid;gap:12px}
+.account-signup-names{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#accountSignupMessage{color:#9b2b24;margin:0}
+#accountSignupMessage:empty{display:none}
+#accountSetup{display:grid;gap:12px;width:100%}
+.account-setup-logo{width:80px;height:80px;object-fit:contain;align-self:center}
+@media(max-width:500px){.account-signup-names{grid-template-columns:1fr}#accountSignup{padding:22px 18px}}
