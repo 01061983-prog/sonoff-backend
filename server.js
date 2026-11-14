@@ -905,7 +905,7 @@ app.post("/api/toggle-multi", requireLogin, route(async (req, res) => {
 // Programmazione autonoma: disabilitata finché non viene attivata su Render.
 // I token sono conservati soltanto dopo il consenso esplicito al primo salvataggio.
 if (process.env.EWELINK_PROGRAMMING_ENABLED === "true") {
-  pushNotify = require("./push-notify")({db:getSceneDatabase,accountLabel:req=>appAccounts?.selectedConnection(req,req.appAccount)?.label||'', identity:req=>requireProgramming().identity(req), requireLogin, route, cloudError});
+  pushNotify = require("./push-notify")({db:getSceneDatabase,accountLabel:req=>appAccounts?.connectionIdentity(req.appAccount,appAccounts.selectedConnection(req,req.appAccount))?.label||'', identity:req=>requireProgramming().identity(req), requireLogin, route, cloudError});
   pushNotify.install(app);
   programming = require("./programming")({onExecuted:(s,status,message)=>pushNotify.scheduleExecuted(s,status,message),daikin:()=>daikinModule,db:getSceneDatabase, api, listDevices, appid:APPID, secret:APPSECRET, saveSession, authorizeOwner:owner=>appAccounts?appAccounts.authorizeOwner(owner):null, solarFetch:fetch, getScene:getProgrammingScene, runScene:runProgrammingScene, region:new URL(API_BASE).hostname.split("-")[0]});
   programming.start();
@@ -920,7 +920,7 @@ app.get("/api/programming", requireLogin, route(async(req,res) => res.json(await
 app.post("/api/programming", requireLogin, route(async(req,res) => res.json(await requireProgramming().mutate(req))));
 
 // Split Daikin tramite Onecta Cloud API (credenziali DAIKIN_* su Render).
-daikinModule=require("./daikin-onecta")({db:getSceneDatabase,home:HOME,requireLogin,route,cloudError});
+daikinModule=require("./daikin-onecta")({db:getSceneDatabase,home:HOME,requireLogin,route,cloudError,ownerFor:req=>appAccounts?appAccounts.climateOwner(req):'default',scheduleOwner:s=>appAccounts?appAccounts.climateScheduleOwner(s):Promise.resolve(s.daikinOwner||'default')});
 daikinModule.install(app);
 
 app.use((error, _req, res, _next) => {

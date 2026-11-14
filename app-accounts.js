@@ -23,6 +23,20 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   const list=connections(a),saved=openPending(req.cookies?.[PROVIDER]);
   return (saved?.accountId===a.id&&list.find(c=>c.owner===saved.owner))||list.find(c=>c.owner===a.providerOwner)||list[0]||null;
  }
+ function connectionIdentity(a,c){
+  if(!c)return null;
+  const primary=c.owner===a.providerOwner,name=primary&&c.label==='Account principale'?(a.name||c.label):c.label;
+  return {id:c.owner,label:name,name,person:typeof c.person==='string'?c.person:primary?a.person||'':'',logo:typeof c.logo==='string'?c.logo:primary?a.logo||'':''};
+ }
+ const climateKey=(a,owner)=>owner===a.providerOwner?a.id:hash(a.id+':daikin:'+owner);
+ function climateOwner(req){const a=req.appAccount;if(!a)throw fail(403,'climate_account','Account non disponibile.');const c=selectedConnection(req,a);if(!c)throw fail(409,'climate_account','Collega e seleziona un account eWeLink per il clima.');return climateKey(a,c.owner);}
+ async function climateScheduleOwner(s){
+  const a=await authorizeOwner(s.owner);
+  if(!a||!connections(a).some(c=>c.owner===s.owner))throw fail(403,'climate_account','Account della programmazione clima non disponibile.');
+  const expected=climateKey(a,s.owner);
+  if(s.daikinOwner!==expected)throw fail(403,'climate_account','Questa programmazione clima non appartiene all’account eWeLink selezionato. Modificala dall’account corretto.');
+  return expected;
+ }
  async function selectConnection(req,res,owner){
   const a=await read(req.appAccount.id),c=connections(a).find(c=>c.owner===owner);
   if(!c)throw fail(403,'app_provider_forbidden','Questo account eWeLink non appartiene alla tua plancia.');
@@ -38,14 +52,15 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
  }
  async function manageProviders(req,res){
   const a=await session(req),list=connections(a),selected=selectedConnection(req,a);
-  if(req.method==='GET')return {ok:true,selected:selected?.owner||'',impersonating:!!req.appImpersonating,connections:list.map(c=>({id:c.owner,label:c.label}))};
+  if(req.method==='GET')return {ok:true,selected:selected?.owner||'',impersonating:!!req.appImpersonating,connections:list.map(c=>connectionIdentity(a,c))};
   csrf(req);if(req.appReadOnly)throw fail(403,'app_readonly','Plancia disponibile soltanto in consultazione.');
   const b=req.body||{};
   if(b.op==='select'){await selectConnection(req,res,b.id);return {ok:true};}
   if(req.appImpersonating)throw fail(403,'app_link_owner','Solo il titolare può collegare o modificare i propri account eWeLink.');
   if(b.op==='rename'){
    const label=String(b.label||'').trim();if(!label||label.length>80)throw fail(400,'app_link_name','Inserisci un nome da 1 a 80 caratteri.');
-   await db().runTransaction(async t=>{const ref=profiles().doc(a.id),snap=await t.get(ref),current=snap.data(),rows=connections(current);if(!rows.some(c=>c.owner===b.id))throw fail(403,'app_provider_forbidden','Collegamento non disponibile.');t.set(ref,{providerConnections:rows.map(c=>c.owner===b.id?{...c,label}:c),updatedAt:now()},{merge:true});});return {ok:true};
+   const identity={};if(Object.hasOwn(b,'logo'))identity.logo=accountLogo(b.logo);if(Object.hasOwn(b,'person')){const person=String(b.person||'').trim();if(person.length>120)throw fail(400,'app_link_name','Il nome del titolare deve contenere al massimo 120 caratteri.');identity.person=person;}
+   await db().runTransaction(async t=>{const ref=profiles().doc(a.id),snap=await t.get(ref),current=snap.data(),rows=connections(current);if(!rows.some(c=>c.owner===b.id))throw fail(403,'app_provider_forbidden','Collegamento non disponibile.');t.set(ref,{providerConnections:rows.map(c=>c.owner===b.id?{...c,label,...identity}:c),updatedAt:now()},{merge:true});});return {ok:true};
   }
   if(!['add','reauthorize'].includes(b.op))throw fail(400,'app_operation','Operazione non valida.');
   const c=list.find(c=>c.owner===b.id),label=String(b.label||'').trim();
@@ -123,7 +138,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   }
   return {ok:true,account:publicProfile(await read(a.id))};
  }
- async function status(req){const a=await session(req,{active:false});return {ok:true,authenticated:true,account:publicProfile(a),actor:publicProfile(req.appActor),impersonating:!!req.appImpersonating,readOnly:!!req.appReadOnly,adminDesktop:desktop(req)&&await isAdmin(req.appActor),primaryProvider:a.providerOwner||'',selectedProvider:selectedConnection(req,a)?.owner||'',selectedProviderLabel:selectedConnection(req,a)?.label||'',providerCount:connections(a).length,csrf:mac(req.cookies[COOKIE])};}
+ async function status(req){const a=await session(req,{active:false});return {ok:true,authenticated:true,account:publicProfile(a),actor:publicProfile(req.appActor),impersonating:!!req.appImpersonating,readOnly:!!req.appReadOnly,adminDesktop:desktop(req)&&await isAdmin(req.appActor),primaryProvider:a.providerOwner||'',selectedProvider:selectedConnection(req,a)?.owner||'',selectedProviderLabel:connectionIdentity(a,selectedConnection(req,a))?.label||'',selectedProviderIdentity:connectionIdentity(a,selectedConnection(req,a)),providerCount:connections(a).length,csrf:mac(req.cookies[COOKIE])};}
  async function bind(a,owner,{add=false,slot='',label,expectedOwner}={}){
   const pr=profiles().doc(a.id),lr=links().doc(owner);
   await db().runTransaction(async t=>{
@@ -260,5 +275,5 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   app.get('/api/app/accounts',wrap(async(req,res)=>res.json(await manage(req,res))));
   app.post('/api/app/accounts',wrap(async(req,res)=>res.json(await manage(req,res))));
  }
- return {install,session,provider,bind,selectedConnection,selectConnection,linkIntent,context,authorizeOwner,tokenAllowed,sealPending,openPending,csrf,publicProfile,providerAccount,accountId};
+ return {install,session,provider,bind,selectedConnection,connectionIdentity,climateOwner,climateScheduleOwner,selectConnection,linkIntent,context,authorizeOwner,tokenAllowed,sealPending,openPending,csrf,publicProfile,providerAccount,accountId};
 };

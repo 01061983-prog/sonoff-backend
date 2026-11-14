@@ -28,6 +28,13 @@
   if(window.PaceSplash)window.PaceSplash.finish();else{const splash=$('startupScreen');if(splash)splash.hidden=true;document.body.classList.remove('app-starting');}
   if(config&& !persistenceReady && !busy)void prepareGoogle().catch(()=>{});
  }
+ function displayIdentity(){
+  if(state.selectedProviderIdentity)return state.selectedProviderIdentity;
+  const primary=!state.selectedProvider||state.selectedProvider===state.primaryProvider;
+  return {name:state.selectedProviderLabel||state.account?.name||'La tua plancia',person:primary?state.account?.person||'':'',logo:primary?state.account?.logo||'':''};
+ }
+ function providerBadge(c){const name=c.name||c.label||'Account',initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(p=>[...p][0]).join('').toLocaleUpperCase('it');return '<span class="provider-avatar">'+(c.logo?'<img src="'+esc(c.logo)+'" alt=""><span hidden aria-hidden="true">'+esc(initials)+'</span>':'<span aria-hidden="true">'+esc(initials)+'</span>')+'</span>';}
+ function providerImages(container){container.querySelectorAll('.provider-avatar img').forEach(image=>{image.onerror=()=>{image.hidden=true;if(image.nextElementSibling)image.nextElementSibling.hidden=false;};});}
  function customerIdentity(){
   const header=document.querySelector('.topbar');if(!header)return;
   header.classList.add('customer-branded');
@@ -37,11 +44,11 @@
    identity.innerHTML='<span class="customer-logo-frame"><span id="customerInitials" class="customer-initials" aria-hidden="true"></span><img id="customerLogo" class="customer-logo" alt="" hidden></span><span class="customer-copy"><strong id="customerName"></strong><span id="customerOwner" class="customer-owner" hidden></span><span id="customerProviderName" class="customer-provider" hidden></span></span>';
    header.insertBefore(identity,$('providerQuick')||null);
   }
-  const name=String(state.account.name||'La tua plancia').trim(),person=String(state.account.person||'').trim();
+  const identityData=displayIdentity(),name=String(identityData.name||'La tua plancia').trim(),person=String(identityData.person||'').trim();
   $('customerName').textContent=name;
   const owner=$('customerOwner');owner.hidden=!person||person.toLocaleLowerCase('it')===name.toLocaleLowerCase('it');owner.textContent=owner.hidden?'':'Titolare: '+person;
-  const provider=$('customerProviderName');provider.hidden=!state.selectedProviderLabel;provider.textContent=state.selectedProviderLabel?'eWeLink · '+state.selectedProviderLabel:'';
-  const image=$('customerLogo'),initials=$('customerInitials'),source=state.account.logo||'';
+  const provider=$('customerProviderName');provider.hidden=!state.selectedProviderLabel||state.selectedProviderLabel===name;provider.textContent=provider.hidden?'':'eWeLink · '+state.selectedProviderLabel;
+  const image=$('customerLogo'),initials=$('customerInitials'),source=identityData.logo||'';
   initials.textContent=name.split(/\s+/).filter(Boolean).slice(0,2).map(part=>[...part][0]).join('').toLocaleUpperCase('it');
   image.alt='Logo di '+name;
   if(!source){identity.classList.remove('has-wide-logo');image.hidden=true;image.removeAttribute('src');initials.hidden=false;}
@@ -54,7 +61,7 @@
   const toolbar=$('accountToolbar');if(toolbar&&toolbar.parentElement!==header)header.append(toolbar);
  }
  function branding(){
-  const name=state.account.name;
+  const name=displayIdentity().name;
   document.title=name+' · PACE';
   const brand=document.querySelector('.brand-copy');if(brand){brand.textContent='PACE';const small=document.createElement('small');small.textContent=name;brand.append(small);}
   const space=document.querySelector('.workspace');if(space){space.textContent='';const label=document.createElement('span');label.textContent=name;space.append(label);}
@@ -326,7 +333,8 @@
  }
  function renderQuickProviders(){
   const list=$('providerQuickList');if(!list)return;
-  list.innerHTML=providerChoices.map(c=>`<button type="button" class="provider-quick-option${c.id===state.selectedProvider?' current':''}" data-quick-provider="${esc(c.id)}" ${c.id===state.selectedProvider?'disabled aria-current="true"':''}><span>${esc(c.label)}</span>${c.id===state.selectedProvider?'<small>In uso ✓</small>':'<span aria-hidden="true">→</span>'}</button>`).join('');
+  list.innerHTML=providerChoices.map(c=>`<button type="button" class="provider-quick-option${c.id===state.selectedProvider?' current':''}" data-quick-provider="${esc(c.id)}" ${c.id===state.selectedProvider?'disabled aria-current="true"':''}>${providerBadge(c)}<span class="provider-choice-copy"><strong>${esc(c.label)}</strong>${c.person&&c.person!==c.label?`<small>${esc(c.person)}</small>`:''}</span>${c.id===state.selectedProvider?'<small>In uso ✓</small>':'<span aria-hidden="true">→</span>'}</button>`).join('');
+  providerImages(list);
  }
  async function refreshQuickProviders(){
   if(!providerChoicesJob)providerChoicesJob=request('/api/app/providers').then(data=>{providerChoices=data.connections;renderQuickProviders();return data;}).finally(()=>{providerChoicesJob=null;});
@@ -367,11 +375,14 @@
   wrapper.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();closeQuickProvider(true);}});
   document.addEventListener('click',e=>{if(!wrapper.contains(e.target)&&!quickSwitchBusy)closeQuickProvider();});
  }
+ const providerLogoDrafts=new Map(),providerLogoJobs=new Map();let providerLogoEpoch=0;
  async function openProviders(){
   const dialog=$('providerAccounts');dialog.showModal();$('providerMessage').textContent='Caricamento account…';
   try{
    const data=await request('/api/app/providers');providerChoices=data.connections;renderQuickProviders();
-   $('providerList').innerHTML=data.connections.map(c=>`<article class="provider-row"><strong>${esc(c.label)}</strong>${c.id===data.selected?'<span>In uso su questo dispositivo</span>':`<button type="button" class="primary-button" data-provider-op="select" data-provider-id="${esc(c.id)}">Usa questo account</button>`}${!data.impersonating?`<button type="button" class="account-link" data-provider-op="reauthorize" data-provider-id="${esc(c.id)}">Ricollega eWeLink</button><form data-provider-rename="${esc(c.id)}"><label>Nome dell’account<input name="label" value="${esc(c.label)}" required maxlength="80"></label><button type="submit" class="secondary-button">Salva nome</button></form>`:''}</article>`).join('')||'<p>Nessun account eWeLink collegato.</p>';
+   providerLogoEpoch++;providerLogoJobs.clear();providerLogoDrafts.clear();data.connections.forEach(c=>providerLogoDrafts.set(c.id,c.logo||''));
+   $('providerList').innerHTML=data.connections.map(c=>`<article class="provider-row"><div class="provider-row-identity">${providerBadge(c)}<div><strong>${esc(c.label)}</strong>${c.person?`<small>${esc(c.person)}</small>`:''}</div></div>${c.id===data.selected?'<span>In uso su questo dispositivo</span>':`<button type="button" class="primary-button" data-provider-op="select" data-provider-id="${esc(c.id)}">Usa questo account</button>`}${!data.impersonating?`<button type="button" class="account-link" data-provider-op="reauthorize" data-provider-id="${esc(c.id)}">Ricollega eWeLink</button><form data-provider-rename="${esc(c.id)}"><label>Nome e cognome o attività<input name="label" required maxlength="80" value="${esc(c.label)}"></label><label>Titolare o referente (facoltativo)<input name="person" maxlength="120" value="${esc(c.person||'')}"></label><label>Logo di questo account<input type="file" accept="image/png,image/jpeg,image/webp" data-provider-logo="${esc(c.id)}"></label><img class="provider-logo-preview" src="${esc(c.logo||'')}" alt="Anteprima logo" ${c.logo?'':'hidden'}><button type="button" class="account-link" data-provider-op="remove-logo" data-provider-id="${esc(c.id)}" ${c.logo?'':'hidden'}>Rimuovi logo</button><button type="submit" class="secondary-button">Salva identità</button></form>`:''}</article>`).join('')||'<p>Nessun account eWeLink collegato.</p>';
+   providerImages($('providerList'));
    $('providerAdd').hidden=data.impersonating;
    $('providerMessage').textContent='Il cambio vale solo per questo dispositivo. I timer degli altri account continuano a funzionare.';
   }catch(e){$('providerMessage').textContent=e.message;}
@@ -383,6 +394,7 @@
    const result=await request('/api/app/providers',body);
    if(result.url){location.assign(result.url);return;}
    if(body.op==='select'){location.replace(dashboardUrl().href);return;}
+   if(body.op==='rename'){const current=await request('/api/app/session');if(current.authenticated!==false){Object.assign(state,current);branding();showQuickProvider();}}
    dialog.close();await openProviders();
   }catch(e){$('providerMessage').textContent=e.message;}
   finally{dialog.setAttribute('aria-busy','false');dialog.querySelectorAll('button').forEach(b=>b.disabled=false);}
@@ -397,8 +409,20 @@
   dialog.innerHTML='<header><h2 id="providerTitle">Account eWeLink</h2><button id="providerClose" type="button" class="secondary-button">Chiudi</button></header><p id="providerMessage" role="status"></p><div id="providerList"></div><form id="providerAdd"><h3>Collega un altro account</h3><label>Nome personalizzato<input id="providerNewLabel" required maxlength="80" placeholder="Es. Sede centrale, Casa, Magazzino"></label><button type="submit" class="primary-button">Aggiungi account eWeLink</button><p>Accederai a eWeLink per autorizzare il nuovo collegamento.</p></form>';
   document.body.append(dialog);$('providerClose').onclick=()=>dialog.close();
   $('providerAdd').onsubmit=e=>{e.preventDefault();void providerAction({op:'add',label:$('providerNewLabel').value});};
-  $('providerList').onclick=e=>{const b=e.target.closest('[data-provider-op]');if(b)void providerAction({op:b.dataset.providerOp,id:b.dataset.providerId});};
-  $('providerList').onsubmit=e=>{const form=e.target.closest('[data-provider-rename]');if(form){e.preventDefault();void providerAction({op:'rename',id:form.dataset.providerRename,label:form.elements.label.value});}};
+  $('providerList').onclick=e=>{const b=e.target.closest('[data-provider-op]');if(!b)return;if(b.dataset.providerOp==='remove-logo'){const form=b.closest('form');providerLogoJobs.delete(b.dataset.providerId);providerLogoDrafts.set(b.dataset.providerId,'');const input=form.querySelector('input[type=file]');input.value='';input.setCustomValidity('');form.querySelector('button[type=submit]').disabled=false;form.querySelector('.provider-logo-preview').hidden=true;b.hidden=true;return;}void providerAction({op:b.dataset.providerOp,id:b.dataset.providerId});};
+  $('providerList').onchange=e=>{if(e.target.matches('[data-provider-logo]'))void readProviderLogo(e.target);};
+  $('providerList').onsubmit=e=>{const form=e.target.closest('[data-provider-rename]');if(form){e.preventDefault();if(!form.reportValidity())return;void providerAction({op:'rename',id:form.dataset.providerRename,label:form.elements.label.value,person:form.elements.person.value,logo:providerLogoDrafts.get(form.dataset.providerRename)||''});}};
+ }
+ async function readProviderLogo(input){
+  const file=input.files?.[0],form=input.closest('form'),id=input.dataset.providerLogo;if(!file)return;
+  const epoch=providerLogoEpoch,job=Symbol();providerLogoJobs.set(id,job);const current=()=>epoch===providerLogoEpoch&&providerLogoJobs.get(id)===job;
+  const submit=form.querySelector('button[type=submit]');submit.disabled=true;input.setCustomValidity('Attendi il caricamento del logo.');
+  try{
+   if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>5000000)throw Error('Scegli un logo PNG, JPEG o WebP di massimo 5 MB.');
+   const image=await createImageBitmap(file);let logo;
+   try{const canvas=document.createElement('canvas'),scale=Math.min(1,160/Math.max(image.width,image.height));canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);logo=canvas.toDataURL('image/png');}finally{image.close();}
+   if(!current())return;providerLogoDrafts.set(id,logo);const preview=form.querySelector('.provider-logo-preview');preview.src=logo;preview.hidden=false;form.querySelector('[data-provider-op="remove-logo"]').hidden=false;$('providerMessage').textContent='Logo pronto. Premi Salva identità per conservarlo.';
+  }catch(e){if(current()){input.value='';$('providerMessage').textContent=e.message;}}finally{if(current()){providerLogoJobs.delete(id);input.setCustomValidity('');submit.disabled=false;}}
  }
  async function logout(){try{await request('/api/app/logout',{});if(fbAuth)await (await sdk()).signOut(fbAuth);location.reload();}catch(e){alert('Uscita non confermata: '+e.message);}}
  async function bootstrap(url){
@@ -430,7 +454,7 @@
    if(!$('accountGate'))mount();state.enabled=true;gate('Accesso non disponibile: '+translate(e));void prepareGoogle().catch(()=>{});return ready;
   }
  }
- window.AppAccounts={state,bootstrap,logout,openPage:()=>{
+ window.AppAccounts={state,bootstrap,logout,displayIdentity,openPage:()=>{
   if(!adminPage||!state.enabled)return false;
   if(!state.adminDesktop){navigateAdmin(false);return true;}
   document.title="Gestione account · PACE · "+state.actor.name;

@@ -13,17 +13,17 @@
   <link rel="manifest" href="manifest.webmanifest?v=65">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg?v=65">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=65">
-  <script src="account-auth.js?v=67"></script>
+  <script src="account-auth.js?v=68"></script>
   <link rel="stylesheet" href="account-auth.css?v=67">
   <script src="text-size.js?v=64"></script>
   <script src="scene-pages.js?v=46"></script>
   <script src="room-map.js?v=48"></script>
   <link rel="stylesheet" href="room-map.css?v=48">
-  <link rel="stylesheet" href="app.css?v=67">
+  <link rel="stylesheet" href="app.css?v=68">
   <script src="menu-bar.js?v=61"></script>
   <link rel="stylesheet" href="menu-bar.css?v=65">
-  <script src="push-settings.js?v=64"></script>
-  <script src="climate.js?v=5"></script>
+  <script src="push-settings.js?v=68"></script>
+  <script src="climate.js?v=68"></script>
   <link rel="stylesheet" href="climate.css?v=3">
   <style>
     #startupScreen{position:fixed;inset:0;z-index:10001;display:flex;align-items:center;justify-content:center;min-height:100dvh;padding:32px 24px max(32px,env(safe-area-inset-bottom));overflow:auto;background:#20242c;color:#f8fafc;text-align:center;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;isolation:isolate}
@@ -1169,7 +1169,7 @@
             else button.removeAttribute("aria-current");
         });
         document.getElementById("pageLabel").textContent = VIEW_NAMES[name];
-        document.title = VIEW_NAMES[name] + " · PACE" + (window.AppAccounts?.state.account?.name ? " · " + window.AppAccounts.state.account.name : "");
+        document.title = VIEW_NAMES[name] + " · PACE" + (window.AppAccounts?.displayIdentity?.().name ? " · " + window.AppAccounts.displayIdentity().name : "");
         if (name === "rooms") renderRooms();
         if (name === "programming") void openProgramming();
         if (name === "programming") window.Climate?.open();

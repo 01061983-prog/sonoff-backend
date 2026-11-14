@@ -21,6 +21,7 @@
  const num=v=>Number.isFinite(v)?(Math.round(v*10)/10).toLocaleString('it-IT'):'—';
  const base=()=>typeof BACKEND_URL!=='undefined'?BACKEND_URL:location.origin;
  const req=(path,body)=>apiRequest(path,body);
+ const accountName=()=>window.AppAccounts?.state.selectedProviderLabel||'questo account';
  function say(text,error){for(const el of [statusEl]){if(!el)continue;el.textContent=text||'';el.classList.toggle('error',Boolean(error));}}
 
  function units(){
@@ -207,7 +208,7 @@
   if(!st){content.innerHTML=state.loading?'<p class="climate-hint">Caricamento…</p>':'';return;}
   if(!st.configured){content.innerHTML='<article class="climate-empty"><h2>Integrazione Daikin non attiva</h2><p>Mancano le credenziali Daikin sul server.</p></article>';return;}
   if(!st.linked){
-   content.innerHTML=`<article class="climate-empty"><span class="climate-empty-icon">${icon('thermo')}</span><h2>Collega Daikin Onecta</h2><p>Accedi con l’account Daikin che usi nell’app Onecta e autorizza la plancia. Serve una volta sola: il collegamento resta valido per un anno.</p><button type="button" class="primary-button" data-act="connect">Collega account Daikin</button></article>`;
+   content.innerHTML=`<article class="climate-empty"><span class="climate-empty-icon">${icon('thermo')}</span><h2>Clima di ${esc(accountName())}</h2><p>Non hai ancora collegato Daikin Onecta a questo account. Il collegamento e gli split restano separati da quelli degli altri account eWeLink.</p><button type="button" class="primary-button" data-act="connect">Collega account Daikin</button></article>`;
    return;
   }
   const list=units();

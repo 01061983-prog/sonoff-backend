@@ -10,7 +10,7 @@ const CACHE_MS = 5 * 60 * 1000;      // stato riutilizzato senza nuove chiamate
 const FORCE_MIN_MS = 20 * 1000;      // aggiornamento manuale al massimo ogni 20 s
 const PENDING_COOKIE = 'daikin_oauth';
 
-module.exports = function createDaikin({ db, home, requireLogin, route, cloudError }) {
+module.exports = function createDaikin({ db, home, requireLogin, route, cloudError, ownerFor=req=>req.appAccount?.id||'default', scheduleOwner=async s=>s.daikinOwner||'default' }) {
   const CLIENT_ID = process.env.DAIKIN_CLIENT_ID;
   const CLIENT_SECRET = process.env.DAIKIN_CLIENT_SECRET;
   const REDIRECT_URI = process.env.DAIKIN_REDIRECT_URI;
@@ -35,7 +35,7 @@ module.exports = function createDaikin({ db, home, requireLogin, route, cloudErr
     return Buffer.concat([d.update(data), d.final()]).toString('utf8');
   };
   const mac = text => crypto.createHmac('sha256', key).update('daikin-pending:' + text).digest('base64url');
-  const ownerOf = req => req.appAccount?.id || 'default';
+  const ownerOf = req => ownerFor(req);
   function needConfig() { if (!configured) throw fail(503, 'daikin_not_configured', 'Integrazione Daikin non configurata sul server.'); }
   function needWriter(req) { if (req.appImpersonating || req.appReadOnly) throw fail(403, 'daikin_owner', 'Il collegamento Daikin può essere gestito soltanto dal titolare della plancia.'); }
 
@@ -359,7 +359,7 @@ module.exports = function createDaikin({ db, home, requireLogin, route, cloudErr
   }
   async function runSchedule(s, state) {
     needConfig();
-    const owner = s.daikinOwner || 'default';
+    const owner = await scheduleOwner(s);
     caches.delete(owner);
     await devices(owner, false); // stato aggiornato: salta le impostazioni già uguali
     const ids = s.deviceId === ALL ? climateUnits(owner).map(u => 'daikin:' + u.gatewayId + ':' + u.embeddedId) : [s.deviceId];
