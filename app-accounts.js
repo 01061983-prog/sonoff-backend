@@ -28,7 +28,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
    if(['auth/session-cookie-expired','auth/session-cookie-revoked','auth/argument-error','auth/invalid-session-cookie','auth/user-disabled','auth/user-not-found','auth/id-token-revoked'].includes(error.code))throw fail(401,'app_auth_required','Accedi con il tuo account della webapp.');
    throw fail(503,'app_auth_unavailable','Verifica dell’accesso temporaneamente non disponibile. Riprova tra poco: la sessione è stata conservata.');
   }
-  const actor=await read(accountId(decoded.email||''));
+  const actor=await read(accountId(decoded.email||'')).catch(error=>{if(error.status===404)throw fail(401,'app_auth_required','Accedi con il tuo account della webapp.');throw error;});
   if(actor.uid!==decoded.uid||decoded.email_verified!==true)throw fail(401,'app_auth_required','Identità dell’account non confermata.');
   if(actor.status==='blocked'||actor.status==='deleted')throw fail(403,'app_blocked',disabledMessage);
   if(Number(decoded.auth_time)*1000<Number(actor.invalidBefore||0))throw fail(401,'app_auth_required','Accesso revocato: accedi nuovamente.');
@@ -37,7 +37,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
    const id=req.cookies[ACT];if(!/^[a-f0-9]{64}$/.test(id))throw fail(401,'app_actas_expired','Accesso alla plancia utente scaduto.');
    const s=await db().collection('ewelinkAppDelegations').doc(hash(id)).get(),d=s.data();
    if(!d||d.actor!==actor.uid||d.until<=now()||!await isAdmin(actor)||!desktop(req))throw fail(401,'app_actas_expired','Accesso amministratore scaduto. Torna alla gestione account.');
-   req.appAccount=await read(d.target);req.appImpersonating=true;req.appReadOnly=req.appAccount.status!=='active';
+   req.appAccount=await read(d.target).catch(error=>{if(error.status===404)throw fail(401,'app_actas_expired','Plancia rimossa. Torna alla gestione account.');throw error;});req.appImpersonating=true;req.appReadOnly=req.appAccount.status!=='active';
   }
   if(req.query?.accountContext&&req.query.accountContext!==req.appAccount.id)throw fail(409,'app_context_changed','La plancia aperta è cambiata. Ricarica la pagina.');
   if(active&&req.appAccount.status!=='active'&&!req.appImpersonating)throw fail(403,'app_pending','Account in attesa di ammissione da parte dell’amministratore.');
@@ -87,12 +87,24 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   await db().runTransaction(async t=>{
    const p=await t.get(pr),l=await t.get(lr),current=p.data();
    if(current?.status!=='active')throw fail(403,'app_blocked','Account non attivo.');
-   if(l.exists&&l.data().accountId!==a.id)throw fail(409,'app_provider_taken','Questo account eWeLink è già collegato a un’altra plancia.');
+   if(l.exists&&!l.data().deleted&&l.data().accountId!==a.id)throw fail(409,'app_provider_taken','Questo account eWeLink è già collegato a un’altra plancia.');
    if(current.providerOwner&&current.providerOwner!==owner)throw fail(409,'app_provider_changed','La plancia è già collegata a un altro account eWeLink. Contatta l’amministratore.');
-   t.set(lr,{accountId:a.id,updatedAt:now()});t.set(pr,{providerOwner:owner,updatedAt:now()},{merge:true});
+   t.set(lr,{accountId:a.id,deleted:false,updatedAt:now()});t.set(pr,{providerOwner:owner,updatedAt:now()},{merge:true});
   });
  }
- async function providerAccount(owner){const s=await links().doc(owner).get();return s.exists?read(s.data().accountId):null;}
+ // Rimozione definitiva: libera l’email, conserva una copia d’archivio e blocca i timer dell’account eWeLink collegato.
+ async function remove(a){
+  const pr=profiles().doc(a.id);let uid=null;
+  await db().runTransaction(async t=>{
+   const p=await t.get(pr);if(!p.exists)return;const current=p.data();uid=current.uid||null;
+   const lr=current.providerOwner?links().doc(current.providerOwner):null,l=lr?await t.get(lr):null;
+   t.set(db().collection('ewelinkAppDeletedAccounts').doc(a.id+'-'+now()),{...current,id:a.id,deletedAt:now()});
+   if(lr&&(!l.exists||l.data().accountId===a.id))t.set(lr,{accountId:a.id,deleted:true,updatedAt:now()});
+   t.delete(pr);
+  });
+  if(uid){await auth().revokeRefreshTokens(uid).catch(()=>{});await auth().deleteUser(uid).catch(()=>{});}
+ }
+ async function providerAccount(owner){const s=await links().doc(owner).get();if(!s.exists)return null;if(s.data().deleted)throw fail(403,'app_blocked','Plancia rimossa: comandi automatici bloccati.');return read(s.data().accountId);}
  async function authorizeOwner(owner){const a=await providerAccount(owner);if(a&&a.status!=='active')throw fail(403,'app_blocked','Account sospeso: comandi automatici bloccati.');return a;}
  async function provider(req){
   const a=await session(req);
@@ -132,6 +144,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
    const email=String(b.email||'').trim().toLowerCase(),name=String(b.name||'').trim();
    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254||!name||name.length>80)throw fail(400,'app_invite','Inserisci un nome (massimo 80 caratteri) e un indirizzo email valido.');
    const id=accountId(email),ref=profiles().doc(id);
+   const previous=await ref.get();if(previous.exists&&previous.data().status==='deleted')await remove({id});
    await db().runTransaction(async t=>{const s=await t.get(ref);if(s.exists)throw fail(409,'app_exists','Account già presente: usa Ammetti o Riattiva.');t.set(ref,{email,name,logo:accountLogo(b.logo??''),status:b.enabled===false?'blocked':'active',role:'user',createdAt:now(),updatedAt:now()});});await audit(actor,'invite',id);return {ok:true};
   }
   const a=await read(b.id);
@@ -146,10 +159,12 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
    await profiles().doc(a.id).set({name,logo:accountLogo(b.logo??''),updatedAt:now()},{merge:true});
   }else if(b.op==='rename'){
    const name=String(b.name||'').trim();if(!name||name.length>80)throw fail(400,'app_name','Inserisci un nome tra 1 e 80 caratteri.');await profiles().doc(a.id).set({name,updatedAt:now()},{merge:true});
-  }else if(['approve','block','delete'].includes(b.op)){
-   const status={approve:'active',block:'blocked',delete:'deleted'}[b.op];
+  }else if(b.op==='delete'){
+   await remove(a);
+  }else if(['approve','block'].includes(b.op)){
+   const status={approve:'active',block:'blocked'}[b.op];
    // La revoca applicativa è efficace anche se Firebase non risponde.
-   await profiles().doc(a.id).set({status,updatedAt:now(),...(['block','delete'].includes(b.op)?{invalidBefore:now()}: {})},{merge:true});
+   await profiles().doc(a.id).set({status,updatedAt:now(),...(b.op==='block'?{invalidBefore:now()}: {})},{merge:true});
    if(a.uid&&status!=='active')await auth().revokeRefreshTokens(a.uid).catch(()=>{});
   }else throw fail(400,'app_operation','Operazione account non valida.');
   await audit(actor,b.op,a.id);return {ok:true};
