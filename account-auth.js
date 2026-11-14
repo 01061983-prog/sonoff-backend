@@ -48,6 +48,7 @@
   $('accountIdentity').hidden=!state.impersonating;
   if(state.impersonating){$('accountIdentity').textContent='Stai gestendo '+state.account.name+(state.readOnly?' · Sola lettura':'');document.body.classList.add('account-delegated');}
   if(state.account.status!=='active'&&!state.impersonating){gate('Account in attesa di ammissione. L’amministratore deve autorizzare il tuo accesso.');$('accountCredentials').hidden=true;$('accountPending').hidden=false;return false;}
+  if(state.account.needsSetup&&!state.impersonating){showSetup();return false;}
   $('accountGate').hidden=true;document.body.classList.remove('account-locked');
   if(readyResolve){readyResolve(true);readyResolve=null;}
   return true;
@@ -83,9 +84,52 @@
   if(accepted(current)&&!firstAccess)location.reload();
  }
  async function run(fn){if(busy)return;busy=true;$('accountGate').setAttribute('aria-busy','true');document.querySelectorAll('#accountGate button').forEach(b=>b.disabled=true);try{await fn();}catch(e){gate(translate(e));}finally{busy=false;$('accountGate').setAttribute('aria-busy','false');document.querySelectorAll('#accountGate button').forEach(b=>b.disabled=false);}}
+ async function signUp(){
+  if(busy)return;busy=true;
+  const form=$('accountSignupForm'),note=$('accountSignupMessage');form.querySelectorAll('button').forEach(b=>b.disabled=true);note.textContent='';
+  try{
+   const first=$('accountSignupFirst').value.trim(),last=$('accountSignupLast').value.trim(),email=$('accountSignupEmail').value.trim();
+   if($('accountSignupPassword').value.length<8){note.textContent='Scegli una password di almeno 8 caratteri.';return;}
+   const a=await sdk(),c=await a.createUserWithEmailAndPassword(fbAuth,email,$('accountSignupPassword').value);
+   await a.updateProfile(c.user,{displayName:(first+' '+last).trim()});
+   await a.sendEmailVerification(c.user);await a.signOut(fbAuth);
+   $('accountSignup').close();$('accountEmail').value=email;$('accountPassword').value='';
+   message('Ti abbiamo inviato un’email a '+email+'. Apri il link di conferma (controlla anche la posta indesiderata), poi torna qui e premi Accedi con email e password. Al primo accesso completerai l’iscrizione.');
+  }catch(e){note.textContent=translate(e);}
+  finally{busy=false;form.querySelectorAll('button').forEach(b=>b.disabled=false);}
+ }
+ let setupLogo='';
+ async function readSetupLogo(){
+  const input=$('accountSetupLogo'),file=input.files[0],preview=$('accountSetupPreview');
+  if(!file)return;
+  try{
+   if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>5000000)throw Error('Scegli un logo PNG, JPEG o WebP di massimo 5 MB.');
+   const image=await createImageBitmap(file);
+   try{
+    const canvas=document.createElement('canvas'),scale=Math.min(1,160/Math.max(image.width,image.height));
+    canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
+    canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+    setupLogo=canvas.toDataURL('image/png');preview.src=setupLogo;preview.hidden=false;
+   }finally{image.close();}
+  }catch(e){input.value='';setupLogo='';preview.hidden=true;message(e.message);}
+ }
+ function showSetup(){
+  gate('Ultimo passo: dai un nome alla tua plancia e, se vuoi, aggiungi il logo. Poi collega il tuo account eWeLink.');
+  $('accountCredentials').hidden=true;$('accountPending').hidden=true;$('accountRetry').hidden=true;$('accountSetup').hidden=false;
+  if(!$('accountSetupName').value)$('accountSetupName').value=state.account.name||'';
+  if(state.account.logo&&!setupLogo){setupLogo=state.account.logo;$('accountSetupPreview').src=setupLogo;$('accountSetupPreview').hidden=false;}
+ }
+ async function saveSetup(link){
+  if(busy)return;busy=true;$('accountSetup').querySelectorAll('button').forEach(b=>b.disabled=true);
+  try{
+   await request('/api/app/setup',{name:$('accountSetupName').value,logo:setupLogo});
+   if(link)location.assign(base+'/login?returnUrl='+encodeURIComponent(base+'/app/index.html'));else location.reload();
+  }catch(e){message(e.message);}
+  finally{busy=false;$('accountSetup').querySelectorAll('button').forEach(b=>b.disabled=false);}
+ }
  function mount(){
   const section=document.createElement('section');section.id='accountGate';section.hidden=true;section.setAttribute('aria-label','Accesso alla webapp');
-  section.innerHTML=`<div class="app-login-card"><img src="icons/icon.svg" width="72" height="72" alt=""><p class="account-eyebrow">LA TUA PLANCIA</p><h1>Benvenuto.</h1><p id="accountMessage" role="status" aria-live="polite"></p><div id="accountCredentials"><label class="account-remember"><input id="accountRemember" type="checkbox"> Ricorda questo dispositivo</label><p class="account-small">Rimani connesso fino a quando esci o l’amministratore revoca l’accesso. Usalo soltanto sui tuoi dispositivi.</p><button id="accountGoogle" class="primary-button" type="button">Continua con Google</button><button id="accountGoogleRedirect" class="account-link" type="button">Apri Google nella pagina</button><div class="account-divider">oppure con la tua email</div><form id="accountForm"><label for="accountEmail">Email</label><input id="accountEmail" type="email" autocomplete="username" required maxlength="254"><label for="accountPassword">Password</label><input id="accountPassword" type="password" autocomplete="current-password" required maxlength="4096"><button class="primary-button" type="submit">Accedi</button><button id="accountRegister" class="secondary-button" type="button">Crea il tuo account</button><button id="accountReset" class="account-link" type="button">Password dimenticata?</button><button id="accountVerify" class="account-link" type="button">Invia di nuovo la conferma email</button></form></div><button id="accountRetry" class="account-link" type="button">Ricarica l’accesso</button><div id="accountPending" hidden><button id="accountCheck" class="primary-button">Controlla l’ammissione</button><button id="accountPendingLogout" class="secondary-button">Esci</button></div></div>`;
+  section.innerHTML=`<div class="app-login-card"><img src="icons/icon.svg" width="72" height="72" alt=""><p class="account-eyebrow">LA TUA PLANCIA</p><h1>Benvenuto.</h1><p id="accountMessage" role="status" aria-live="polite"></p><div id="accountCredentials"><label class="account-remember"><input id="accountRemember" type="checkbox"> Ricorda questo dispositivo</label><p class="account-small">Rimani connesso fino a quando esci o l’amministratore revoca l’accesso. Usalo soltanto sui tuoi dispositivi.</p><button id="accountGoogle" class="primary-button" type="button">Continua con Google</button><button id="accountGoogleRedirect" class="account-link" type="button">Apri Google nella pagina</button><div class="account-divider">oppure con la tua email</div><form id="accountForm"><label for="accountEmail">Email</label><input id="accountEmail" type="email" autocomplete="username" required maxlength="254"><label for="accountPassword">Password</label><input id="accountPassword" type="password" autocomplete="current-password" required maxlength="4096"><button class="primary-button" type="submit">Accedi</button><button id="accountRegister" class="secondary-button" type="button">Crea il tuo account</button><button id="accountReset" class="account-link" type="button">Password dimenticata?</button><button id="accountVerify" class="account-link" type="button">Invia di nuovo la conferma email</button></form></div><button id="accountRetry" class="account-link" type="button">Ricarica l’accesso</button><div id="accountPending" hidden><button id="accountCheck" class="primary-button">Controlla l’ammissione</button><button id="accountPendingLogout" class="secondary-button">Esci</button></div><form id="accountSetup" hidden><label>Nome della plancia<input id="accountSetupName" required maxlength="80" placeholder="Es. Oratorio San Luigi"></label><label>Logo (facoltativo)<input id="accountSetupLogo" type="file" accept="image/png,image/jpeg,image/webp"></label><img id="accountSetupPreview" class="account-setup-logo" alt="Anteprima logo" hidden><button class="primary-button" type="submit">Salva e collega eWeLink</button><button id="accountSetupLater" class="account-link" type="button">Salva e collega eWeLink più tardi</button><button id="accountSetupLogout" class="account-link" type="button">Esci</button></form><dialog id="accountSignup" aria-labelledby="accountSignupTitle"><form id="accountSignupForm"><h2 id="accountSignupTitle">Crea il tuo account</h2><p class="account-small">Ti invieremo un’email di conferma. Dopo il primo accesso completerai l’iscrizione con il nome e il logo della tua plancia.</p><div class="account-signup-names"><label>Nome<input id="accountSignupFirst" autocomplete="given-name" required maxlength="60"></label><label>Cognome<input id="accountSignupLast" autocomplete="family-name" required maxlength="60"></label></div><label>Email<input id="accountSignupEmail" type="email" autocomplete="email" required maxlength="254"></label><label>Password<input id="accountSignupPassword" type="password" autocomplete="new-password" required minlength="8" maxlength="4096"></label><p id="accountSignupMessage" role="alert"></p><button class="primary-button" type="submit">Crea account</button><div class="account-divider">oppure</div><button id="accountSignupGoogle" class="secondary-button" type="button">Continua con Google</button><button id="accountSignupCancel" class="account-link" type="button">Annulla</button></form></dialog></div>`;
   document.body.append(section);
   const bar=document.createElement('div');bar.id='accountToolbar';bar.innerHTML='<span id="accountIdentity" hidden></span><button id="accountReturn" hidden>Torna alla gestione</button><button id="accountManage" hidden>Gestione account</button>';document.body.append(bar);
   $('accountRetry').onclick=()=>location.reload();
@@ -98,7 +142,14 @@
    sessionStorage.setItem('ewelink_auth_remember',$('accountRemember').checked?'yes':'no');
    await a.signInWithRedirect(fbAuth,new a.GoogleAuthProvider());
   });
-  $('accountRegister').onclick=()=>void run(async()=>{if(!$('accountForm').reportValidity())return;if($('accountPassword').value.length<8){message('Per creare l’account scegli una password di almeno 8 caratteri.');return;}const a=await sdk(),c=await a.createUserWithEmailAndPassword(fbAuth,$('accountEmail').value.trim(),$('accountPassword').value);await a.sendEmailVerification(c.user);await a.signOut(fbAuth);$('accountPassword').value='';message('Account creato. Conferma l’email ricevuta e accedi. L’amministratore dovrà ammetterti alla plancia.');});
+  $('accountRegister').onclick=()=>{$('accountSignupForm').reset();$('accountSignupMessage').textContent='';$('accountSignupEmail').value=$('accountEmail').value.trim();$('accountSignup').showModal();};
+  $('accountSignupCancel').onclick=()=>$('accountSignup').close();
+  $('accountSignupGoogle').onclick=()=>{$('accountSignup').close();$('accountGoogle').click();};
+  $('accountSignupForm').addEventListener('submit',e=>{e.preventDefault();void signUp();});
+  $('accountSetup').addEventListener('submit',e=>{e.preventDefault();void saveSetup(true);});
+  $('accountSetupLater').onclick=()=>{if($('accountSetup').reportValidity())void saveSetup(false);};
+  $('accountSetupLogout').onclick=()=>void logout();
+  $('accountSetupLogo').onchange=()=>void readSetupLogo();
   $('accountVerify').onclick=()=>void run(async()=>{if(!$('accountForm').reportValidity())return;const a=await sdk(),c=await a.signInWithEmailAndPassword(fbAuth,$('accountEmail').value.trim(),$('accountPassword').value);if(c.user.emailVerified){await exchange(c.user);return;}await a.sendEmailVerification(c.user);await a.signOut(fbAuth);message('Email di conferma inviata. Controlla anche la posta indesiderata.');});
   $('accountReset').onclick=()=>void run(async()=>{if(!$('accountEmail').reportValidity())return;const a=await sdk();try{await a.sendPasswordResetEmail(fbAuth,$('accountEmail').value.trim());}catch(e){if(e.code!=='auth/user-not-found')throw e;}message('Se l’indirizzo è registrato, riceverai un’email per recuperare la password.');});
   $('accountCheck').onclick=()=>void run(async()=>{if(accepted(await request('/api/app/session')))location.reload();});
@@ -194,7 +245,7 @@
   try{
    const data=await request('/api/app/accounts');
    accounts=data.accounts;
-   $('accountList').innerHTML=accounts.map(a=>`<article class="account-row"><div>${a.logo?`<img class="account-row-logo" src="${esc(a.logo)}" alt="">`:''}<h2>${esc(a.name)}</h2><p>${esc(a.email)}</p><span class="account-badge">${esc({active:'Ammesso',pending:'In attesa',blocked:'Disattivata',deleted:'Archiviata'}[a.status]||a.status)}</span><span>${a.linked?'eWeLink collegato':'eWeLink da collegare'}</span></div><div class="account-actions"><label class="account-enabled"><input type="checkbox" data-account-op="toggle" data-account-id="${a.id}" ${a.status==='active'?'checked':''} ${a.id===state.actor.id?'disabled':''}> Abilitato</label><button class="secondary-button" data-account-op="enter" data-account-id="${a.id}">Apri plancia</button><button class="secondary-button" data-account-op="edit" data-account-id="${a.id}">Modifica</button>${a.id!==state.actor.id?`<button class="secondary-button" data-account-op="delete" data-account-id="${a.id}">Rimuovi</button>`:''}</div></article>`).join('');
+   $('accountList').innerHTML=accounts.map(a=>`<article class="account-row"><div>${a.logo?`<img class="account-row-logo" src="${esc(a.logo)}" alt="">`:''}<h2>${esc(a.name)}</h2>${a.person&&a.person!==a.name?`<p>${esc(a.person)}</p>`:''}<p>${esc(a.email)}</p><span class="account-badge">${esc({active:'Ammesso',pending:'In attesa',blocked:'Disattivata',deleted:'Archiviata'}[a.status]||a.status)}</span><span>${a.linked?'eWeLink collegato':'eWeLink da collegare'}</span></div><div class="account-actions"><label class="account-enabled"><input type="checkbox" data-account-op="toggle" data-account-id="${a.id}" ${a.status==='active'?'checked':''} ${a.id===state.actor.id?'disabled':''}> Abilitato</label><button class="secondary-button" data-account-op="enter" data-account-id="${a.id}">Apri plancia</button><button class="secondary-button" data-account-op="edit" data-account-id="${a.id}">Modifica</button>${a.id!==state.actor.id?`<button class="secondary-button" data-account-op="delete" data-account-id="${a.id}">Rimuovi</button>`:''}</div></article>`).join('');
    message.textContent=accounts.length+' account';
   }catch(e){message.textContent=e.message;}
  }
