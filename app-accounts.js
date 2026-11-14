@@ -2,7 +2,7 @@
 'use strict';
 const crypto=require('crypto');
 module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,webConfig,programming,now=Date.now}){
- const COOKIE='ewelink_app',ACT='ewelink_actas',DAY=86400000;
+ const COOKIE='ewelink_app',ACT='ewelink_actas',PROVIDER='ewelink_provider',INTENT='ewelink_link_intent',DAY=86400000;
  const opts={httpOnly:true,secure:true,sameSite:'lax',path:'/'};
  const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
  const mac=s=>crypto.createHmac('sha256',secret).update('app-accounts:'+s).digest('hex');
@@ -14,6 +14,47 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
  const disabledMessage='Plancia disattivata. Contatta l’amministratore.';
  const needsSetup=a=>(a.role||'user')!=='admin'&&!a.providerOwner&&a.setupDone!==true;
  const publicProfile=a=>({id:a.id,name:a.name,person:a.person||'',email:a.email,status:a.status,role:a.role||'user',linked:!!a.providerOwner,logo:a.logo||'',needsSetup:needsSetup(a),registrationIncomplete:a.registrationIncomplete===true,...(typeof a.emailVerified==='boolean'?{emailVerified:a.emailVerified}:{})});
+ function connections(a){
+  const list=Array.isArray(a.providerConnections)?a.providerConnections.filter(c=>c&&typeof c.owner==='string'&&c.owner&&typeof c.label==='string'):[];
+  if(a.providerOwner&&!list.some(c=>c.owner===a.providerOwner))list.unshift({owner:a.providerOwner,label:'Account principale',slot:''});
+  return list;
+ }
+ function selectedConnection(req,a){
+  const list=connections(a),saved=openPending(req.cookies?.[PROVIDER]);
+  return (saved?.accountId===a.id&&list.find(c=>c.owner===saved.owner))||list.find(c=>c.owner===a.providerOwner)||list[0]||null;
+ }
+ async function selectConnection(req,res,owner){
+  const a=await read(req.appAccount.id),c=connections(a).find(c=>c.owner===owner);
+  if(!c)throw fail(403,'app_provider_forbidden','Questo account eWeLink non appartiene alla tua plancia.');
+  res.cookie(PROVIDER,sealPending({accountId:a.id,owner}),{...opts,maxAge:365*DAY});return c;
+ }
+ function linkIntent(req){
+  const d=openPending(req.cookies?.[INTENT]);
+  if(!d)return null;
+  if(d.accountId!==req.appAccount.id||d.uid!==req.appActor.uid||d.until<=now())throw fail(403,'app_oauth_account','Richiesta di collegamento scaduta. Riparti dalla tua plancia.');
+  if(d.add){if(!/^[a-f0-9]{64}$/.test(d.slot||''))throw fail(400,'app_link','Collegamento non valido.');return d;}
+  const c=connections(req.appAccount).find(c=>c.owner===d.owner);
+  if(!c)throw fail(403,'app_provider_forbidden','Collegamento non disponibile.');return {...d,slot:c.slot||'',label:c.label};
+ }
+ async function manageProviders(req,res){
+  const a=await session(req),list=connections(a),selected=selectedConnection(req,a);
+  if(req.method==='GET')return {ok:true,selected:selected?.owner||'',impersonating:!!req.appImpersonating,connections:list.map(c=>({id:c.owner,label:c.label}))};
+  csrf(req);if(req.appReadOnly)throw fail(403,'app_readonly','Plancia disponibile soltanto in consultazione.');
+  const b=req.body||{};
+  if(b.op==='select'){await selectConnection(req,res,b.id);return {ok:true};}
+  if(req.appImpersonating)throw fail(403,'app_link_owner','Solo il titolare può collegare o modificare i propri account eWeLink.');
+  if(b.op==='rename'){
+   const label=String(b.label||'').trim();if(!label||label.length>80)throw fail(400,'app_link_name','Inserisci un nome da 1 a 80 caratteri.');
+   await db().runTransaction(async t=>{const ref=profiles().doc(a.id),snap=await t.get(ref),current=snap.data(),rows=connections(current);if(!rows.some(c=>c.owner===b.id))throw fail(403,'app_provider_forbidden','Collegamento non disponibile.');t.set(ref,{providerConnections:rows.map(c=>c.owner===b.id?{...c,label}:c),updatedAt:now()},{merge:true});});return {ok:true};
+  }
+  if(!['add','reauthorize'].includes(b.op))throw fail(400,'app_operation','Operazione non valida.');
+  const c=list.find(c=>c.owner===b.id),label=String(b.label||'').trim();
+  if(b.op==='add'&&(!label||label.length>80))throw fail(400,'app_link_name','Dai un nome al nuovo account eWeLink (massimo 80 caratteri).');
+  if(b.op==='reauthorize'&&!c)throw fail(403,'app_provider_forbidden','Collegamento non disponibile.');
+  const d={accountId:a.id,uid:req.appActor.uid,until:now()+10*60000,add:b.op==='add',...(b.op==='add'?{slot:crypto.randomBytes(32).toString('hex'),label}:{owner:c.owner})};
+  res.cookie(INTENT,sealPending(d),{...opts,path:'/login',maxAge:10*60000});
+  return {ok:true,url:origin+'/login?returnUrl='+encodeURIComponent(origin+'/app/index.html')};
+ }
  function originCheck(req){if(req.headers?.origin!==origin)throw fail(403,'app_origin','Richiesta non autorizzata: riapri la plancia dal suo indirizzo ufficiale.');}
  function csrf(req){originCheck(req);const expected=mac(req.cookies?.[COOKIE]||'');const supplied=req.headers?.['x-app-csrf']||'';if(supplied.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected)))throw fail(403,'app_csrf','Sessione aggiornata. Ricarica la pagina prima di riprovare.');}
  function desktop(req){return !/Mobile|Android|iPhone|iPad|Tablet/i.test(req.headers?.['user-agent']||'');}
@@ -82,15 +123,17 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   }
   return {ok:true,account:publicProfile(await read(a.id))};
  }
- async function status(req){const a=await session(req,{active:false});return {ok:true,authenticated:true,account:publicProfile(a),actor:publicProfile(req.appActor),impersonating:!!req.appImpersonating,readOnly:!!req.appReadOnly,adminDesktop:desktop(req)&&await isAdmin(req.appActor),csrf:mac(req.cookies[COOKIE])};}
- async function bind(a,owner){
+ async function status(req){const a=await session(req,{active:false});return {ok:true,authenticated:true,account:publicProfile(a),actor:publicProfile(req.appActor),impersonating:!!req.appImpersonating,readOnly:!!req.appReadOnly,adminDesktop:desktop(req)&&await isAdmin(req.appActor),primaryProvider:a.providerOwner||'',selectedProvider:selectedConnection(req,a)?.owner||'',selectedProviderLabel:selectedConnection(req,a)?.label||'',providerCount:connections(a).length,csrf:mac(req.cookies[COOKIE])};}
+ async function bind(a,owner,{add=false,slot='',label,expectedOwner}={}){
   const pr=profiles().doc(a.id),lr=links().doc(owner);
   await db().runTransaction(async t=>{
    const p=await t.get(pr),l=await t.get(lr),current=p.data();
    if(current?.status!=='active')throw fail(403,'app_blocked','Account non attivo.');
    if(l.exists&&!l.data().deleted&&l.data().accountId!==a.id)throw fail(409,'app_provider_taken','Questo account eWeLink è già collegato a un’altra plancia.');
-   if(current.providerOwner&&current.providerOwner!==owner)throw fail(409,'app_provider_changed','La plancia è già collegata a un altro account eWeLink. Contatta l’amministratore.');
-   t.set(lr,{accountId:a.id,deleted:false,updatedAt:now()});t.set(pr,{providerOwner:owner,setupDone:true,updatedAt:now()},{merge:true});
+   const rows=connections(current),known=rows.find(c=>c.owner===owner);
+   if(!add&&(expectedOwner||current.providerOwner)&&(expectedOwner||current.providerOwner)!==owner)throw fail(409,'app_provider_changed','Hai scelto un account eWeLink diverso. Usa Aggiungi account per conservarli entrambi.');
+   if(!known)rows.push({owner,label:label||'Account principale',slot});
+   t.set(lr,{accountId:a.id,deleted:false,updatedAt:now()});t.set(pr,{providerOwner:current.providerOwner||owner,providerConnections:rows,setupDone:true,updatedAt:now()},{merge:true});
   });
  }
  // Rimozione definitiva: cancella profilo e accesso, libera l’email e blocca i timer dell’account eWeLink collegato.
@@ -98,8 +141,8 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   const pr=profiles().doc(a.id);let uid=null,email=null;
   await db().runTransaction(async t=>{
    const p=await t.get(pr);if(!p.exists)return;const current=p.data();uid=current.uid||null;email=current.email||null;
-   const lr=current.providerOwner?links().doc(current.providerOwner):null,l=lr?await t.get(lr):null;
-   if(lr&&(!l.exists||l.data().accountId===a.id))t.set(lr,{accountId:a.id,deleted:true,updatedAt:now()});
+   const linked=await Promise.all(connections(current).map(async c=>{const ref=links().doc(c.owner);return {ref,snap:await t.get(ref)};}));
+   for(const {ref,snap}of linked)if(!snap.exists||snap.data().accountId===a.id)t.set(ref,{accountId:a.id,deleted:true,updatedAt:now()});
    t.delete(pr);
   });
   // Copie d’archivio create dalle versioni precedenti: eliminate insieme alla plancia.
@@ -113,19 +156,21 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   const expected=req.headers?.['x-app-account']||req.query?.accountContext;
   if((expected&&expected!==a.id)||(!['GET','HEAD'].includes(req.method)&&expected!==a.id))throw fail(409,'app_context_changed','La plancia aperta è cambiata. Ricarica la pagina prima di inviare comandi.');
   if(req.method!=='GET'&&req.method!=='HEAD'){csrf(req);if(req.appReadOnly)throw fail(403,'app_readonly','Questa plancia è consultabile soltanto: account non attivo.');}
-  if(!a.providerOwner)throw fail(401,'not_authenticated','Collega eWeLink per la prima volta dalla tua plancia.');
-  const c=await programming().access(a.providerOwner,{inspection:req.appImpersonating===true&&req.appReadOnly===true});req.programmingOwner=a.providerOwner;req.programmingChecked=true;
+  const selected=selectedConnection(req,a),expectedProvider=req.headers?.['x-app-provider']||req.query?.providerContext;
+  if(!selected)throw fail(401,'not_authenticated','Collega eWeLink per la prima volta dalla tua plancia.');
+  if(expectedProvider&&expectedProvider!==selected.owner||!['GET','HEAD'].includes(req.method)&&connections(a).length>1&&expectedProvider!==selected.owner)throw fail(409,'app_provider_context_changed','Account eWeLink cambiato. Ricarica la plancia prima di inviare comandi.');
+  const c=await programming().access(selected.owner,{inspection:req.appImpersonating===true&&req.appReadOnly===true});req.programmingOwner=selected.owner;req.programmingChecked=true;
   req.cookies={...req.cookies,ewelink_access:c.accessToken,ewelink_refresh:c.refreshToken,ewelink_expires:String(c.atExpiredTime)};
  }
  async function tokenAllowed(token){const owner=await programming().identity({cookies:{ewelink_access:token}});await authorizeOwner(owner);}
  function sealPending(data){const payload=Buffer.from(JSON.stringify(data)).toString('base64url');return payload+'.'+mac(payload);}
  function openPending(value){const [p,m]=String(value||'').split('.');if(!p||!m||m.length!==64||!crypto.timingSafeEqual(Buffer.from(mac(p)),Buffer.from(m)))return null;try{return JSON.parse(Buffer.from(p,'base64url'));}catch{return null;}}
  async function context(req,home,legacyRef){
-  let a=req.appAccount;if(!a){const owner=await programming().identity(req);a=await authorizeOwner(owner);}
+  let a=req.appAccount,owner=req.programmingOwner;if(!owner)owner=await programming().identity(req);if(!a)a=await authorizeOwner(owner);
   if(!a)return legacyRef;
-  const ref=db().collection('sanLuigiScenarioWorkspaces').doc(hash(appid+':app:'+a.id+':'+home.id));
+  const ref=db().collection('sanLuigiScenarioWorkspaces').doc(hash(appid+':app:'+a.id+':'+home.id+(owner!==a.providerOwner?':provider:'+owner:'')));
   // Migrazione non distruttiva, esclusivamente della plancia dell’amministratore.
-  if(a.role==='admin')await db().runTransaction(async t=>{const dest=await t.get(ref),old=await t.get(legacyRef);if(!dest.exists&&old.exists){const data=old.data();if(Object.values(data.executions||{}).some(r=>r.status==='running'&&r.expiresAt>now()))throw fail(409,'app_migration_busy','Attendi la fine del comando prima di aprire la nuova plancia.');t.set(ref,{...data,migratedFrom:legacyRef.id,migratedAt:now()});}});
+  if(a.role==='admin'&&owner===a.providerOwner)await db().runTransaction(async t=>{const dest=await t.get(ref),old=await t.get(legacyRef);if(!dest.exists&&old.exists){const data=old.data();if(Object.values(data.executions||{}).some(r=>r.status==='running'&&r.expiresAt>now()))throw fail(409,'app_migration_busy','Attendi la fine del comando prima di aprire la nuova plancia.');t.set(ref,{...data,migratedFrom:legacyRef.id,migratedAt:now()});}});
   return ref;
  }
  function accountLogo(value){
@@ -208,10 +253,12 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   app.get('/api/app/session',wrap(async(req,res)=>{try{res.json(await status(req));}catch(e){if(e.code==='app_auth_required'){if(req.cookies?.[COOKIE])res.clearCookie(COOKIE,opts);return res.json({ok:true,authenticated:false});}if(e.code==='app_actas_expired')res.clearCookie(ACT,opts);throw e;}}));
   app.post('/api/app/login',wrap(async(req,res)=>res.json(await login(req,res))));
   app.post('/api/app/renew',wrap(async(req,res)=>res.json(await login(req,res,{renew:true}))));
+  app.get('/api/app/providers',wrap(async(req,res)=>res.json(await manageProviders(req,res))));
+  app.post('/api/app/providers',wrap(async(req,res)=>res.json(await manageProviders(req,res))));
   app.post('/api/app/setup',wrap(async(req,res)=>res.json(await setup(req))));
-  app.post('/api/app/logout',wrap(async(req,res)=>{csrf(req);res.clearCookie(COOKIE,opts);res.clearCookie(ACT,opts);res.json({ok:true});}));
+  app.post('/api/app/logout',wrap(async(req,res)=>{csrf(req);res.clearCookie(COOKIE,opts);res.clearCookie(ACT,opts);res.clearCookie(PROVIDER,opts);res.clearCookie(INTENT,{...opts,path:'/login'});res.json({ok:true});}));
   app.get('/api/app/accounts',wrap(async(req,res)=>res.json(await manage(req,res))));
   app.post('/api/app/accounts',wrap(async(req,res)=>res.json(await manage(req,res))));
  }
- return {install,session,provider,bind,context,authorizeOwner,tokenAllowed,sealPending,openPending,csrf,publicProfile,providerAccount,accountId};
+ return {install,session,provider,bind,selectedConnection,selectConnection,linkIntent,context,authorizeOwner,tokenAllowed,sealPending,openPending,csrf,publicProfile,providerAccount,accountId};
 };

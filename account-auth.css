@@ -47,3 +47,9 @@ body.account-admin-page>main,body.account-admin-page>#navigationDialog,body.acco
 #accountSetup{display:grid;gap:12px;width:100%}
 .account-setup-logo{width:80px;height:80px;object-fit:contain;align-self:center}
 @media(max-width:500px){.account-signup-names{grid-template-columns:1fr}#accountSignup{padding:22px 18px}}
+
+#providerAccounts{box-sizing:border-box;width:min(600px,calc(100vw - 24px));max-height:90dvh;overflow:auto;padding:24px;border:1px solid #c9ddd1;border-radius:24px;background:#f6f8f6;color:#21392f}
+#providerAccounts::backdrop{background:#132b2370}#providerAccounts header{display:flex;align-items:center;justify-content:space-between;gap:16px}#providerAccounts h2{margin:0}#providerAccounts [hidden]{display:none!important}
+.provider-row{display:grid;gap:12px;background:#fff;border:1px solid #c9ddd1;border-radius:16px;padding:20px;margin:16px 0}.provider-row>span{font-weight:600;color:#147d5a}
+#providerAccounts label,#providerAccounts form{display:grid;gap:10px}#providerAccounts input{box-sizing:border-box;width:100%;min-height:48px;font:inherit;font-size:1rem;padding:12px;border:1px solid #bacfc2;border-radius:12px;background:#fff;color:#21392f}
+#providerAccounts button{min-height:44px;white-space:normal}#providerAdd{border-top:1px solid #c9ddd1;padding-top:16px}#providerSelectedName{display:block;font-size:.75em;font-weight:400;overflow-wrap:anywhere}#providerMessage{line-height:1.5}

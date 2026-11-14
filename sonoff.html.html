@@ -12,14 +12,14 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <script src="account-auth.js?v=60"></script>
-  <link rel="stylesheet" href="account-auth.css?v=39">
+  <script src="account-auth.js?v=61"></script>
+  <link rel="stylesheet" href="account-auth.css?v=61">
   <script src="text-size.js?v=48"></script>
   <script src="scene-pages.js?v=46"></script>
   <script src="room-map.js?v=48"></script>
   <link rel="stylesheet" href="room-map.css?v=48">
   <link rel="stylesheet" href="app.css?v=46">
-  <script src="menu-bar.js?v=54"></script>
+  <script src="menu-bar.js?v=61"></script>
   <link rel="stylesheet" href="menu-bar.css?v=53">
   <script src="push-settings.js?v=59"></script>
   <script src="climate.js?v=5"></script>
@@ -935,7 +935,7 @@
     }
     function openSceneStream() {
         if (typeof EventSource === "undefined" || !sceneWorkspace || sceneStream || document.visibilityState === "hidden") return;
-        sceneStream = new EventSource(BACKEND_URL + "/api/user-scenes/events?workspaceId=" + encodeURIComponent(sceneWorkspace.id) + (window.AppAccounts?.state.enabled ? "&accountContext="+encodeURIComponent(window.AppAccounts.state.account.id) : ""), {withCredentials: true});
+        sceneStream = new EventSource(BACKEND_URL + "/api/user-scenes/events?workspaceId=" + encodeURIComponent(sceneWorkspace.id) + (window.AppAccounts?.state.enabled ? "&accountContext="+encodeURIComponent(window.AppAccounts.state.account.id)+"&providerContext="+encodeURIComponent(window.AppAccounts.state.selectedProvider||"") : ""), {withCredentials: true});
         sceneLastHeartbeat = Date.now();
         sceneStream.addEventListener("heartbeat", () => { sceneLastHeartbeat = Date.now(); });
         sceneStream.addEventListener("scenes", event => {
@@ -2022,7 +2022,7 @@
             const allowed=await window.AppAccounts.bootstrap(BACKEND_URL);
             if(!allowed||window.AppAccounts.openPage?.())return;
             if(window.AppAccounts.state.enabled){
-                SCENES_STORAGE_KEY="ewelink_private_scenes_"+window.AppAccounts.state.account.id;
+                SCENES_STORAGE_KEY="ewelink_private_scenes_"+window.AppAccounts.state.account.id+(window.AppAccounts.state.selectedProvider!==window.AppAccounts.state.primaryProvider?"_"+window.AppAccounts.state.selectedProvider:"");
                 startupComplete=false;document.body.classList.add('app-starting');
                 const splash=document.getElementById('startupScreen');splash.hidden=false;splash.setAttribute('aria-busy','true');
                 document.getElementById('startupContinue').hidden=true;document.getElementById('mainContent').inert=true;

@@ -18,7 +18,7 @@
  const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const svg=name=>typeof icon==='function'?icon(name):'';
  const accountId=()=>window.AppAccounts?.state?.account?.id||'local';
- const storageKey=()=>'ewelink_menu_bar_v1:'+accountId();
+ const storageKey=()=>'ewelink_menu_bar_v1:'+accountId()+(window.AppAccounts?.state?.selectedProvider&&window.AppAccounts.state.selectedProvider!==window.AppAccounts.state.primaryProvider?':'+window.AppAccounts.state.selectedProvider:'');
 
  function validItem(item){return item&&['view','scene','room'].includes(item.type)&&typeof item.id==='string'&&item.id&&(item.type!=='view'||PAGES[item.id]);}
  function normalize(raw){

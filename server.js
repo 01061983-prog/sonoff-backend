@@ -259,13 +259,15 @@ app.get("/app", (_req, res) => res.redirect(HOME));
 app.get("/app/", (_req, res) => res.redirect(HOME));
 
 
-app.get("/", (_req, res) => res.json({ ok: true, message: "Backend Sonoff OAuth attivo", oauthLinkVersion: 2 }));
+app.get("/", (_req, res) => res.json({ ok: true, message: "Backend Sonoff OAuth attivo", oauthLinkVersion: 3 }));
 
 app.get("/login", route(async (req, res) => {
   if (appAccounts) {
     await appAccounts.session(req);
     if(req.appImpersonating) throw cloudError(403,"app_link_owner","Il collegamento eWeLink deve essere completato dal titolare dell’account.");
-    if(req.appAccount.providerOwner){
+    req.oauthConnection=appAccounts.linkIntent(req);
+    res.clearCookie("ewelink_link_intent",{...COOKIE_OPTIONS,path:"/login"});
+    if(req.appAccount.providerOwner&&!req.oauthConnection){
       try{await appAccounts.provider(req);return res.redirect(returnUrl(req.query.returnUrl));}
       catch(error){if(error.code!=="not_authenticated")throw error;}
     }
@@ -294,10 +296,11 @@ app.get("/login", route(async (req, res) => {
       clearSession(res);
     }
   }
+  if(appAccounts&&!req.oauthConnection){const selected=appAccounts.selectedConnection(req,req.appAccount);if(selected)req.oauthConnection={add:false,owner:selected.owner,slot:selected.slot||'',label:selected.label};}
   const seq = Date.now().toString();
   const nonce = crypto.randomBytes(4).toString("hex");
   const state = crypto.randomBytes(24).toString("hex");
-  const pending = {state,returnUrl:returnUrl(req.query.returnUrl),...(appAccounts?{accountId:req.appAccount.id,actorUid:req.appActor.uid}: {})};
+  const pending = {state,returnUrl:returnUrl(req.query.returnUrl),...(appAccounts?{accountId:req.appAccount.id,actorUid:req.appActor.uid,...(req.oauthConnection?{connection:req.oauthConnection}:{})}: {})};
   res.cookie("ewelink_oauth", appAccounts ? appAccounts.sealPending(pending) : JSON.stringify(pending), {
     httpOnly: true, secure: true, sameSite: "Lax", signed: false, maxAge: 600000, path: "/oauth/callback"
   });
@@ -322,7 +325,16 @@ app.get("/oauth/callback", route(async (req, res) => {
   const body = { code: req.query.code, redirectUrl: REDIRECT_URL, grantType: "authorization_code" };
   const data = await api("/v2/user/oauth/token", null, body, "Sign " + sign(JSON.stringify(body)));
   saveSession(req, res, data.data || {});
-  if(appAccounts){const owner=await programming.resolveOAuthOwner(req,data.data,req.appAccount);await appAccounts.bind(req.appAccount,owner);}
+  if(appAccounts){
+    const connection=pending.connection;
+    const selected=appAccounts.selectedConnection(req,req.appAccount);
+    const expectedOwner=connection?.add?null:connection?.owner||selected?.owner;
+    const slot=connection?.slot||selected?.slot||'';
+    const identityAccount={...req.appAccount,providerOwner:expectedOwner,oauthConnectionSlot:slot};
+    const owner=await programming.resolveOAuthOwner(req,data.data,identityAccount);
+    await appAccounts.bind(req.appAccount,owner,{add:connection?.add===true,slot,label:connection?.label,expectedOwner});
+    await appAccounts.selectConnection(req,res,owner);
+  }
   if (programming) await programming.connectBrowser(req, res, appAccounts ? undefined : data.data);
   res.redirect(returnUrl(pending.returnUrl));
 }));

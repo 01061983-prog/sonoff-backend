@@ -82,7 +82,9 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   const c=providerData,token=req.cookies.ewelink_access;
   if(!account||account.status!=='active'||typeof account.uid!=='string'||!account.uid||!/^[a-f0-9]{64}$/.test(account.id||''))throw error(403,'app_oauth_account','Accedi alla tua plancia prima di collegare eWeLink.');
   if(typeof c?.accessToken!=='string'||!c.accessToken||c.accessToken!==token||typeof c.refreshToken!=='string'||!c.refreshToken||c.region!==undefined&&c.region!==region)throw error(503,'identity_unavailable','Risposta di autorizzazione eWeLink non valida. Riparti dalla tua plancia.');
-  const scoped=hash(appid+':'+region+':oauth-grant:app-account:'+account.id);
+  const slot=account.oauthConnectionSlot||'';
+  if(slot&&!/^[a-f0-9]{64}$/.test(slot))throw error(403,'app_oauth_account','Collegamento non valido.');
+  const scoped=hash(appid+':'+region+':oauth-grant:app-account:'+account.id+(slot?':connection:'+slot:''));
   let owner;
   // Keep the same storage scope on subsequent grants, even if the provider later
   // adds optional identity fields. This scope identifies our account, not eWeLink's.

@@ -7,7 +7,7 @@
  const state={enabled:false,csrf:'',account:null,actor:null,readOnly:false};
  const $=id=>document.getElementById(id);
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- let base='',sdkPromise,fbAuth,config,busy=false,readyResolve;
+ let base='',sdkPromise,fbAuth,authModule,persistenceReady=false,persistenceEpoch=0,persistenceJob=Promise.resolve(),config,busy=false,readyResolve;
  const ready=new Promise(resolve=>{readyResolve=resolve;});
  const request=async(path,body)=>{
   const c=new AbortController(),timer=setTimeout(()=>c.abort(),20000);
@@ -18,7 +18,7 @@
  function message(text){$('accountMessage').textContent=text;}
  function translate(e){return ({'auth/invalid-credential':'Email o password non corretti.','auth/invalid-email':'Inserisci un indirizzo email valido.','auth/account-exists-with-different-credential':'Questa email usa già un altro metodo. Accedi con Google oppure recupera la password.','auth/operation-not-allowed':'Metodo di accesso non ancora disponibile. Contatta l’amministratore.','auth/user-disabled':'Account sospeso. Contatta l’amministratore.','auth/email-already-in-use':'Email già registrata. Accedi oppure recupera la password.','auth/weak-password':'Scegli una password di almeno 8 caratteri.','auth/too-many-requests':'Troppi tentativi. Attendi prima di riprovare.','auth/popup-closed-by-user':'Accesso Google annullato.','auth/popup-blocked':'Il browser ha bloccato la finestra Google. Apri la plancia direttamente in Safari o Chrome e riprova.','auth/network-request-failed':'Connessione assente o cambiata. Riprova.','auth/unauthorized-domain':'Accesso Google non ancora autorizzato per questo sito. Contatta l’amministratore.'})[e.code]||e.message||'Accesso non riuscito.';}
  async function sdk(){
-  if(!sdkPromise)sdkPromise=Promise.all([import('https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js'),import('https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js')]).then(async([app,auth])=>{fbAuth=auth.getAuth(app.initializeApp(config.firebase,'ewelink-webapp'));fbAuth.languageCode='it';return auth;}).catch(e=>{sdkPromise=null;throw e;});
+  if(!sdkPromise)sdkPromise=Promise.all([import('https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js'),import('https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js')]).then(async([app,auth])=>{fbAuth=auth.getAuth(app.initializeApp(config.firebase,'ewelink-webapp'));fbAuth.languageCode='it';authModule=auth;return auth;}).catch(e=>{sdkPromise=null;throw e;});
   return sdkPromise;
  }
  function gate(text){
@@ -27,6 +27,7 @@
   if(typeof window.finishStartup==='function')window.finishStartup();
   const splash=$('startupScreen');if(splash)splash.hidden=true;
   document.body.classList.remove('app-starting');
+  if(config&& !persistenceReady && !busy)void prepareGoogle().catch(()=>{});
  }
  function branding(){
   const name=state.account.name;
@@ -42,6 +43,8 @@
  }
  function accepted(data){
   Object.assign(state,data);branding();
+  const providerButton=$('providerAccountsBtn');if(providerButton)providerButton.hidden=false;
+  const providerName=$('providerSelectedName');if(providerName)providerName.textContent=state.selectedProviderLabel||'Collega un account';
   $('accountIdentity').textContent=state.account.name;
   $('accountManage').hidden=!state.adminDesktop;
   $('accountReturn').hidden=!state.impersonating;
@@ -57,6 +60,24 @@
   const a=await sdk();
   await a.setPersistence(fbAuth,$('accountRemember').checked?a.browserLocalPersistence:redirect?a.browserSessionPersistence:a.inMemoryPersistence);
   return a;
+ }
+ function prepareGoogle(){
+  const epoch=++persistenceEpoch;
+  persistenceReady=false;
+  const buttons=[$('accountGoogle'),$('accountSignupGoogle')].filter(Boolean);
+  buttons.forEach(b=>b.disabled=true);
+  persistenceJob=persistenceJob.catch(()=>{}).then(()=>signInPersistence()).then(()=>{if(epoch!==persistenceEpoch)return;persistenceReady=true;buttons.forEach(b=>b.disabled=false);});
+  return persistenceJob;
+ }
+ function googleSignIn(){
+  if(!authModule||!persistenceReady){message('Preparazione di Google in corso. Attendi un momento e riprova.');return;}
+  // Open inside the original click: no await, SDK loading or persistence work
+  // may run before signInWithPopup (Safari requires the user gesture).
+  void run(()=>{
+   message('Accesso con Google in corso…');
+   const popup=authModule.signInWithPopup(fbAuth,new authModule.GoogleAuthProvider());
+   return popup.then(result=>exchange(result.user));
+  });
  }
  function completing(){
   $('accountGate').hidden=true;
@@ -83,7 +104,7 @@
   const firstAccess=Boolean(readyResolve);
   if(accepted(current)&&!firstAccess)location.reload();
  }
- async function run(fn){if(busy)return;busy=true;$('accountGate').setAttribute('aria-busy','true');document.querySelectorAll('#accountGate button').forEach(b=>b.disabled=true);try{await fn();}catch(e){gate(translate(e));}finally{busy=false;$('accountGate').setAttribute('aria-busy','false');document.querySelectorAll('#accountGate button').forEach(b=>b.disabled=false);}}
+ async function run(fn){if(busy)return;busy=true;$('accountGate').setAttribute('aria-busy','true');document.querySelectorAll('#accountGate button').forEach(b=>b.disabled=true);try{await fn();}catch(e){gate(translate(e));}finally{busy=false;$('accountGate').setAttribute('aria-busy','false');document.querySelectorAll('#accountGate button').forEach(b=>b.disabled=false);if(!persistenceReady){$('accountGoogle').disabled=true;$('accountSignupGoogle').disabled=true;}}}
  async function signUp(){
   if(busy)return;busy=true;
   const form=$('accountSignupForm'),note=$('accountSignupMessage');form.querySelectorAll('button').forEach(b=>b.disabled=true);note.textContent='';
@@ -131,10 +152,12 @@
   const section=document.createElement('section');section.id='accountGate';section.hidden=true;section.setAttribute('aria-label','Accesso alla webapp');
   section.innerHTML=`<div class="app-login-card"><img src="icons/icon.svg" width="72" height="72" alt=""><p class="account-eyebrow">LA TUA PLANCIA</p><h1>Benvenuto.</h1><p id="accountMessage" role="status" aria-live="polite"></p><div id="accountCredentials"><label class="account-remember"><input id="accountRemember" type="checkbox"> Ricorda questo dispositivo</label><p class="account-small">Rimani connesso fino a quando esci o l’amministratore revoca l’accesso. Usalo soltanto sui tuoi dispositivi.</p><button id="accountGoogle" class="primary-button" type="button">Continua con Google</button><button id="accountGoogleRedirect" class="account-link" type="button">Apri Google nella pagina</button><div class="account-divider">oppure con la tua email</div><form id="accountForm"><label for="accountEmail">Email</label><input id="accountEmail" type="email" autocomplete="username" required maxlength="254"><label for="accountPassword">Password</label><input id="accountPassword" type="password" autocomplete="current-password" required maxlength="4096"><button class="primary-button" type="submit">Accedi</button><button id="accountRegister" class="secondary-button" type="button">Crea il tuo account</button><button id="accountReset" class="account-link" type="button">Password dimenticata?</button><button id="accountVerify" class="account-link" type="button">Invia di nuovo la conferma email</button></form></div><button id="accountRetry" class="account-link" type="button">Ricarica l’accesso</button><div id="accountPending" hidden><button id="accountCheck" class="primary-button">Controlla l’ammissione</button><button id="accountPendingLogout" class="secondary-button">Esci</button></div><form id="accountSetup" hidden><label>Nome della plancia<input id="accountSetupName" required maxlength="80" placeholder="Es. Oratorio San Luigi"></label><label>Logo (facoltativo)<input id="accountSetupLogo" type="file" accept="image/png,image/jpeg,image/webp"></label><img id="accountSetupPreview" class="account-setup-logo" alt="Anteprima logo" hidden><button class="primary-button" type="submit">Salva e collega eWeLink</button><button id="accountSetupLater" class="account-link" type="button">Salva e collega eWeLink più tardi</button><button id="accountSetupLogout" class="account-link" type="button">Esci</button></form><dialog id="accountSignup" aria-labelledby="accountSignupTitle"><form id="accountSignupForm"><h2 id="accountSignupTitle">Crea il tuo account</h2><p class="account-small">Ti invieremo un’email di conferma. Dopo il primo accesso completerai l’iscrizione con il nome e il logo della tua plancia.</p><div class="account-signup-names"><label>Nome<input id="accountSignupFirst" autocomplete="given-name" required maxlength="60"></label><label>Cognome<input id="accountSignupLast" autocomplete="family-name" required maxlength="60"></label></div><label>Email<input id="accountSignupEmail" type="email" autocomplete="email" required maxlength="254"></label><label>Password<input id="accountSignupPassword" type="password" autocomplete="new-password" required minlength="8" maxlength="4096"></label><p id="accountSignupMessage" role="alert"></p><button class="primary-button" type="submit">Crea account</button><div class="account-divider">oppure</div><button id="accountSignupGoogle" class="secondary-button" type="button">Continua con Google</button><button id="accountSignupCancel" class="account-link" type="button">Annulla</button></form></dialog></div>`;
   document.body.append(section);
-  const bar=document.createElement('div');bar.id='accountToolbar';bar.innerHTML='<span id="accountIdentity" hidden></span><button id="accountReturn" hidden>Torna alla gestione</button><button id="accountManage" hidden>Gestione account</button>';document.body.append(bar);
+  const bar=document.createElement('div');bar.id='accountToolbar';bar.innerHTML='<span id="accountIdentity" hidden></span><button id="accountReturn" hidden>Torna alla gestione</button><button id="accountManage" hidden>Gestione account</button>';document.body.append(bar);mountProviders();
   $('accountRetry').onclick=()=>location.reload();
   $('accountForm').addEventListener('submit',e=>{e.preventDefault();void run(async()=>exchange((await (await signInPersistence()).signInWithEmailAndPassword(fbAuth,$('accountEmail').value.trim(),$('accountPassword').value)).user));});
-  $('accountGoogle').onclick=()=>void run(async()=>{message('Accesso con Google in corso…');const a=await signInPersistence();await exchange((await a.signInWithPopup(fbAuth,new a.GoogleAuthProvider())).user);});
+  $('accountGoogle').disabled=true;$('accountSignupGoogle').disabled=true;
+  $('accountGoogle').onclick=googleSignIn;
+  $('accountRemember').onchange=()=>void prepareGoogle().catch(e=>message(translate(e)));
   const redirect = $('accountGoogleRedirect');
   redirect.hidden = !config?.firebase?.authDomain || config.firebase.authDomain !== location.host;
   redirect.onclick=()=>void run(async()=>{
@@ -145,7 +168,7 @@
   });
   $('accountRegister').onclick=()=>{$('accountSignupForm').reset();$('accountSignupMessage').textContent='';$('accountSignupEmail').value=$('accountEmail').value.trim();$('accountSignup').showModal();};
   $('accountSignupCancel').onclick=()=>$('accountSignup').close();
-  $('accountSignupGoogle').onclick=()=>{$('accountSignup').close();$('accountGoogle').click();};
+  $('accountSignupGoogle').onclick=()=>{$('accountSignup').close();googleSignIn();};
   $('accountSignupForm').addEventListener('submit',e=>{e.preventDefault();void signUp();});
   $('accountSetup').addEventListener('submit',e=>{e.preventDefault();void saveSetup(true);});
   $('accountSetupLater').onclick=()=>{if($('accountSetup').reportValidity())void saveSetup(false);};
@@ -264,6 +287,38 @@
    else message(e.message);
   }finally{adminBusy=false;if(list)list.inert=false;}
  }
+ async function openProviders(){
+  const dialog=$('providerAccounts');dialog.showModal();$('providerMessage').textContent='Caricamento account…';
+  try{
+   const data=await request('/api/app/providers');
+   $('providerList').innerHTML=data.connections.map(c=>`<article class="provider-row"><strong>${esc(c.label)}</strong>${c.id===data.selected?'<span>In uso su questo dispositivo</span>':`<button type="button" class="primary-button" data-provider-op="select" data-provider-id="${esc(c.id)}">Usa questo account</button>`}${!data.impersonating?`<button type="button" class="account-link" data-provider-op="reauthorize" data-provider-id="${esc(c.id)}">Ricollega eWeLink</button><form data-provider-rename="${esc(c.id)}"><label>Nome dell’account<input name="label" value="${esc(c.label)}" required maxlength="80"></label><button type="submit" class="secondary-button">Salva nome</button></form>`:''}</article>`).join('')||'<p>Nessun account eWeLink collegato.</p>';
+   $('providerAdd').hidden=data.impersonating;
+   $('providerMessage').textContent='Il cambio vale solo per questo dispositivo. I timer degli altri account continuano a funzionare.';
+  }catch(e){$('providerMessage').textContent=e.message;}
+ }
+ async function providerAction(body){
+  const dialog=$('providerAccounts');if(dialog.getAttribute('aria-busy')==='true')return;
+  dialog.setAttribute('aria-busy','true');dialog.querySelectorAll('button').forEach(b=>b.disabled=true);
+  try{
+   const result=await request('/api/app/providers',body);
+   if(result.url){location.assign(result.url);return;}
+   if(body.op==='select'){location.replace(dashboardUrl().href);return;}
+   dialog.close();await openProviders();
+  }catch(e){$('providerMessage').textContent=e.message;}
+  finally{dialog.setAttribute('aria-busy','false');dialog.querySelectorAll('button').forEach(b=>b.disabled=false);}
+ }
+ function mountProviders(){
+  const nav=document.querySelector('.nav-list');if(!nav)return;
+  const button=document.createElement('button');button.id='providerAccountsBtn';button.type='button';button.className='nav-item';button.hidden=true;
+  button.innerHTML='<span aria-hidden="true">⇄</span><span>Account eWeLink<small id="providerSelectedName"></small></span>';
+  button.onclick=()=>{$('navigationDialog')?.close();void openProviders();};nav.append(button);
+  const dialog=document.createElement('dialog');dialog.id='providerAccounts';dialog.setAttribute('aria-labelledby','providerTitle');
+  dialog.innerHTML='<header><h2 id="providerTitle">Account eWeLink</h2><button id="providerClose" type="button" class="secondary-button">Chiudi</button></header><p id="providerMessage" role="status"></p><div id="providerList"></div><form id="providerAdd"><h3>Collega un altro account</h3><label>Nome personalizzato<input id="providerNewLabel" required maxlength="80" placeholder="Es. Casa, Oratorio, Campo"></label><button type="submit" class="primary-button">Aggiungi account eWeLink</button><p>Accederai a eWeLink per autorizzare il nuovo collegamento.</p></form>';
+  document.body.append(dialog);$('providerClose').onclick=()=>dialog.close();
+  $('providerAdd').onsubmit=e=>{e.preventDefault();void providerAction({op:'add',label:$('providerNewLabel').value});};
+  $('providerList').onclick=e=>{const b=e.target.closest('[data-provider-op]');if(b)void providerAction({op:b.dataset.providerOp,id:b.dataset.providerId});};
+  $('providerList').onsubmit=e=>{const form=e.target.closest('[data-provider-rename]');if(form){e.preventDefault();void providerAction({op:'rename',id:form.dataset.providerRename,label:form.elements.label.value});}};
+ }
  async function logout(){try{await request('/api/app/logout',{});if(fbAuth)await (await sdk()).signOut(fbAuth);location.reload();}catch(e){alert('Uscita non confermata: '+e.message);}}
  async function bootstrap(url){
   base=url;
@@ -287,11 +342,11 @@
    }else if(fbAuth.currentUser){
     $('accountRemember').checked=true;
     await exchange(fbAuth.currentUser,{renew:true});
-   }else gate(sessionError);
+   }else {await prepareGoogle();gate(sessionError);}
    return ready;
   }catch(e){
    // Non aprire la plancia con il controllo account indisponibile.
-   if(!$('accountGate'))mount();state.enabled=true;gate('Accesso non disponibile: '+translate(e));return ready;
+   if(!$('accountGate'))mount();state.enabled=true;gate('Accesso non disponibile: '+translate(e));void prepareGoogle().catch(()=>{});return ready;
   }
  }
  window.AppAccounts={state,bootstrap,logout,openPage:()=>{
@@ -300,5 +355,5 @@
   document.title="Gestione account · "+state.actor.name;
   if(typeof window.finishStartup==="function")window.finishStartup();
   showAdmin();return true;
- },headers:()=>state.enabled?{'X-App-CSRF':state.csrf,'X-App-Account':state.account?.id||''}:{},handleError:d=>{if(state.enabled&&['app_auth_required','app_blocked','app_pending','app_actas_expired','app_context_changed'].includes(d?.error)){gate(d.msg);return true;}return false;}};
+ },headers:()=>state.enabled?{'X-App-CSRF':state.csrf,'X-App-Account':state.account?.id||'','X-App-Provider':state.selectedProvider||''}:{},handleError:d=>{if(state.enabled&&['app_auth_required','app_blocked','app_pending','app_actas_expired','app_context_changed','app_provider_context_changed'].includes(d?.error)){gate(d.msg);return true;}return false;}};
 })();
