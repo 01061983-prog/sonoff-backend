@@ -278,3 +278,6 @@ body .topbar.customer-branded #accountToolbar{max-width:min(400px,35vw)}body .to
 
 /* Keep every account choice visible over delegated-management controls. */
 body .topbar.customer-branded #providerQuick:has(#providerQuickButton[aria-expanded="true"]){z-index:501}
+
+/* Ownership labels are separate from ON/OFF/offline state colors. */
+.device-primary .pad-top{gap:8px}.device-ownership{display:inline-flex;align-items:center;justify-content:center;max-width:65%;padding:5px 8px;border:1px solid #ffffff80;border-radius:9px;background:#00000016;color:#fff;font-size:.6875rem;line-height:1.25;font-weight:650;text-align:center;white-space:normal;overflow-wrap:anywhere}.device-primary .device-ownership{margin-left:auto}.device-primary .pad-dot{flex-shrink:0}.ownership-shared{background:#ffffff24;border-style:dashed}.ownership-table{display:block;font-size:.75rem;color:var(--text-soft);margin-top:4px}.device-ownership-note{margin:0 0 18px}.filter-tabs{flex-wrap:wrap}

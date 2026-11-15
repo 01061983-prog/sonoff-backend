@@ -352,6 +352,18 @@ async function families(token) {
   return response.data.familyList;
 }
 
+// Ownership is relative to the selected eWeLink account. Never expose sharing identities.
+function deviceOwnership(thing){
+  const d=thing.itemData||{},hasSharer=d.sharedBy&&typeof d.sharedBy==='object'&&!Array.isArray(d.sharedBy)&&Object.keys(d.sharedBy).length>0;
+  const kind=thing.itemType===2?'shared':thing.itemType===1&&!hasSharer?'owned':'unknown';
+  return {kind,sharedToOthers:kind==='owned'&&Array.isArray(d.shareTo)&&d.shareTo.some(share=>share&&typeof share==='object'&&!Array.isArray(share)&&Object.keys(share).length>0)};
+}
+function mergeDeviceOwnership(previous,current){
+  if(!previous)return current;
+  if(previous.kind!==current.kind)return {kind:'unknown',sharedToOthers:false};
+  return {kind:current.kind,sharedToOthers:current.sharedToOthers||previous.sharedToOthers};
+}
+
 // Ricerca autorizzata per ID: non modifica lo stato dei dispositivi.
 async function readLinkedDevice(token,id,workspaceId){
   let found=null,lastError;
@@ -371,7 +383,7 @@ async function readLinkedDevice(token,id,workspaceId){
     if(!channel||!["on","off"].includes(channel.switch))throw cloudError(502,"invalid_device_state","Stato dei due canali non verificabile. Nessun comando disponibile.");
     return {outlet,switch:channel.switch};
   });
-  return {deviceid:id,name:d.name||id,online:d.online===true,params:{switches},familyId:workspaceId,itemType:found.itemType,uiid:2,linkedById:true};
+  return {deviceid:id,name:d.name||id,online:d.online===true,params:{switches},familyId:workspaceId,itemType:found.itemType,ownership:deviceOwnership(found),uiid:2,linkedById:true};
 }
 async function assertLinkedDeviceChannels(token,id,outlets,registry){
   if(!programming?.linkedDevices)return;
@@ -409,6 +421,7 @@ async function listDevices(token, homes, {includeOwnership = false, deviceIds = 
         devices.set(d.deviceid, {
           deviceid: d.deviceid, name: d.name, online: d.online === true,
           params, familyId: home.id, itemType: thing.itemType,
+          ownership:mergeDeviceOwnership(devices.get(d.deviceid)?.ownership,deviceOwnership(thing)),
           ...(singleRelay?{controlOutlets:[0]}:{}),
           ...(includeOwnership && thing.itemType === 1 && !d.sharedBy && typeof d.apikey === "string" ? {ownerApikey:d.apikey} : {})
         });
@@ -424,7 +437,7 @@ async function listDevices(token, homes, {includeOwnership = false, deviceIds = 
   if(!includeOwnership&&programming?.linkedDevices){
     const linked=linkedRegistry||await programming.linkedDevices(token);
     for(const entry of linked.filter(d=>homes.some(h=>h.id===d.workspaceId)&&(!deviceIds||deviceIds.includes(d.id)))){
-      try{devices.set(entry.id,await readLinkedDevice(token,entry.id,entry.workspaceId));}
+      try{const linkedDevice=await readLinkedDevice(token,entry.id,entry.workspaceId);linkedDevice.ownership=mergeDeviceOwnership(devices.get(entry.id)?.ownership,linkedDevice.ownership);devices.set(entry.id,linkedDevice);}
       catch(error){
         if(error.code==="not_authenticated")throw error;
         devices.delete(entry.id);warnings.push((entry.name||entry.id)+": lettura non disponibile. Verifica il collegamento eWeLink.");
