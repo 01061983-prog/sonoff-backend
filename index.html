@@ -19,7 +19,7 @@
   <script src="scene-pages.js?v=46"></script>
   <script src="room-map.js?v=48"></script>
   <link rel="stylesheet" href="room-map.css?v=48">
-  <link rel="stylesheet" href="app.css?v=73">
+  <link rel="stylesheet" href="app.css?v=74">
   <script src="menu-bar.js?v=61"></script>
   <link rel="stylesheet" href="menu-bar.css?v=65">
   <script src="push-settings.js?v=68"></script>
@@ -1673,9 +1673,10 @@
     let programmingData = {schedules:[],folders:[],organizationRevision:0,connected:false};
     let programmingFolderId="", programmingFolderEditing=null;
     let programmingEditing = null, programmingEpoch = 0, programmingBusy = false;
+    let programmingReadSerial = 0, programmingReadTask = null;
     const programmingElement = id => document.getElementById('programming'+id);
     function clearProgramming() {
-        programmingEpoch++;italianLocationEpoch++;solarPreviewEpoch++;
+        programmingEpoch++;programmingReadSerial++;programmingReadTask=null;italianLocationEpoch++;solarPreviewEpoch++;
         programmingData = {schedules:[],folders:[],organizationRevision:0,connected:false};programmingEditing=null;programmingFolderId="";programmingFolderEditing=null;programmingElement("FolderDialog").close();programmingElement("Folders").innerHTML="";programmingElement("FolderBar").innerHTML="";
         programmingElement('List').innerHTML='';programmingElement('Form').hidden=true;
         programmingElement('Status').textContent='Accedi al tuo account per vedere le tue programmazioni.';
@@ -1687,13 +1688,23 @@
         await loadProgramming();
     }
     async function loadProgramming(){
-        const epoch=programmingEpoch;
-        try{
-            const data=await apiRequest('/api/programming');
-            if(epoch!==programmingEpoch)return;
-            if(programmingData.accountId&&data.accountId!==programmingData.accountId){clearProgramming();}
-            programmingData=data;renderProgramming();
-        }catch(error){if(epoch===programmingEpoch)programmingElement('Status').textContent=error.message;}
+        if(programmingReadTask)return programmingReadTask;
+        const epoch=programmingEpoch,serial=++programmingReadSerial;
+        const provider=window.AppAccounts?.state.enabled?window.AppAccounts.state.selectedProvider:'';
+        const task=(async()=>{
+            try{
+                const data=await apiRequest('/api/programming');
+                if(epoch!==programmingEpoch||serial!==programmingReadSerial||programmingBusy)return;
+                if(provider&&data.accountId!==provider)throw new Error('L’account delle programmazioni non corrisponde a quello selezionato. Riapri la plancia.');
+                if(programmingData.accountId&&data.accountId!==programmingData.accountId)clearProgramming();
+                programmingData=data;renderProgramming();
+            }catch(error){if(epoch===programmingEpoch&&serial===programmingReadSerial)programmingElement('Status').textContent=error.message;}
+        })();
+        programmingReadTask=task;
+        try{return await task;}finally{if(programmingReadTask===task)programmingReadTask=null;}
+    }
+    function refreshVisibleProgramming(){
+        if(document.body.dataset.view==='programming'&&document.visibilityState==='visible'&&!authRequired&&!programmingBusy&&programmingElement('Form').hidden&&!programmingElement('FolderDialog').open)void loadProgramming();
     }
     const isSolarTime = value => value==='sunrise'||value==='sunset';
     const programmingTimeLabel = value => value==='sunrise'?"all’alba":value==='sunset'?'al tramonto':'alle '+value;
@@ -2093,8 +2104,8 @@
         if(success){programmingFolderId=schedule.folderId||'';cancelProgramming();renderProgramming();window.scrollTo({top:0,behavior:'instant'});setMessage('Programmazione salvata.','');}
     }
     async function programmingRequest(body){
-        if(programmingBusy)return false;programmingElement('RequestError').hidden=true;const epoch=programmingEpoch;programmingBusy=true;document.getElementById('saveProgrammingBtn').disabled=true;
-        try{const data=await apiRequest('/api/programming',body);if(epoch!==programmingEpoch)return false;programmingData=data;renderProgramming();return true;}
+        if(programmingBusy)return false;programmingReadSerial++;programmingReadTask=null;programmingElement('RequestError').hidden=true;const epoch=programmingEpoch;programmingBusy=true;document.getElementById('saveProgrammingBtn').disabled=true;
+        try{const data=await apiRequest('/api/programming',body);if(epoch!==programmingEpoch)return false;programmingReadSerial++;programmingReadTask=null;programmingData=data;renderProgramming();return true;}
         catch(error){if(epoch===programmingEpoch){setMessage(error.message,'error');if(['folder-save','folder-delete','move'].includes(body.op)&&programmingElement('FolderDialog').open){programmingElement('FolderError').textContent=error.message;programmingElement('FolderError').hidden=false;}if(body.op==='save'){programmingElement('RequestError').textContent=error.message;programmingElement('RequestError').hidden=false;programmingElement('RequestError').scrollIntoView({behavior:'smooth',block:'center'});}if(['version_conflict','organization_conflict'].includes(error.code))void loadProgramming();}return false;}
         finally{programmingBusy=false;programmingFieldsChanged();}
     }
@@ -2122,7 +2133,10 @@
         for(const id of ['StartDate','IntervalDays','DurationWeeks','Until'])programmingElement(id).addEventListener('input',programmingFieldsChanged);
         programmingElement('Form').addEventListener('submit',saveProgramming);
         for(const event of ['input','change'])programmingElement('Form').addEventListener(event,()=>{programmingElement('RequestError').hidden=true;if(programmingValidationShown)programmingFieldsChanged();});
-        setInterval(()=>{if(document.body.dataset.view==='programming'&&document.visibilityState==='visible'&&!authRequired&&!programmingBusy&&programmingElement('Form').hidden)void loadProgramming();},30000);
+        setInterval(refreshVisibleProgramming,10000);
+        document.addEventListener('visibilitychange',refreshVisibleProgramming);
+        window.addEventListener('pageshow',refreshVisibleProgramming);
+        window.addEventListener('online',refreshVisibleProgramming);
     }
 
     document.addEventListener("DOMContentLoaded", async () => {
