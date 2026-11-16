@@ -235,9 +235,47 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   const solar=await astronomy.calendar(loc,date,core.addDays(date,1));
   return {ok:true,timeZone:core.ZONE,solar};
  }
- async function list(req){const owner=await identity(req),account=await accounts().doc(owner).get(),records=await owned(owner);await archiveCompleted(records);return {ok:true,accountId:owner,timeZone:core.ZONE,connected:account.exists&&automatic(account.data()),connectionError:account.data()?.lastError||null,schedules:records.filter(s=>!s.archivedAt&&!completedOnce(s)).map(visible).sort((a,b)=>a.nextAt-b.nextAt)};}
+ const organizations=()=>db().collection('ewelinkProgrammingOrganization');
+ const validFolderId=id=>typeof id==='string'&&/^[\w-]{1,100}$/.test(id);
+ function organizationData(snapshot){
+  const value=snapshot.data()||{};
+  return {revision:Number.isSafeInteger(value.revision)?value.revision:0,folders:Array.isArray(value.folders)?value.folders.filter(f=>validFolderId(f.id)&&typeof f.name==='string'):[],assignments:value.assignments&&typeof value.assignments==='object'&&!Array.isArray(value.assignments)?value.assignments:{}};
+ }
+ function folderForSchedule(org,id){const folder=org.assignments[id];return org.folders.some(f=>f.id===folder)?folder:'';}
+ async function organize(owner,body,records){
+  const ref=organizations().doc(owner),op=body.op;
+  let changedFolderId='';
+  await db().runTransaction(async t=>{
+   const snapshot=await t.get(ref),org=organizationData(snapshot);
+   if(body.expectedOrganizationRevision!==org.revision)throw error(409,'organization_conflict','Le cartelle sono state modificate da un altro dispositivo. Aggiorna l’elenco e riprova.');
+   const active=new Set(records.filter(s=>!s.archivedAt&&!completedOnce(s)).map(s=>s.id));
+   let folders=org.folders,assignments=Object.fromEntries(Object.entries(org.assignments).filter(([id,folder])=>active.has(id)&&folders.some(f=>f.id===folder)));
+   if(op==='folder-save'){
+    const name=typeof body.name==='string'?body.name.trim():'';
+    if(!name||name.length>80)throw error(400,'folder_name','Inserisci il nome della cartella, da 1 a 80 caratteri.');
+    const id=body.folderId||crypto.randomUUID();if(!validFolderId(id))throw error(400,'folder_id','Cartella non valida.');
+    if(body.folderId&&!folders.some(f=>f.id===id))throw error(404,'folder_not_found','Cartella non trovata. Aggiorna l’elenco.');
+    if(folders.some(f=>f.id!==id&&f.name.toLocaleLowerCase('it')===name.toLocaleLowerCase('it')))throw error(400,'folder_name','Esiste già una cartella con questo nome.');
+    if(!body.folderId&&folders.length>=50)throw error(400,'folder_limit','Puoi creare fino a 50 cartelle per account.');
+    folders=[...folders.filter(f=>f.id!==id),{id,name}];changedFolderId=id;
+   }else if(op==='folder-delete'){
+    if(!validFolderId(body.folderId)||!folders.some(f=>f.id===body.folderId))throw error(404,'folder_not_found','Cartella non trovata.');
+    folders=folders.filter(f=>f.id!==body.folderId);assignments=Object.fromEntries(Object.entries(assignments).filter(([,id])=>id!==body.folderId));
+   }else if(op==='move'){
+    if(!validFolderId(body.id))throw error(400,'invalid_id','Programmazione non valida.');
+    const schedule=await t.get(schedules().doc(body.id));
+    if(!schedule.exists||schedule.data().owner!==owner||schedule.data().archivedAt||completedOnce({...schedule.data(),id:body.id}))throw error(404,'not_found','Programmazione non trovata. Aggiorna l’elenco.');
+    const folder=body.folderId;if(typeof folder!=='string'||folder&&!folders.some(f=>f.id===folder))throw error(400,'folder_not_found','Scegli una cartella di questo account oppure Senza cartella.');
+    assignments={...assignments,[body.id]:folder};if(!folder)delete assignments[body.id];
+   }
+   t.set(ref,{folders,assignments,revision:org.revision+1,updatedAt:now()});
+  });
+  return changedFolderId;
+ }
+ async function list(req){const owner=await identity(req),account=await accounts().doc(owner).get(),records=await owned(owner),org=organizationData(await organizations().doc(owner).get());await archiveCompleted(records);return {ok:true,accountId:owner,timeZone:core.ZONE,connected:account.exists&&automatic(account.data()),connectionError:account.data()?.lastError||null,folders:org.folders.sort((a,b)=>a.name.localeCompare(b.name,'it')),organizationRevision:org.revision,schedules:records.filter(s=>!s.archivedAt&&!completedOnce(s)).map(s=>({...visible(s),folderId:folderForSchedule(org,s.id)})).sort((a,b)=>a.nextAt-b.nextAt)};}
  async function mutate(req){
   const owner=await identity(req),op=req.body?.op;
+  if(['folder-save','folder-delete','move'].includes(op)){const changedFolderId=await organize(owner,req.body,await owned(owner));return {...await list(req),changedFolderId};}
   if(op==='connect'){if(req.body.authorize!==true)throw error(400,'consent_required','Consenti l’esecuzione dei timer a webapp chiusa.');await remember(req);return list(req);}
   if(op==='disconnect'){
    const records=await owned(owner);for(const s of records){const ref=schedules().doc(s.id);await db().runTransaction(async t=>{const doc=await t.get(ref);if(doc.data()?.last?.status==='claimed'&&doc.data().last.until>now())throw error(409,'schedule_busy','Un comando programmato è già in corso.');const next={...doc.data(),enabled:false,nextAt:core.NEVER,solarRefreshAt:core.NEVER,version:doc.data().version+1};delete next.recoveryAt;delete next.recovery;t.set(ref,next);});}
@@ -289,6 +327,9 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   if(op==='toggle'){const old=records.find(s=>s.id===id);if(old&&!old.enabled&&core.usesSolar(old)){const prepared=await astronomy.prepare({...old,location:old.solar.location});clean={solar:prepared.solar};}}
   await db().runTransaction(async t=>{
    const snap=await t.get(ref),old=snap.exists?snap.data():null;
+   const hasFolder=op==='save'&&Object.hasOwn(req.body.schedule||{},'folderId'),organization=hasFolder?organizationData(await t.get(organizations().doc(owner))):null;
+   const selectedFolder=hasFolder?req.body.schedule.folderId:null;
+   if(hasFolder&&(typeof selectedFolder!=='string'||selectedFolder&&!organization.folders.some(f=>f.id===selectedFolder)))throw error(400,'folder_not_found','La cartella scelta non è disponibile. Aggiorna l’elenco e scegli una cartella oppure Senza cartella.');
    if(old&&old.owner!==owner)throw error(404,'not_found','Programmazione non trovata.');
    if(old&&old.version!==req.body.expectedVersion)throw error(409,'version_conflict','Programmazione modificata su un altro dispositivo. Aggiorna l’elenco.');
    if(!old&&op==='save'&&req.body.expectedVersion)throw error(409,'version_conflict','Programmazione conclusa o rimossa. Aggiorna l’elenco.');
@@ -310,6 +351,10 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
    const activation=automaticActivation(next,now());
    if(activation){next.activation=activation;next.nextAt=now();}
    if(next.enabled&&next.nextAt===core.NEVER)throw error(400,'schedule_past','Gli orari sono già trascorsi. Modifica la programmazione.');
+   if(hasFolder&&folderForSchedule(organization,id)!==selectedFolder){
+    const active=new Set(records.filter(s=>!s.archivedAt&&!completedOnce(s)).map(s=>s.id));active.add(id);const assignments={...Object.fromEntries(Object.entries(organization.assignments).filter(([key])=>active.has(key))),[id]:selectedFolder};if(!selectedFolder)delete assignments[id];
+    t.set(organizations().doc(owner),{...organization,assignments,revision:organization.revision+1,updatedAt:now()});
+   }
    t.set(ref,next);
   });
   if(op==='save'||op==='toggle')await execute(ref);

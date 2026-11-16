@@ -19,7 +19,7 @@
   <script src="scene-pages.js?v=46"></script>
   <script src="room-map.js?v=48"></script>
   <link rel="stylesheet" href="room-map.css?v=48">
-  <link rel="stylesheet" href="app.css?v=71">
+  <link rel="stylesheet" href="app.css?v=72">
   <script src="menu-bar.js?v=61"></script>
   <link rel="stylesheet" href="menu-bar.css?v=65">
   <script src="push-settings.js?v=68"></script>
@@ -135,12 +135,14 @@
   </section>
 
   <section id="programmingView" class="view" style="display:none" aria-labelledby="programmingHeading">
-    <div class="page-heading"><div><p class="eyebrow">IL TUO TEMPO, I TUOI SPAZI</p><h1 id="programmingHeading">Programmazione<span class="green-dot">.</span></h1><p class="heading-sub">Scegli uno scenario o un dispositivo, poi il giorno e l’orario. Lo spegnimento è facoltativo.</p></div><button id="newProgrammingBtn" class="primary-button" onclick="editProgramming(null)"><span data-icon="plus"></span>Nuova programmazione</button></div>
+    <div class="page-heading"><div><p class="eyebrow">IL TUO TEMPO, I TUOI SPAZI</p><h1 id="programmingHeading">Programmazione<span class="green-dot">.</span></h1><p class="heading-sub">Scegli uno scenario o un dispositivo, poi il giorno e l’orario. Lo spegnimento è facoltativo.</p></div><div class="programming-main-actions"><button id="newProgrammingBtn" class="primary-button programming-create" onclick="editProgramming(null)">+ Nuova programmazione</button><button type="button" class="secondary-button" onclick="editProgrammingFolder(null)">Nuova cartella</button></div></div>
     <p class="programming-zone"><span data-icon="calendar"></span> Ora italiana · cambio dell’ora automatico</p>
     <div id="programmingStatus" class="info-strip" role="status">Caricamento programmazioni…</div>
+    <div id="programmingFolders" class="programming-folders"></div><div id="programmingFolderBar" class="programming-folder-bar"></div>
     <form id="programmingForm" class="scene-editor programming-form" novalidate hidden>
       <div class="editor-heading"><h2 id="programmingEditorTitle">Nuova programmazione</h2><button type="button" class="icon-button" onclick="cancelProgramming()" aria-label="Chiudi programmazione"><span data-icon="close"></span></button></div>
       <div id="programmingAlerts" class="programming-validation programming-alerts" role="alert" tabindex="-1" hidden></div>
+      <div class="form-row"><label for="programmingFolder">Cartella (facoltativa)</label><select id="programmingFolder"><option value="">Senza cartella</option></select></div>
       <label class="programming-step" for="programmingDevice"><span>1</span> Che cosa vuoi programmare?</label>
       <select id="programmingDevice" required><option value="">Scegli un dispositivo…</option></select>
       <p id="programmingSceneNote" class="page-note" hidden>Lo scenario usa i canali già configurati. Se lo modifichi, apri e salva di nuovo la programmazione. Gli impulsi non prevedono uno spegnimento automatico.</p>
@@ -172,8 +174,9 @@
         <div class="editor-footer"><button type="button" class="secondary-button" onclick="cancelProgramming()">Annulla</button><button type="submit" id="saveProgrammingBtn" class="primary-button"><span data-icon="check"></span>Salva programmazione</button></div>
       </div>
     </form>
-    <p class="page-note">Le fasce attive mantengono accese le proprie luci anche durante uno spegnimento manuale dalla plancia. Se salvi o riattivi una fascia già iniziata, le luci si accendono subito; impulsi e cancelli sono esclusi. Le programmazioni concluse, singole o con una data finale, spariscono dall’elenco, mentre gli esiti incerti restano visibili.</p><div id="programmingList" class="programming-list"></div>
-    <details class="programming-help"><summary>Come funzionano le programmazioni</summary><p>I timer funzionano anche con la webapp chiusa. Ogni fascia invia un comando esplicito: i comandi manuali restano validi fino al prossimo orario programmato.</p><p>Le fasce dello stesso account sullo stesso canale possono sovrapporsi: una fascia non spegne la luce mentre un’altra la richiede accesa.</p><p>In caso di interruzione, i comandi ON/OFF non completati vengono riallineati allo stato previsto quando tornano disponibili connessione e dati. Il recupero rispetta le altre fasce attive. Impulsi e cancelli senza stato verificabile non vengono ripetuti automaticamente. Server, eWeLink e dispositivo devono essere disponibili.</p><p>Nel cambio all’ora solare, per gli orari ripetuti si usa la prima occorrenza per l’accensione e l’ultima per lo spegnimento finale; un orario settimanale inesistente nel cambio all’ora legale viene saltato.</p></details>
+<div id="programmingList" class="programming-list"></div>
+    <dialog id="programmingFolderDialog" class="control-dialog programming-folder-dialog" aria-labelledby="programmingFolderTitle"><form id="programmingFolderForm"><div class="editor-heading"><h2 id="programmingFolderTitle">Nuova cartella</h2><button type="button" class="secondary-button" onclick="document.getElementById('programmingFolderDialog').close()">Chiudi</button></div><label for="programmingFolderName">Nome della cartella</label><input id="programmingFolderName" maxlength="80" required placeholder="Es. Basket"><p id="programmingFolderError" class="programming-validation" role="alert" hidden></p><button id="programmingFolderSave" type="submit" class="primary-button">Salva cartella</button></form></dialog>
+    <details class="programming-help"><summary>Come funzionano le programmazioni</summary><p class="page-note">Le fasce attive mantengono accese le proprie luci anche durante uno spegnimento manuale dalla plancia. Se salvi o riattivi una fascia già iniziata, le luci si accendono subito; impulsi e cancelli sono esclusi. Le programmazioni concluse, singole o con una data finale, spariscono dall’elenco, mentre gli esiti incerti restano visibili.</p><p>I timer funzionano anche con la webapp chiusa. Ogni fascia invia un comando esplicito: i comandi manuali restano validi fino al prossimo orario programmato.</p><p>Le fasce dello stesso account sullo stesso canale possono sovrapporsi: una fascia non spegne la luce mentre un’altra la richiede accesa.</p><p>In caso di interruzione, i comandi ON/OFF non completati vengono riallineati allo stato previsto quando tornano disponibili connessione e dati. Il recupero rispetta le altre fasce attive. Impulsi e cancelli senza stato verificabile non vengono ripetuti automaticamente. Server, eWeLink e dispositivo devono essere disponibili.</p><p>Nel cambio all’ora solare, per gli orari ripetuti si usa la prima occorrenza per l’accensione e l’ultima per lo spegnimento finale; un orario settimanale inesistente nel cambio all’ora legale viene saltato.</p></details>
     <button id="disconnectProgrammingBtn" class="secondary-button" hidden onclick="disconnectProgramming()">Disattiva tutti i timer e scollega l’esecuzione automatica</button>
   </section>
   <section id="climateView" class="view" style="display:none" aria-labelledby="climateHeading">
@@ -1118,6 +1121,7 @@
         calendar: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4m10-4v4M3 11h18"/>',
         'arrow-right': '<path d="M4 12h16m-6-6 6 6-6 6"/>',
         'arrow-up-right': '<path d="M6 18 18 6M6 6h12v12"/>',
+        folder: '<path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>',
         plug: '<path d="M8 3v5m8-5v5M6 8h12v4a6 6 0 0 1-12 0V8Zm6 10v4"/>',
         wifi: '<path d="M3 8a15 15 0 0 1 18 0M6 12a10 10 0 0 1 12 0m-9 4a5 5 0 0 1 6 0m-3 4h.01"/>',
         'wifi-off': '<path d="m3 3 18 18M3 8a15 15 0 0 1 4-2m4-1a15 15 0 0 1 10 3M6 12a10 10 0 0 1 5-2m5 1 2 1m-9 4a5 5 0 0 1 6 0m-3 4h.01"/>',
@@ -1666,12 +1670,13 @@
     }
     // END CONNECTION RECOVERY
 
-    let programmingData = {schedules:[],connected:false};
+    let programmingData = {schedules:[],folders:[],organizationRevision:0,connected:false};
+    let programmingFolderId="", programmingFolderEditing=null;
     let programmingEditing = null, programmingEpoch = 0, programmingBusy = false;
     const programmingElement = id => document.getElementById('programming'+id);
     function clearProgramming() {
         programmingEpoch++;italianLocationEpoch++;solarPreviewEpoch++;
-        programmingData = {schedules:[],connected:false};programmingEditing=null;
+        programmingData = {schedules:[],folders:[],organizationRevision:0,connected:false};programmingEditing=null;programmingFolderId="";programmingFolderEditing=null;programmingElement("FolderDialog").close();programmingElement("Folders").innerHTML="";programmingElement("FolderBar").innerHTML="";
         programmingElement('List').innerHTML='';programmingElement('Form').hidden=true;
         programmingElement('Status').textContent='Accedi al tuo account per vedere le tue programmazioni.';
     }
@@ -1680,7 +1685,6 @@
         if(!devicesFresh&&!devicesLoading)await loadDevices();
         if(epoch!==programmingEpoch||authRequired)return;
         await loadProgramming();
-        if(!programmingData.schedules.length && devicesFresh && !authRequired && programmingElement("Form").hidden) editProgramming(null);
     }
     async function loadProgramming(){
         const epoch=programmingEpoch;
@@ -1813,18 +1817,55 @@
         const label=!schedule.enabled?'Sospesa':running?'In esecuzione':schedule.recoveryAt?'Ripristino in attesa':attention?'Da verificare':next?'Attiva':last?.status==='skipped'?'Non eseguita':'Conclusa';
         return {label,attention:attention||Boolean(schedule.recoveryAt),message,note:schedule.enabled&&schedule.recoveryAt?'Il sistema verificherà il dispositivo e ripristinerà lo stato previsto dalle programmazioni attuali quando torneranno disponibili connessione e dati.':attention&&!next?'La programmazione resta visibile perché l’esecuzione non è confermata. Questo comando non verrà ripetuto automaticamente.':''};
     }
+    function programmingFolderOptions(value='') {
+        const folders=programmingData.folders||[];
+        return '<option value="">Senza cartella</option>'+folders.map(f=>`<option value="${escapeHtml(f.id)}" ${f.id===value?'selected':''}>${escapeHtml(f.name)}</option>`).join('')+(value&&!folders.some(f=>f.id===value)?`<option value="${escapeHtml(value)}" selected disabled>Cartella rimossa · scegli dove salvare</option>`:'');
+    }
+    function setProgrammingFolder(id){programmingFolderId=id;renderProgramming();window.scrollTo({top:0,behavior:'instant'});}
+    function renderProgrammingFolders(){
+        const folders=programmingData.folders||[],folder=folders.find(f=>f.id===programmingFolderId);
+        if(!folder)programmingFolderId='';
+        programmingElement('Folders').hidden=!!folder;document.getElementById('newProgrammingBtn').hidden=!!folder;
+        programmingElement('Folders').innerHTML=folders.length?folders.map(f=>`<button type="button" class="programming-folder-tile" onclick="setProgrammingFolder(${jsArg(f.id)})" aria-label="Apri cartella ${escapeHtml(f.name)}"><span aria-hidden="true">${icon('folder')}</span><strong>${escapeHtml(f.name)}</strong><small>${programmingData.schedules.filter(s=>s.folderId===f.id).length} ${programmingData.schedules.filter(s=>s.folderId===f.id).length===1?'programmazione':'programmazioni'}</small></button>`).join(''):'<p class="page-note">Puoi creare cartelle oppure lasciare le programmazioni senza cartella.</p>';
+        programmingElement('FolderBar').innerHTML=folder?`<button type="button" class="secondary-button" onclick="setProgrammingFolder('')">← Tutte le cartelle</button><h2>${escapeHtml(folder.name)}</h2><button type="button" class="primary-button programming-create" onclick="editProgramming(null)">+ Nuova programmazione</button><button type="button" class="secondary-button" onclick="editProgrammingFolder(${jsArg(folder.id)})">Rinomina cartella</button><button type="button" class="btn-ghost-danger" onclick="deleteProgrammingFolder(${jsArg(folder.id)})">Elimina cartella</button>`:'<h2>Senza cartella</h2>';
+        if(!programmingElement('Form').hidden){const select=programmingElement('Folder'),value=select.value;select.innerHTML=programmingFolderOptions(value);select.value=value;}
+    }
+    function editProgrammingFolder(id){
+        if(!programmingData.accountId){setMessage('Attendi il caricamento delle programmazioni.','error');return;}
+        const folder=(programmingData.folders||[]).find(f=>f.id===id);
+        programmingFolderEditing=folder?.id||null;programmingElement('FolderTitle').textContent=folder?'Rinomina cartella':'Nuova cartella';programmingElement('FolderName').value=folder?.name||'';programmingElement('FolderError').hidden=true;programmingElement('FolderDialog').showModal();programmingElement('FolderName').focus();
+    }
+    async function saveProgrammingFolder(event){
+        event.preventDefault();if(programmingBusy)return;
+        const name=programmingElement('FolderName').value.trim();
+        if(!name){programmingElement('FolderError').textContent='Inserisci il nome della cartella.';programmingElement('FolderError').hidden=false;return;}
+        programmingElement('FolderSave').disabled=true;
+        try{if(await programmingRequest({op:'folder-save',...(programmingFolderEditing?{folderId:programmingFolderEditing}:{}),name,expectedOrganizationRevision:programmingData.organizationRevision||0})){programmingFolderId=programmingData.changedFolderId||programmingFolderId;programmingElement('FolderDialog').close();renderProgramming();window.scrollTo({top:0,behavior:'instant'});setMessage('Cartella salvata. Puoi creare qui una nuova programmazione.','');}}
+        finally{programmingElement('FolderSave').disabled=false;}
+    }
+    async function deleteProgrammingFolder(id){
+        if(programmingBusy||!confirm('Eliminare questa cartella? Le sue programmazioni restano attive e saranno visibili in Senza cartella.'))return;
+        if(await programmingRequest({op:'folder-delete',folderId:id,expectedOrganizationRevision:programmingData.organizationRevision||0}))setMessage('Cartella eliminata. Le programmazioni sono in Senza cartella.','');
+    }
+    async function moveProgramming(id,folderId){
+        if(await programmingRequest({op:'move',id,folderId,expectedOrganizationRevision:programmingData.organizationRevision||0}))setMessage('Programmazione spostata. Orari e funzionamento restano invariati.','');
+        else renderProgramming();
+    }
     function renderProgramming(){
         const data=programmingData;
+        const expanded=new Set([...programmingElement('List').querySelectorAll('details[data-schedule-id][open]')].map(el=>el.dataset.scheduleId));
+        renderProgrammingFolders();
         programmingElement('Status').textContent=data.connectionError|| (data.connected?'Le tue programmazioni sono sincronizzate. Richiedono Internet nell’impianto; al ritorno della connessione, i comandi ON/OFF non completati vengono riallineati allo stato previsto. Gli impulsi non vengono ripetuti automaticamente.':'Crea la prima programmazione per collegare l’esecuzione automatica al tuo account.');
         document.getElementById('disconnectProgrammingBtn').hidden=!data.connected;
-        programmingElement('List').innerHTML=data.schedules.length?data.schedules.map(s=>{
+        const shown=data.schedules.filter(s=>(s.folderId||'')===programmingFolderId);
+        programmingElement('List').innerHTML=shown.length?shown.map(s=>{
             const when=(s.repeat==='interval'?`Ogni ${s.intervalDays} giorni`:s.repeat==='date'?new Date(s.date+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'}):isDailyProgramming(s)?'Ogni giorno':s.days.map(d=>['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d]).join(' · '))+(s.startDate?' · dal '+new Date(s.startDate+'T12:00:00').toLocaleDateString('it-IT'):'')+(s.until?' · fino al '+new Date(s.until+'T12:00:00').toLocaleDateString('it-IT')+' incluso':'');
             const time=s.end?`Dalle ${s.start} alle ${s.end}${s.endDate&&s.endDate!==s.date?' del '+new Date(s.endDate+'T12:00:00').toLocaleDateString('it-IT'):!s.endDate&&s.end<=s.start?' del giorno successivo':''}`:`${s.action==='off'?'Spegni':s.action==='pulse'?'Impulso':s.action==='run'?'Esegui scenario':'Accendi'} alle ${s.start}`;
             const description=s.autoOffSeconds?`Accendi ${programmingTimeLabel(s.start)}; spegni dopo ${programmingTimerLabel(s.autoOffSeconds)}${s.solar?' · '+s.solar.location.name:''}`:s.solar?`${s.end?'Accendi':s.action==='off'?'Spegni':s.action==='pulse'?'Impulso':'Esegui'} ${programmingTimeLabel(s.start)}${s.end?'; spegni '+programmingTimeLabel(s.end)+' alla prima occorrenza successiva':''} · ${s.solar.location.name}`:time;
             const next=s.enabled&&s.nextAt<8640000000000000?new Date(s.nextAt).toLocaleString('it-IT',{timeZone:'Europe/Rome',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',...(s.autoOffSeconds?{second:'2-digit'}:{})}):null;
             const outcome=programmingOutcome(s,next);
-            return `<article class="programming-card"><div class="programming-card-top"><h2>${escapeHtml(s.name)}</h2><span class="programming-badge ${outcome.attention?'is-warning':s.enabled?'is-enabled':''}">${escapeHtml(outcome.label)}</span></div><p class="programming-device">${s.kind==='scene'?'Scenario · ':s.kind==='daikin'?'Clima · ':''}${escapeHtml(s.deviceName)}${s.kind==='daikin'&&s.action==='on'&&window.Climate?.describeSettings(s.daikin)?' · '+escapeHtml(window.Climate.describeSettings(s.daikin)):''}${s.kind==='multi'?' · '+s.outlets.map(o=>'CH '+(o+1)).join(', '):''}</p><p class="programming-time">${escapeHtml(s.action==='on'&&s.start==='sunset'&&s.end==='sunrise'?'Crepuscolare automatico · '+description:description)}</p>${s.solarError?`<p class="programming-validation" role="status">${escapeHtml(s.solarError)}</p>`:''}<p>${escapeHtml(when)}</p>${next?`<p class="page-note">Prossimo comando: ${escapeHtml(next)}</p>`:''}${s.last?`<p class="programming-result ${outcome.attention?'is-warning':''}" role="status">${escapeHtml(outcome.message)}</p>${outcome.note?`<p class="page-note">${escapeHtml(outcome.note)}</p>`:''}`:''}<div class="scene-actions"><button onclick="editProgramming(${jsArg(s.id)})">Modifica</button><button onclick="changeProgramming('toggle',${jsArg(s.id)})">${s.enabled?'Sospendi':'Riattiva'}</button><button class="btn-ghost-danger" onclick="changeProgramming('delete',${jsArg(s.id)})">Elimina</button></div></article>`;
-        }).join(''):'<div class="empty-state"><h3>Nessuna programmazione</h3><p>Scegli un dispositivo e imposta il primo orario.</p></div>';
+            return `<details class="programming-card programming-disclosure" data-schedule-id="${escapeHtml(s.id)}" ${expanded.has(s.id)?'open':''}><summary><span>${escapeHtml(s.name)}</span><span class="programming-chevron" aria-hidden="true">⌄</span></summary><div class="programming-specifics"><div class="programming-card-top"><span class="programming-badge ${outcome.attention?'is-warning':s.enabled?'is-enabled':''}">${escapeHtml(outcome.label)}</span></div><p class="programming-device">${s.kind==='scene'?'Scenario · ':s.kind==='daikin'?'Clima · ':''}${escapeHtml(s.deviceName)}${s.kind==='daikin'&&s.action==='on'&&window.Climate?.describeSettings(s.daikin)?' · '+escapeHtml(window.Climate.describeSettings(s.daikin)):''}${s.kind==='multi'?' · '+s.outlets.map(o=>'CH '+(o+1)).join(', '):''}</p><p class="programming-time">${escapeHtml(s.action==='on'&&s.start==='sunset'&&s.end==='sunrise'?'Crepuscolare automatico · '+description:description)}</p>${s.solarError?`<p class="programming-validation" role="status">${escapeHtml(s.solarError)}</p>`:''}<p>${escapeHtml(when)}</p>${next?`<p class="page-note">Prossimo comando: ${escapeHtml(next)}</p>`:''}${s.last?`<p class="programming-result ${outcome.attention?'is-warning':''}" role="status">${escapeHtml(outcome.message)}</p>${outcome.note?`<p class="page-note">${escapeHtml(outcome.note)}</p>`:''}`:''}<label class="programming-move">Cartella<select aria-label="Cartella di ${escapeHtml(s.name)}" onchange="moveProgramming(${jsArg(s.id)},this.value)">${programmingFolderOptions(s.folderId||'')}</select></label><div class="scene-actions"><button onclick="editProgramming(${jsArg(s.id)})">Modifica</button><button onclick="changeProgramming('toggle',${jsArg(s.id)})">${s.enabled?'Sospendi':'Riattiva'}</button><button class="btn-ghost-danger" onclick="changeProgramming('delete',${jsArg(s.id)})">Elimina</button></div></div></details>`;
+        }).join(''):'<div class="empty-state"><h3>Nessuna programmazione in questa sezione</h3><p>Premi + Nuova programmazione per aggiungerne una qui.</p></div>';
     }
     function editProgramming(id){
         if(!devicesFresh||authRequired){setMessage('Aggiorna i dispositivi prima di programmare.','error');return;}
@@ -1840,6 +1881,7 @@
         const splits=window.Climate?.programmingUnits()||[];
         if(splits.length){const group=document.createElement('optgroup');group.label='Clima (split Daikin)';for(const u of splits){const option=document.createElement('option');option.value=u.id;option.textContent=u.name+(u.online?'':' · offline');group.appendChild(option);}select.appendChild(group);}
         const s=programmingEditing;
+        programmingElement('Folder').innerHTML=programmingFolderOptions(s?.folderId||programmingFolderId);programmingElement('Folder').value=s?.folderId??programmingFolderId;
         programmingElement('EditorTitle').textContent=s?'Modifica programmazione':'Nuova programmazione';
         select.value=s?.kind==='scene'?'scene:'+s.sceneId:s?.deviceId||'';programmingElement('Name').value=s?.name||'';
         programmingElement('Action').value=s?.action||'on';programmingElement('Repeat').value=isDailyProgramming(s)?'daily':s?.repeat||'date';
@@ -2036,7 +2078,7 @@
         if(issues.length){programmingElement('Alerts').scrollIntoView({behavior:'smooth',block:'start'});programmingElement('Alerts').focus({preventScroll:true});return;}
         if(!programmingData.connected&&!programmingElement('Consent').checked){setMessage('Consenti l’esecuzione a webapp chiusa per attivare il timer.','error');return;}
         const action=programmingElement('Action').value,{scene,daikin}=programmingTarget();
-        const schedule={name:programmingElement('Name').value,...(scene?{targetType:'scene',sceneId:scene.id,workspaceId:sceneWorkspace.id}:daikin?{targetType:'daikin',deviceId:daikin.id,daikin:action==='on'?window.Climate.programmingSettings(programmingElement('Daikin')):{}}:{targetType:'device',deviceId:programmingElement('Device').value}),action,repeat:programmingElement('Repeat').value,date:programmingElement('Date').value,days:[...document.querySelectorAll('[name="programmingDay"]:checked')].map(input=>Number(input.value)),outlets:[...document.querySelectorAll('[name="programmingOutlet"]:checked')].map(input=>Number(input.value)),start:programmingElement('StartType').value==='fixed'?programmingElement('Start').value:programmingElement('StartType').value,end:action==='on'&&programmingElement('HasEnd').checked?(programmingElement('EndType').value==='fixed'?programmingElement('End').value:programmingElement('EndType').value):null,enabled:programmingEditing?.enabled!==false};
+        const schedule={name:programmingElement('Name').value,folderId:programmingElement('Folder').value,...(scene?{targetType:'scene',sceneId:scene.id,workspaceId:sceneWorkspace.id}:daikin?{targetType:'daikin',deviceId:daikin.id,daikin:action==='on'?window.Climate.programmingSettings(programmingElement('Daikin')):{}}:{targetType:'device',deviceId:programmingElement('Device').value}),action,repeat:programmingElement('Repeat').value,date:programmingElement('Date').value,days:[...document.querySelectorAll('[name="programmingDay"]:checked')].map(input=>Number(input.value)),outlets:[...document.querySelectorAll('[name="programmingOutlet"]:checked')].map(input=>Number(input.value)),start:programmingElement('StartType').value==='fixed'?programmingElement('Start').value:programmingElement('StartType').value,end:action==='on'&&programmingElement('HasEnd').checked?(programmingElement('EndType').value==='fixed'?programmingElement('End').value:programmingElement('EndType').value):null,enabled:programmingEditing?.enabled!==false};
         if(action==='on'&&programmingElement('HasTimer').checked)schedule.autoOffSeconds=Number(programmingElement('TimerMinutes').value)*60+Number(programmingElement('TimerSeconds').value);
         if(schedule.repeat!=='date'){
             schedule.startDate=programmingElement('StartDate').value;schedule.durationMode=programmingElement('DurationMode').value;
@@ -2048,17 +2090,18 @@
         if(programmingUsesSolar()){try{schedule.location=programmingLocationValue();}catch(error){setMessage(error.message,'error');return;}}
         if(schedule.end&&schedule.repeat==='date'&&!programmingUsesSolar())schedule.endDate=programmingElement('EndDate').value;
         const success=await programmingRequest({op:'save',...(programmingEditing?{id:programmingEditing.id,expectedVersion:programmingEditing.version}:{}),schedule,authorize:programmingElement('Consent').checked});
-        if(success){cancelProgramming();setMessage('Programmazione salvata.','');}
+        if(success){programmingFolderId=schedule.folderId||'';cancelProgramming();renderProgramming();window.scrollTo({top:0,behavior:'instant'});setMessage('Programmazione salvata.','');}
     }
     async function programmingRequest(body){
         if(programmingBusy)return false;programmingElement('RequestError').hidden=true;const epoch=programmingEpoch;programmingBusy=true;document.getElementById('saveProgrammingBtn').disabled=true;
         try{const data=await apiRequest('/api/programming',body);if(epoch!==programmingEpoch)return false;programmingData=data;renderProgramming();return true;}
-        catch(error){if(epoch===programmingEpoch){setMessage(error.message,'error');if(body.op==='save'){programmingElement('RequestError').textContent=error.message;programmingElement('RequestError').hidden=false;programmingElement('RequestError').scrollIntoView({behavior:'smooth',block:'center'});}if(error.code==='version_conflict')void loadProgramming();}return false;}
+        catch(error){if(epoch===programmingEpoch){setMessage(error.message,'error');if(['folder-save','folder-delete','move'].includes(body.op)&&programmingElement('FolderDialog').open){programmingElement('FolderError').textContent=error.message;programmingElement('FolderError').hidden=false;}if(body.op==='save'){programmingElement('RequestError').textContent=error.message;programmingElement('RequestError').hidden=false;programmingElement('RequestError').scrollIntoView({behavior:'smooth',block:'center'});}if(['version_conflict','organization_conflict'].includes(error.code))void loadProgramming();}return false;}
         finally{programmingBusy=false;programmingFieldsChanged();}
     }
     async function changeProgramming(op,id){const s=programmingData.schedules.find(s=>s.id===id);if(s)await programmingRequest({op,id,expectedVersion:s.version});}
     async function disconnectProgramming(){await programmingRequest({op:'disconnect'});}
     function initProgramming(){
+        programmingElement('FolderForm').addEventListener('submit',saveProgrammingFolder);
         for(const kind of ['Province','Municipality']){programmingElement(kind+'Search').addEventListener('keydown',event=>locationSearchKeys(event,kind));programmingElement(kind+'Results').addEventListener('keydown',event=>locationSearchKeys(event,kind));}
         programmingElement('ProvinceSearch').addEventListener('input',filterProgrammingProvinces);
         programmingElement('MunicipalitySearch').addEventListener('input',filterProgrammingMunicipalities);
