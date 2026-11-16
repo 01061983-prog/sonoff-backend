@@ -206,7 +206,7 @@ if(APP_AUTH_ENABLED){
     });
     webConfig.authDomain = new URL(HOME).host;
   }
-  appAccounts=require('./app-accounts')({db:getSceneDatabase,auth:()=>{getSceneDatabase();return require('firebase-admin/auth').getAuth(require('firebase-admin/app').getApps().find(a=>a.name==='san-luigi-scenes'));},secret:APPSECRET,appid:APPID,adminEmail,origin:new URL(HOME).origin,webConfig,programming:()=>requireProgramming()});
+  appAccounts=require('./app-accounts')({db:getSceneDatabase,auth:()=>{getSceneDatabase();return require('firebase-admin/auth').getAuth(require('firebase-admin/app').getApps().find(a=>a.name==='san-luigi-scenes'));},secret:APPSECRET,appid:APPID,adminEmail,origin:new URL(HOME).origin,webConfig,programming:()=>requireProgramming(),listDevices:token=>listDevices(token)});
   appAccounts.install(app,route);
 }else app.get('/api/app/config',(_req,res)=>res.json({ok:true,enabled:false}));
 

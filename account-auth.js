@@ -74,7 +74,7 @@
   showQuickProvider();
   $('accountIdentity').textContent=state.account.name;
   $('accountManage').hidden=!state.adminDesktop;
-  $('accountReturn').hidden=!state.impersonating;
+  $('accountReturn').hidden=!state.impersonating;$('accountReturn').textContent=state.workspaceView?'Torna alla mia plancia':'Torna alla gestione';
   $('accountIdentity').hidden=!state.impersonating;
   if(state.impersonating){$('accountIdentity').textContent='Stai gestendo '+state.account.name+(state.readOnly?' · Sola lettura':'');document.body.classList.add('account-delegated');}
   if(state.account.status!=='active'&&!state.impersonating){gate('Account in attesa di ammissione. L’amministratore deve autorizzare il tuo accesso.');$('accountCredentials').hidden=true;$('accountPending').hidden=false;return false;}
@@ -217,7 +217,7 @@
   $('accountCheck').onclick=()=>void run(async()=>{if(accepted(await request('/api/app/session')))location.reload();});
   $('accountPendingLogout').onclick=()=>void logout();
   $('accountManage').onclick=()=>navigateAdmin(true);
-  $('accountReturn').onclick=()=>void adminMutation({op:'stop-view'},'accounts');
+  $('accountReturn').onclick=()=>void (state.workspaceView?providerAction({op:'stop-workspace'}):adminMutation({op:'stop-view'},'accounts'));
  }
  function navigateAdmin(show){
   const url=dashboardUrl();
@@ -326,17 +326,18 @@
   }finally{adminBusy=false;if(list)list.inert=false;}
  }
  let providerChoices=[],providerChoicesJob,quickSwitchBusy=false;
+ const quickSelection=()=>state.quickSelection||state.selectedProvider;
  function closeQuickProvider(focus=false){
   const panel=$('providerQuickPanel'),button=$('providerQuickButton');
   if(panel)panel.hidden=true;if(button){button.setAttribute('aria-expanded','false');if(focus)button.focus();}
  }
  function renderQuickProviders(){
   const list=$('providerQuickList');if(!list)return;
-  list.innerHTML=providerChoices.map(c=>`<button type="button" class="provider-quick-option${c.id===state.selectedProvider?' current':''}" data-quick-provider="${esc(c.id)}" ${c.id===state.selectedProvider?'disabled aria-current="true"':''}>${providerBadge(c)}<span class="provider-choice-copy"><strong>${esc(c.name||c.label)}</strong>${c.name&&c.name!==c.label?`<small>${esc(c.label)}</small>`:''}${c.person&&c.person!==c.label?`<small>${esc(c.person)}</small>`:''}</span>${c.id===state.selectedProvider?'<small>In uso ✓</small>':'<span aria-hidden="true">→</span>'}</button>`).join('');
+  list.innerHTML=providerChoices.map(c=>`<button type="button" class="provider-quick-option${c.id===quickSelection()?' current':''}" data-quick-provider="${esc(c.id)}" ${c.id===quickSelection()?'disabled aria-current="true"':''}>${providerBadge(c)}<span class="provider-choice-copy"><strong>${esc(c.name||c.label)}</strong>${c.name&&c.name!==c.label?`<small>${esc(c.label)}</small>`:''}${c.person&&c.person!==c.label?`<small>${esc(c.person)}</small>`:''}${c.contextLabel?`<small>${esc(c.contextLabel)}</small>`:''}</span>${c.id===quickSelection()?'<small>In uso ✓</small>':'<span aria-hidden="true">→</span>'}</button>`).join('');
   providerImages(list);
  }
  async function refreshQuickProviders(){
-  if(!providerChoicesJob)providerChoicesJob=request('/api/app/providers').then(data=>{providerChoices=data.connections;renderQuickProviders();return data;}).finally(()=>{providerChoicesJob=null;});
+  if(!providerChoicesJob)providerChoicesJob=request('/api/app/providers').then(data=>{providerChoices=data.switchChoices||data.connections;if(data.switchSelected)state.quickSelection=data.switchSelected;renderQuickProviders();return data;}).finally(()=>{providerChoicesJob=null;});
   return providerChoicesJob;
  }
  function showQuickProvider(){
@@ -354,7 +355,7 @@
   catch(e){$('providerQuickMessage').textContent=e.message;}
  }
  async function quickSelectProvider(id){
-  if(quickSwitchBusy||id===state.selectedProvider)return;
+  if(quickSwitchBusy||id===quickSelection())return;
   quickSwitchBusy=true;$('providerQuickPanel').setAttribute('aria-busy','true');
   $('providerQuickMessage').textContent='Cambio account…';
   $('providerQuick').querySelectorAll('button').forEach(b=>b.disabled=true);
@@ -378,9 +379,9 @@
  async function openProviders(){
   const dialog=$('providerAccounts');dialog.showModal();$('providerMessage').textContent='Caricamento account…';
   try{
-   const data=await request('/api/app/providers');providerChoices=data.connections;renderQuickProviders();
+   const data=await request('/api/app/providers');providerChoices=data.switchChoices||data.connections;if(data.switchSelected)state.quickSelection=data.switchSelected;renderQuickProviders();
    providerLogoEpoch++;providerLogoJobs.clear();providerLogoDrafts.clear();data.connections.forEach(c=>providerLogoDrafts.set(c.id,c.localLogo??c.logo??''));
-   $('providerList').innerHTML=data.connections.map(c=>`<article class="provider-row"><div class="provider-row-identity">${providerBadge(c)}<div><strong>${esc(c.name||c.label)}</strong>${c.name&&c.name!==c.label?`<small>${esc(c.label)}</small>`:''}${c.person?`<small>${esc(c.person)}</small>`:''}</div></div>${c.id===data.selected?'<span>In uso su questo dispositivo</span>':`<button type="button" class="primary-button" data-provider-op="select" data-provider-id="${esc(c.id)}">Usa questo account</button>`}${!data.impersonating?`<button type="button" class="account-link" data-provider-op="reauthorize" data-provider-id="${esc(c.id)}">Ricollega eWeLink</button><form data-provider-rename="${esc(c.id)}"><label>Nome e cognome o attività<input name="label" required maxlength="80" value="${esc(c.label)}"></label>${data.brandingAccounts?.length?`<label>Nome e logo da Gestione utenti<select name="brandingAccountId"><option value="">Identità personalizzata di questo collegamento</option>${data.brandingAccounts.map(b=>`<option value="${esc(b.id)}" ${b.id===c.brandingAccountId?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label><p>Se scegli una plancia cliente, nome, referente e logo vengono letti dal suo profilo senza ricaricarli.</p>`:''}<fieldset data-provider-local ${c.brandingAccountId?'hidden disabled':''}><label>Titolare o referente (facoltativo)<input name="person" maxlength="120" value="${esc(c.localPerson??c.person??'')}"></label><label>Logo di questo account<input type="file" accept="image/png,image/jpeg,image/webp" data-provider-logo="${esc(c.id)}"></label><img class="provider-logo-preview" src="${esc(c.logo||'')}" alt="Anteprima logo" ${c.logo?'':'hidden'}><button type="button" class="account-link" data-provider-op="remove-logo" data-provider-id="${esc(c.id)}" ${c.logo?'':'hidden'}>Rimuovi logo</button></fieldset><button type="submit" class="secondary-button">Salva identità</button></form>`:''}</article>`).join('')||'<p>Nessun account eWeLink collegato.</p>';
+   $('providerList').innerHTML=data.connections.map(c=>`<article class="provider-row"><div class="provider-row-identity">${providerBadge(c)}<div><strong>${esc(c.name||c.label)}</strong>${c.name&&c.name!==c.label?`<small>${esc(c.label)}</small>`:''}${c.person?`<small>${esc(c.person)}</small>`:''}${c.workspaceAccountId?'<small>Collegato alla plancia cliente · archivio unico</small>':'<small>Archivio di questo collegamento eWeLink</small>'}</div></div>${c.id===data.selected?'<span>In uso su questo dispositivo</span>':`<button type="button" class="primary-button" data-provider-op="select" data-provider-id="${esc(c.id)}">Usa questo account</button>`}${!data.impersonating?`<button type="button" class="account-link" data-provider-op="reauthorize" data-provider-id="${esc(c.id)}">Ricollega eWeLink</button><form data-provider-rename="${esc(c.id)}"><label>Nome e cognome o attività<input name="label" required maxlength="80" value="${esc(c.label)}"></label>${data.brandingAccounts?.length?`<label>Nome e logo da Gestione utenti<select name="brandingAccountId"><option value="">Identità personalizzata di questo collegamento</option>${data.brandingAccounts.map(b=>`<option value="${esc(b.id)}" ${b.id===c.brandingAccountId?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label><p>Se scegli una plancia cliente, nome, referente e logo vengono letti dal suo profilo senza ricaricarli.</p>`:''}<fieldset data-provider-local ${c.brandingAccountId?'hidden disabled':''}><label>Titolare o referente (facoltativo)<input name="person" maxlength="120" value="${esc(c.localPerson??c.person??'')}"></label><label>Logo di questo account<input type="file" accept="image/png,image/jpeg,image/webp" data-provider-logo="${esc(c.id)}"></label><img class="provider-logo-preview" src="${esc(c.logo||'')}" alt="Anteprima logo" ${c.logo?'':'hidden'}><button type="button" class="account-link" data-provider-op="remove-logo" data-provider-id="${esc(c.id)}" ${c.logo?'':'hidden'}>Rimuovi logo</button></fieldset><button type="submit" class="secondary-button">Salva identità</button></form>${data.canTransfer&&!c.workspaceAccountId?`<div class="provider-transfer"><label>Trasferisci cartelle e programmi a una plancia cliente<select data-transfer-target="${esc(c.id)}"><option value="">Scegli la plancia cliente…</option>${(data.transferTargets||[]).map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label><button type="button" class="secondary-button" data-provider-op="preview-transfer" data-provider-id="${esc(c.id)}">Verifica trasferimento</button><div data-transfer-preview hidden></div></div>`:''}`:''}</article>`).join('')||'<p>Nessun account eWeLink collegato.</p>';
    providerImages($('providerList'));
    $('providerAdd').hidden=data.impersonating;
    $('providerMessage').textContent='Il cambio vale solo per questo dispositivo. I timer degli altri account continuano a funzionare.';
@@ -392,7 +393,7 @@
   try{
    const result=await request('/api/app/providers',body);
    if(result.url){location.assign(result.url);return;}
-   if(body.op==='select'){location.replace(dashboardUrl().href);return;}
+   if(['select','stop-workspace'].includes(body.op)){location.replace(dashboardUrl().href);return;}
    if(body.op==='rename'){const current=await request('/api/app/session');if(current.authenticated!==false){Object.assign(state,current);branding();showQuickProvider();}}
    dialog.close();await openProviders();
   }catch(e){$('providerMessage').textContent=e.message;}
@@ -408,9 +409,28 @@
   dialog.innerHTML='<header><h2 id="providerTitle">Account eWeLink</h2><button id="providerClose" type="button" class="secondary-button">Chiudi</button></header><p id="providerMessage" role="status"></p><div id="providerList"></div><form id="providerAdd"><h3>Collega un altro account</h3><label>Nome personalizzato<input id="providerNewLabel" required maxlength="80" placeholder="Es. Sede centrale, Casa, Magazzino"></label><button type="submit" class="primary-button">Aggiungi account eWeLink</button><p>Accederai a eWeLink per autorizzare il nuovo collegamento.</p></form>';
   document.body.append(dialog);$('providerClose').onclick=()=>dialog.close();
   $('providerAdd').onsubmit=e=>{e.preventDefault();void providerAction({op:'add',label:$('providerNewLabel').value});};
-  $('providerList').onclick=e=>{const b=e.target.closest('[data-provider-op]');if(!b)return;if(b.dataset.providerOp==='remove-logo'){const form=b.closest('form');providerLogoJobs.delete(b.dataset.providerId);providerLogoDrafts.set(b.dataset.providerId,'');const input=form.querySelector('input[type=file]');input.value='';input.setCustomValidity('');form.querySelector('button[type=submit]').disabled=false;form.querySelector('.provider-logo-preview').hidden=true;b.hidden=true;return;}void providerAction({op:b.dataset.providerOp,id:b.dataset.providerId});};
-  $('providerList').onchange=e=>{if(e.target.matches('[data-provider-logo]'))void readProviderLogo(e.target);if(e.target.name==='brandingAccountId'){const local=e.target.closest('form').querySelector('[data-provider-local]');local.hidden=local.disabled=!!e.target.value;}};
+  $('providerList').onclick=e=>{const confirmation=e.target.closest('[data-transfer-confirm]');if(confirmation){void confirmProgramTransfer(confirmation);return;}const b=e.target.closest('[data-provider-op]');if(!b)return;if(b.dataset.providerOp==='preview-transfer'){void previewProgramTransfer(b);return;}if(b.dataset.providerOp==='remove-logo'){const form=b.closest('form');providerLogoJobs.delete(b.dataset.providerId);providerLogoDrafts.set(b.dataset.providerId,'');const input=form.querySelector('input[type=file]');input.value='';input.setCustomValidity('');form.querySelector('button[type=submit]').disabled=false;form.querySelector('.provider-logo-preview').hidden=true;b.hidden=true;return;}void providerAction({op:b.dataset.providerOp,id:b.dataset.providerId});};
+  $('providerList').onchange=e=>{if(e.target.matches('[data-transfer-target]')){const preview=e.target.closest('.provider-row').querySelector('[data-transfer-preview]');preview.hidden=true;preview.innerHTML='';}if(e.target.matches('[data-provider-logo]'))void readProviderLogo(e.target);if(e.target.name==='brandingAccountId'){const local=e.target.closest('form').querySelector('[data-provider-local]');local.hidden=local.disabled=!!e.target.value;}};
   $('providerList').onsubmit=e=>{const form=e.target.closest('[data-provider-rename]');if(form){e.preventDefault();if(!form.reportValidity())return;const source=form.elements.brandingAccountId;void providerAction({op:'rename',id:form.dataset.providerRename,label:form.elements.label.value,...(source?{brandingAccountId:source.value}:{}),...(!source?.value?{person:form.elements.person.value,logo:providerLogoDrafts.get(form.dataset.providerRename)||''}:{})});}};
+ }
+ async function previewProgramTransfer(button){
+  const row=button.closest('.provider-row'),target=row.querySelector('[data-transfer-target]').value;
+  if(!target){$('providerMessage').textContent='Seleziona la plancia cliente che deve ricevere i programmi.';return;}
+  button.disabled=true;
+  try{
+   const result=await request('/api/app/providers',{op:'preview-transfer',source:button.dataset.providerId,targetId:target});
+   if(row.querySelector('[data-transfer-target]').value!==target)return;
+   const panel=row.querySelector('[data-transfer-preview]');panel.hidden=false;
+   panel.innerHTML=`<h3>Conferma trasferimento a ${esc(result.targetName)}</h3><p>Da: ${esc(result.sourceName)}. ${result.names.length===1?'Sarà spostata 1 programmazione':'Saranno spostate '+result.names.length+' programmazioni'}, con gli stessi orari e senza duplicarle. Le cartelle e i programmi già presenti nel cliente saranno conservati. Il selettore aprirà poi la vera plancia cliente.</p><p>Cartelle: ${esc(result.folders.join(', ')||'nessuna')}.</p><ul>${result.names.map(n=>`<li>${esc(n)}</li>`).join('')}</ul><button type="button" class="primary-button" data-transfer-confirm data-source="${esc(button.dataset.providerId)}" data-target="${esc(target)}" data-proof="${esc(result.proof)}">Conferma collegamento e trasferimento</button>`;
+  }catch(e){$('providerMessage').textContent=e.message;}finally{button.disabled=false;}
+ }
+ async function confirmProgramTransfer(button){
+  const dialog=$('providerAccounts');dialog.inert=true;
+  try{
+   await request('/api/app/providers',{op:'transfer-programming',source:button.dataset.source,targetId:button.dataset.target,proof:button.dataset.proof});
+   await request('/api/app/providers',{op:'select',id:'client:'+button.dataset.target});
+   location.replace(dashboardUrl().href);
+  }catch(e){$('providerMessage').textContent=e.message;dialog.inert=false;}
  }
  async function readProviderLogo(input){
   const file=input.files?.[0],form=input.closest('form'),id=input.dataset.providerLogo;if(!file)return;
