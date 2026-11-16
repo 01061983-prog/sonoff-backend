@@ -49,6 +49,7 @@
   $('customerName').textContent=name;
   const owner=$('customerOwner');owner.hidden=!person||person.toLocaleLowerCase('it')===name.toLocaleLowerCase('it');owner.textContent=owner.hidden?'':'Titolare: '+person;
   const provider=$('customerProviderName');provider.hidden=!state.selectedProviderLabel||state.selectedProviderLabel===name;provider.textContent=provider.hidden?'':'eWeLink · '+state.selectedProviderLabel;
+  if(state.account?.role==='admin'&&!state.impersonating){provider.hidden=false;provider.textContent='Archivio personale dell’amministratore'+(state.selectedProviderLabel?' · '+state.selectedProviderLabel:'');}
   const image=$('customerLogo'),source=identityData.logo||defaultCustomerLogo;
   image.alt=identityData.logo?'Logo di '+name:'Logo PACE';image.hidden=false;
   if(image.getAttribute('src')!==source){
