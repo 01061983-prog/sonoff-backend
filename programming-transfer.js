@@ -43,7 +43,8 @@ module.exports=function({db,programming,listDevices,now=Date.now}){
    const sourceIntent=(await t.get(sourceIntentRef)).data()||{},targetIntent=(await t.get(targetIntentRef)).data()||{};
    if(JSON.stringify(fingerprint(records))!==JSON.stringify(proof.versions)||from.revision!==proof.sourceRevision||to.revision!==proof.targetRevision)throw fail('transfer_changed','Cartelle o programmi sono cambiati. Ripeti l’anteprima prima di trasferire.');
    if(records.length+existing.length>100)throw fail('transfer_limit','La plancia di destinazione supererebbe il limite di 100 programmazioni.');
-   if(!sourceAccount.data()?.credentials||sourceAccount.data()?.revoked||sourceAccount.data()?.reauthRequired)throw fail('transfer_auth','Ricollega il collegamento sorgente prima del trasferimento.');
+   // Source ownership is authorized by the administrator profile, not by an
+   // obsolete provider token. Only the destination grant will execute timers.
    if(!targetAccount.data()?.credentials||targetAccount.data()?.revoked||targetAccount.data()?.reauthRequired)throw fail('transfer_auth','Ricollega eWeLink nella plancia cliente prima del trasferimento.');
    for(const s of records){
     const d=devices.find(d=>d.deviceid===s.deviceId);
