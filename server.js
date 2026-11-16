@@ -122,12 +122,35 @@ function failure(res, error, req) {
   return res.status(error.status || 502).json({
     ok: false, error: error.code || "upstream_error", msg: error.message,
     providerError: error.providerError,
-    canResume: error.code === "not_authenticated" && Boolean(req?.browserSession)
+    canResume: error.code === "not_authenticated" && Boolean(req?.browserSession || req?.appAccount?.providerOwner)
   });
 }
 const route = fn => async (req, res) => {
   try { return await fn(req, res); }
   catch (error) {
+    if (appAccounts && programming && req.programmingOwner && error.code === "not_authenticated" && !res.headersSent) {
+      const used = req.cookies.ewelink_access;
+      let retriedRead = false;
+      try {
+        const credentials = await programming.access(req.programmingOwner, {
+          rejectedToken: used,
+          inspection: req.appImpersonating === true && req.appReadOnly === true
+        });
+        req.cookies = {...req.cookies, ewelink_access: credentials.accessToken,
+          ewelink_refresh: credentials.refreshToken, ewelink_expires: String(credentials.atExpiredTime)};
+        // Recover readings only. Never replay a command or a schedule save.
+        if (req.method === "GET" && req.path?.startsWith("/api/")) {
+          retriedRead = true;
+          return await fn(req, res);
+        }
+        error = cloudError(409, "session_updated", "Collegamento eWeLink ripristinato. Verifica lo stato e riprova il comando.");
+      } catch (recoveryError) {
+        if (retriedRead && recoveryError.code === "not_authenticated") {
+          try { await programming.markAuthenticationRequired(req); } catch {}
+        }
+        error = recoveryError;
+      }
+    }
     if (!appAccounts && programming && req.browserSession && error.code === "not_authenticated" && !res.headersSent) {
       const used = req.cookies.ewelink_access;
       try {
@@ -267,7 +290,7 @@ app.get("/login", route(async (req, res) => {
     if(req.appImpersonating) throw cloudError(403,"app_link_owner","Il collegamento eWeLink deve essere completato dal titolare dell’account.");
     req.oauthConnection=appAccounts.linkIntent(req);
     res.clearCookie("ewelink_link_intent",{...COOKIE_OPTIONS,path:"/login"});
-    if(req.appAccount.providerOwner&&!req.oauthConnection){
+    if(req.appAccount.providerOwner&&!req.oauthConnection&&req.query.reauthorize!=="1"){
       try{await appAccounts.provider(req);return res.redirect(returnUrl(req.query.returnUrl));}
       catch(error){if(error.code!=="not_authenticated")throw error;}
     }

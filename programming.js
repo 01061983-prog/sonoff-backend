@@ -149,7 +149,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
    if(data?.credentials&&open(data.credentials).accessToken===used)t.set(ref,{...data,reauthRequired:true,renewAt:core.NEVER,lastError:'Ricollega eWeLink da un dispositivo: il collegamento verrà aggiornato anche sugli altri.'});
   });
  }
- async function access(owner,{scheduled=false,inspection=false}={}){
+ async function access(owner,{scheduled=false,inspection=false,rejectedToken}={}){
   if(scheduled&&inspection)throw error(403,"app_readonly","La consultazione amministrativa non può eseguire timer.");
   const linkedAccount=inspection?null:await authorizeOwner(owner);
   const ref=accounts().doc(owner),claim=crypto.randomUUID();
@@ -161,7 +161,9 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
    if(data.revoked||!data.credentials)throw error(401,'not_authenticated','Ricollega eWeLink nella sezione Programmazione.');
    if(linkedAccount&&(data.browserUntil||0)<now()+59*core.DAY){data.browserUntil=now()+60*core.DAY;t.set(ref,data);}
    const credentials=open(data.credentials);
-   if(credentials.atExpiredTime>now()+5*60000)return {credentials};
+   // A provider rejection can precede the advertised expiry. Reuse a newer grant
+   // saved by another device; otherwise rotate the rejected token once.
+   if(credentials.atExpiredTime>now()+5*60000&&credentials.accessToken!==rejectedToken)return {credentials};
    if(data.refreshUntil>now())throw error(409,'refresh_busy','Rinnovo dell’accesso in corso.');
    if(credentials.rtExpiredTime<=now())throw error(401,'not_authenticated','Autorizzazione dei timer scaduta. Ricollega eWeLink.');
    t.set(ref,{...data,refreshClaim:claim,refreshUntil:now()+120000});return {credentials,refresh:true};

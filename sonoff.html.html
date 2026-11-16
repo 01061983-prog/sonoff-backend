@@ -19,7 +19,7 @@
   <script src="scene-pages.js?v=46"></script>
   <script src="room-map.js?v=48"></script>
   <link rel="stylesheet" href="room-map.css?v=48">
-  <link rel="stylesheet" href="app.css?v=72">
+  <link rel="stylesheet" href="app.css?v=73">
   <script src="menu-bar.js?v=61"></script>
   <link rel="stylesheet" href="menu-bar.css?v=65">
   <script src="push-settings.js?v=68"></script>
@@ -279,13 +279,13 @@
             if(window.AppAccounts?.handleError(data))throw Object.assign(new Error(data.msg),{auth:true});
             if (response.status === 401 || data?.error === "not_authenticated") {
                 resumableSession = data?.canResume === true;
-                const error = new Error("Sessione scaduta. Accedi nuovamente.");
+                const error = new Error(data?.msg || "Collegamento eWeLink da ripristinare.");
                 error.auth = true;
                 showLoginRequired(window.AppAccounts?.state.enabled && !window.AppAccounts.state.account?.linked
                     ? "Il tuo account è pronto. Collega eWeLink per vedere i tuoi dispositivi: questo passaggio serve soltanto al primo utilizzo."
                     : data?.providerError === 401
-                    ? "eWeLink non riconosce più questa sessione. Ricollega l’account solo quando vuoi riprendere il controllo."
-                    : "Accedi per collegare questo browser. La pagina resta qui, senza riavviare automaticamente il login.");
+                    ? "Il collegamento eWeLink deve essere autorizzato di nuovo. Premi Accedi a eWeLink: l’aggiornamento varrà anche sugli altri dispositivi."
+                    : data?.msg || "Premi Accedi a eWeLink per ripristinare il collegamento dell’account selezionato.");
                 throw error;
             }
             if (!response.ok || data?.ok !== true) {
@@ -1278,7 +1278,7 @@
         if (commandBusy || devicesLoading) return;
         window.location.href = window.location.origin !== BACKEND_URL
             ? BACKEND_URL + "/app/index.html"
-            : BACKEND_URL + "/login?returnUrl=" + encodeURIComponent(BACKEND_URL + "/app/index.html");
+            : BACKEND_URL + "/login?reauthorize=1&returnUrl=" + encodeURIComponent(BACKEND_URL + "/app/index.html");
     }
     function exportScenes() {
         const data = JSON.stringify({version: 1, scenes: loadUserScenes()}, null, 2);
