@@ -19,7 +19,7 @@
   <script src="scene-pages.js?v=46"></script>
   <script src="room-map.js?v=48"></script>
   <link rel="stylesheet" href="room-map.css?v=48">
-  <link rel="stylesheet" href="app.css?v=77">
+  <link rel="stylesheet" href="app.css?v=78">
   <script src="menu-bar.js?v=61"></script>
   <link rel="stylesheet" href="menu-bar.css?v=65">
   <script src="push-settings.js?v=68"></script>
@@ -135,8 +135,8 @@
   </section>
 
   <section id="programmingView" class="view" style="display:none" aria-labelledby="programmingHeading">
-    <div class="page-heading"><div><p class="eyebrow">IL TUO TEMPO, I TUOI SPAZI</p><h1 id="programmingHeading">Programmazione<span class="green-dot">.</span></h1><p class="heading-sub">Scegli uno scenario o un dispositivo, poi il giorno e l’orario. Lo spegnimento è facoltativo.</p></div><div class="programming-main-actions"><button id="newProgrammingBtn" class="primary-button programming-create" onclick="editProgramming(null)">+ Nuova programmazione</button><button type="button" class="secondary-button" onclick="editProgrammingFolder(null)">Nuova cartella</button></div></div>
-    <p class="programming-zone"><span data-icon="calendar"></span> Ora italiana · cambio dell’ora automatico</p>
+    <div class="page-heading"><div><h1 id="programmingHeading">Programmazione<span class="green-dot">.</span></h1></div><div class="programming-main-actions"><button id="newProgrammingBtn" class="primary-button programming-create" onclick="editProgramming(null)">+ Nuova programmazione</button><button type="button" class="secondary-button" onclick="editProgrammingFolder(null)">Nuova cartella</button></div></div>
+    
     <div id="programmingStatus" class="info-strip" role="status">Caricamento programmazioni…</div>
     <div id="programmingFolders" class="programming-folders"></div><div id="programmingFolderBar" class="programming-folder-bar"></div>
     <form id="programmingForm" class="scene-editor programming-form" novalidate hidden>
@@ -176,7 +176,7 @@
     </form>
 <div id="programmingList" class="programming-list"></div>
     <dialog id="programmingFolderDialog" class="control-dialog programming-folder-dialog" aria-labelledby="programmingFolderTitle"><form id="programmingFolderForm"><div class="editor-heading"><h2 id="programmingFolderTitle">Nuova cartella</h2><button type="button" class="secondary-button" onclick="document.getElementById('programmingFolderDialog').close()">Chiudi</button></div><label for="programmingFolderName">Nome della cartella</label><input id="programmingFolderName" maxlength="80" required placeholder="Es. Basket"><p id="programmingFolderError" class="programming-validation" role="alert" hidden></p><button id="programmingFolderSave" type="submit" class="primary-button">Salva cartella</button></form></dialog>
-    <details class="programming-help"><summary>Come funzionano le programmazioni</summary><p class="page-note">Le fasce attive mantengono accese le proprie luci anche durante uno spegnimento manuale dalla plancia. Se salvi o riattivi una fascia già iniziata, le luci si accendono subito; impulsi e cancelli sono esclusi. Le programmazioni concluse, singole o con una data finale, spariscono dall’elenco, mentre gli esiti incerti restano visibili.</p><p>I timer funzionano anche con la webapp chiusa. Ogni fascia invia un comando esplicito: i comandi manuali restano validi fino al prossimo orario programmato.</p><p>Le fasce dello stesso account sullo stesso canale possono sovrapporsi: una fascia non spegne la luce mentre un’altra la richiede accesa.</p><p>In caso di interruzione, i comandi ON/OFF non completati vengono riallineati allo stato previsto quando tornano disponibili connessione e dati. Il recupero rispetta le altre fasce attive. Impulsi e cancelli senza stato verificabile non vengono ripetuti automaticamente. Server, eWeLink e dispositivo devono essere disponibili.</p><p>Nel cambio all’ora solare, per gli orari ripetuti si usa la prima occorrenza per l’accensione e l’ultima per lo spegnimento finale; un orario settimanale inesistente nel cambio all’ora legale viene saltato.</p></details>
+    <details class="programming-help"><summary>Come funzionano le programmazioni</summary><p>Scegli uno scenario o un dispositivo, poi il giorno e l’orario. Lo spegnimento è facoltativo.</p><p class="programming-zone"><span data-icon="calendar"></span> Ora italiana · cambio dell’ora automatico</p><p id="programmingHelpStatus"></p><p>Puoi creare cartelle oppure lasciare le programmazioni senza cartella.</p><p class="page-note">Le fasce attive mantengono accese le proprie luci anche durante uno spegnimento manuale dalla plancia. Se salvi o riattivi una fascia già iniziata, le luci si accendono subito; impulsi e cancelli sono esclusi. Le programmazioni concluse, singole o con una data finale, spariscono dall’elenco, mentre gli esiti incerti restano visibili.</p><p>I timer funzionano anche con la webapp chiusa. Ogni fascia invia un comando esplicito: i comandi manuali restano validi fino al prossimo orario programmato.</p><p>Le fasce dello stesso account sullo stesso canale possono sovrapporsi: una fascia non spegne la luce mentre un’altra la richiede accesa.</p><p>In caso di interruzione, i comandi ON/OFF non completati vengono riallineati allo stato previsto quando tornano disponibili connessione e dati. Il recupero rispetta le altre fasce attive. Impulsi e cancelli senza stato verificabile non vengono ripetuti automaticamente. Server, eWeLink e dispositivo devono essere disponibili.</p><p>Nel cambio all’ora solare, per gli orari ripetuti si usa la prima occorrenza per l’accensione e l’ultima per lo spegnimento finale; un orario settimanale inesistente nel cambio all’ora legale viene saltato.</p></details>
     <button id="disconnectProgrammingBtn" class="secondary-button" hidden onclick="disconnectProgramming()">Disattiva tutti i timer e scollega l’esecuzione automatica</button>
   </section>
   <section id="climateView" class="view" style="display:none" aria-labelledby="climateHeading">
@@ -1679,7 +1679,7 @@
         programmingEpoch++;programmingReadSerial++;programmingReadTask=null;italianLocationEpoch++;solarPreviewEpoch++;
         programmingData = {schedules:[],folders:[],organizationRevision:0,connected:false};programmingEditing=null;programmingFolderId="";programmingFolderEditing=null;programmingElement("FolderDialog").close();programmingElement("Folders").innerHTML="";programmingElement("FolderBar").innerHTML="";
         programmingElement('List').innerHTML='';programmingElement('Form').hidden=true;
-        programmingElement('Status').textContent='Accedi al tuo account per vedere le tue programmazioni.';
+        programmingElement('Status').textContent='';programmingElement('Status').hidden=true;programmingElement('HelpStatus').textContent='Accedi al tuo account per vedere le tue programmazioni.';
     }
     async function openProgramming(){
         const epoch=programmingEpoch;
@@ -1698,7 +1698,7 @@
                 if(provider&&data.accountId!==provider)throw new Error('L’account delle programmazioni non corrisponde a quello selezionato. Riapri la plancia.');
                 if(programmingData.accountId&&data.accountId!==programmingData.accountId)clearProgramming();
                 programmingData=data;renderProgramming();
-            }catch(error){if(epoch===programmingEpoch&&serial===programmingReadSerial)programmingElement('Status').textContent=error.message;}
+            }catch(error){if(epoch===programmingEpoch&&serial===programmingReadSerial){programmingElement('Status').textContent=error.message;programmingElement('Status').hidden=false;}}
         })();
         programmingReadTask=task;
         try{return await task;}finally{if(programmingReadTask===task)programmingReadTask=null;}
@@ -1837,7 +1837,7 @@
         const folders=programmingData.folders||[],folder=folders.find(f=>f.id===programmingFolderId);
         if(!folder)programmingFolderId='';
         programmingElement('Folders').hidden=!!folder;document.getElementById('newProgrammingBtn').hidden=!!folder;
-        programmingElement('Folders').innerHTML=folders.length?folders.map(f=>`<button type="button" class="programming-folder-tile" onclick="setProgrammingFolder(${jsArg(f.id)})" aria-label="Apri cartella ${escapeHtml(f.name)}"><span aria-hidden="true">${icon('folder')}</span><strong>${escapeHtml(f.name)}</strong><small>${programmingData.schedules.filter(s=>s.folderId===f.id).length} ${programmingData.schedules.filter(s=>s.folderId===f.id).length===1?'programmazione':'programmazioni'}</small></button>`).join(''):'<p class="page-note">Puoi creare cartelle oppure lasciare le programmazioni senza cartella.</p>';
+        programmingElement('Folders').innerHTML=folders.length?folders.map(f=>`<button type="button" class="programming-folder-tile" onclick="setProgrammingFolder(${jsArg(f.id)})" aria-label="Apri cartella ${escapeHtml(f.name)}"><span aria-hidden="true">${icon('folder')}</span><strong>${escapeHtml(f.name)}</strong><small>${programmingData.schedules.filter(s=>s.folderId===f.id).length} ${programmingData.schedules.filter(s=>s.folderId===f.id).length===1?'programmazione':'programmazioni'}</small></button>`).join(''):'';
         programmingElement('FolderBar').innerHTML=folder?`<button type="button" class="secondary-button" onclick="setProgrammingFolder('')">← Tutte le cartelle</button><h2>${escapeHtml(folder.name)}</h2><button type="button" class="primary-button programming-create" onclick="editProgramming(null)">+ Nuova programmazione</button><button type="button" class="secondary-button" onclick="editProgrammingFolder(${jsArg(folder.id)})">Rinomina cartella</button><button type="button" class="btn-ghost-danger" onclick="deleteProgrammingFolder(${jsArg(folder.id)})">Elimina cartella</button>`:'<h2>Senza cartella</h2>';
         if(!programmingElement('Form').hidden){const select=programmingElement('Folder'),value=select.value;select.innerHTML=programmingFolderOptions(value);select.value=value;}
     }
@@ -1866,7 +1866,8 @@
         const data=programmingData;
         const expanded=new Set([...programmingElement('List').querySelectorAll('details[data-schedule-id][open]')].map(el=>el.dataset.scheduleId));
         renderProgrammingFolders();
-        programmingElement('Status').textContent=data.connectionError|| (data.connected?'Le tue programmazioni sono sincronizzate. Richiedono Internet nell’impianto; al ritorno della connessione, i comandi ON/OFF non completati vengono riallineati allo stato previsto. Gli impulsi non vengono ripetuti automaticamente.':'Crea la prima programmazione per collegare l’esecuzione automatica al tuo account.');
+        programmingElement('Status').textContent=data.connectionError||'';programmingElement('Status').hidden=!data.connectionError;
+        programmingElement('HelpStatus').textContent=(data.connected?'Le tue programmazioni sono sincronizzate. Richiedono Internet nell’impianto; al ritorno della connessione, i comandi ON/OFF non completati vengono riallineati allo stato previsto. Gli impulsi non vengono ripetuti automaticamente.':'Crea la prima programmazione per collegare l’esecuzione automatica al tuo account.');
         document.getElementById('disconnectProgrammingBtn').hidden=!data.connected;
         const shown=data.schedules.filter(s=>(s.folderId||'')===programmingFolderId);
         programmingElement('List').innerHTML=shown.length?shown.map(s=>{
