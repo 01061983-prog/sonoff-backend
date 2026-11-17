@@ -19,10 +19,10 @@
   <script src="scene-pages.js?v=46"></script>
   <script src="room-map.js?v=48"></script>
   <link rel="stylesheet" href="room-map.css?v=48">
-  <link rel="stylesheet" href="app.css?v=80">
+  <link rel="stylesheet" href="app.css?v=81">
   <script src="menu-bar.js?v=61"></script>
   <link rel="stylesheet" href="menu-bar.css?v=65">
-  <script src="push-settings.js?v=68"></script>
+  <script src="push-settings.js?v=81"></script>
   <script src="climate.js?v=68"></script>
   <link rel="stylesheet" href="climate.css?v=3">
   <style>
@@ -169,6 +169,7 @@
         <div id="programmingModeRow" class="form-row"><label for="programmingMode">Modalità di programmazione</label><select id="programmingMode"><option value="custom">Personalizzata · orari, alba o tramonto</option><option value="solar">Crepuscolare · scegli alba o tramonto</option><option value="twilight">Crepuscolare notte · tramonto → alba</option><option value="daylight">Crepuscolare giorno · alba → tramonto</option></select></div><p id="programmingTwilightNote" class="programming-summary" hidden>Accende al tramonto e spegne all’alba successiva. Gli orari seguono automaticamente il sole nella località scelta, senza aggiornamenti manuali. Per ripeterlo ogni giorno scegli “Ogni giorno”.</p><div id="programmingHours" class="programming-hours"><div class="form-row"><label id="programmingStartLabel" for="programmingStart">Accendi alle / dalle</label><select id="programmingStartType" aria-label="Quando iniziare"><option value="fixed">Orario fisso</option><option value="sunset">Al tramonto</option><option value="sunrise">All’alba</option></select><input id="programmingStart" type="time" required step="60"></div><div id="programmingEndGroup"><label class="programming-checkbox"><input type="checkbox" id="programmingHasEnd">Aggiungi lo spegnimento (facoltativo)</label><label class="programming-checkbox"><input type="checkbox" id="programmingHasTimer">Spegni dopo (timer facoltativo)</label><div id="programmingTimerRow" class="form-row" hidden><label for="programmingTimerMinutes">Minuti</label><input id="programmingTimerMinutes" type="number" inputmode="numeric" min="0" max="1439" step="1" value="0"><label for="programmingTimerSeconds">Secondi</label><input id="programmingTimerSeconds" type="number" inputmode="numeric" min="0" max="59" step="1" value="0"><p class="page-note">Durata dall’orario di accensione programmato. Scegli il timer oppure un orario di spegnimento. Richiede Internet nell’impianto; i tempi effettivi dipendono dalla connessione e da eWeLink.</p></div><div id="programmingEndRow" class="form-row" hidden><div id="programmingEndDateRow"><label for="programmingEndDate">Data di spegnimento</label><input id="programmingEndDate" type="date"></div><label for="programmingEnd">Spegni alle</label><select id="programmingEndType" aria-label="Quando spegnere"><option value="fixed">Orario fisso</option><option value="sunrise">All’alba</option><option value="sunset">Al tramonto</option></select><input id="programmingEnd" type="time" step="60"><p id="programmingFixedEndNote" class="page-note">Per una data precisa scegli anche il giorno di fine. Nelle ripetizioni giornaliere o settimanali, un’ora precedente indica il giorno successivo.</p></div></div></div>
         <fieldset id="programmingSolarGroup" class="programming-solar" hidden><legend>Località per alba e tramonto</legend><p class="page-note">Scegli provincia e comune: le coordinate vengono impostate automaticamente. Gli orari seguono il sole nella località scelta e sono espressi nell’ora italiana.</p><label class="programming-checkbox"><input id="programmingCustomLocation" type="checkbox">Usa coordinate personalizzate</label><div id="programmingLocationPicker"><div class="programming-location-pickers"><div class="form-row"><label for="programmingProvinceSearch">Cerca provincia</label><input id="programmingProvinceSearch" type="search" placeholder="Nome o sigla, es. Pavia o PV" autocomplete="off"><div id="programmingProvinceResults" class="location-search-results" role="group" aria-label="Risultati province" hidden></div><p id="programmingProvinceResultsStatus" class="page-note" role="status" hidden></p><label for="programmingProvince">Provincia / città metropolitana</label><select id="programmingProvince"><option value="">Caricamento province…</option></select></div><div class="form-row"><label for="programmingMunicipalitySearch">Cerca comune</label><input id="programmingMunicipalitySearch" type="search" placeholder="Nome del comune" autocomplete="off"><div id="programmingMunicipalityResults" class="location-search-results" role="group" aria-label="Risultati comuni" hidden></div><p id="programmingMunicipalityResultsStatus" class="page-note" role="status" hidden></p><label for="programmingMunicipality">Comune dell’impianto</label><select id="programmingMunicipality"><option value="">Seleziona prima la provincia</option></select></div></div><p id="programmingLocationStatus" class="page-note" role="status"></p><button id="programmingLocationsRetry" type="button" class="secondary-button" hidden onclick="loadProgrammingLocations()">Riprova caricamento località</button><p class="page-note">La scelta usa una posizione indicativa del comune. Per indicare il punto esatto dell’impianto, usa le coordinate personalizzate.</p></div><div id="programmingCoordinates" class="programming-location" hidden><div class="form-row"><label for="programmingLocation">Località</label><input id="programmingLocation" maxlength="80" value="Pavia"></div><div class="form-row"><label for="programmingLatitude">Latitudine</label><input id="programmingLatitude" type="number" min="-90" max="90" step="any" value="45.19205"></div><div class="form-row"><label for="programmingLongitude">Longitudine</label><input id="programmingLongitude" type="number" min="-180" max="180" step="any" value="9.15917"></div></div><button id="programmingSolarPreviewBtn" type="button" class="secondary-button" onclick="previewProgrammingSolar()">Verifica alba e tramonto</button><p id="programmingSolarPreview" class="page-note" role="status"></p><p class="page-note">Con alba o tramonto, lo spegnimento usa la prima occorrenza successiva all’accensione, anche il giorno dopo. I giorni selezionati indicano il giorno di inizio.</p><p class="page-note">Dati astronomici: <a href="https://sunrise-sunset.org" target="_blank" rel="noopener noreferrer">Sunrise-Sunset.org</a>. Località: <a href="https://www.istat.it/classificazione/codici-dei-comuni-delle-province-e-delle-regioni/" target="_blank" rel="noopener noreferrer">ISTAT</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>; coordinate indicative elaborate dai confini comunali.</p></fieldset>
         <p id="programmingValidation" class="programming-validation" hidden></p><button id="programmingUseToday" type="button" class="secondary-button" hidden onclick="programmingDateToday()">Usa la data di oggi</button><p id="programmingRequestError" class="programming-validation" role="alert" hidden></p><p id="programmingSummary" class="programming-summary" aria-live="polite"></p>
+        <label class="programming-checkbox"><input id="programmingNameAuto" type="checkbox" checked>Nome automatico · aggiorna dispositivo, data e orari</label>
         <div class="form-row"><label for="programmingName">Nome della programmazione</label><input id="programmingName" maxlength="100" placeholder="Dispositivo · data · dalle ore… alle ore…"></div>
         <div class="programming-color-row"><label for="programmingColor">Colore delle programmazioni di questo dispositivo</label><input id="programmingColor" type="color" value="#b94712"><button id="programmingSaveColor" type="button" onclick="saveProgrammingColor()">Salva solo il colore</button><p id="programmingColorStatus" class="page-note" role="status">Si applica a tutte le programmazioni dello stesso dispositivo in questo account. Viene salvato anche con la programmazione.</p><div id="programmingNamePreview" class="programming-name-preview" aria-hidden="true"></div></div>
         <label id="programmingConsentRow" class="programming-checkbox programming-consent"><input type="checkbox" id="programmingConsent">Consento l’esecuzione automatica dei miei timer a webapp chiusa. Posso disattivarla da questa sezione.</label>
@@ -1881,7 +1882,7 @@
             const previewTarget=(s.kind==='scene'?'Scenario · ':s.kind==='daikin'?'Clima · ':'Dispositivo · ')+s.deviceName+(s.kind==='multi'?' · '+s.outlets.map(o=>'CH '+(o+1)).join(', '):'');
             const previewTime=(s.action==='on'&&s.start==='sunset'&&s.end==='sunrise'?'Crepuscolare automatico · '+description:description)+(s.action==='on'&&!s.end&&!s.autoOffSeconds?' · Nessuno spegnimento automatico':'');
             const previewRepeat=(s.repeat==='date'?'Solo il ':s.repeat==='weekly'&&!isDailyProgramming(s)?'Ogni settimana · ':'')+when;
-            return `<details class="programming-card programming-disclosure" style="--programming-color:${programmingColorFor(s)}" data-schedule-id="${escapeHtml(s.id)}" ${expanded.has(s.id)?'open':''}><summary><span class="programming-summary-copy"><span class="programming-summary-title"><strong>${escapeHtml(s.name)}</strong><span class="programming-badge ${outcome.attention?'is-warning':s.enabled?'is-enabled':''}">${escapeHtml(outcome.label)}</span></span><span class="programming-summary-target">${escapeHtml(previewTarget)}</span><span class="programming-summary-time">${escapeHtml(previewTime)}</span><span class="programming-summary-repeat">${escapeHtml(previewRepeat)}</span></span><span class="programming-chevron" aria-hidden="true">⌄</span></summary><div class="programming-specifics"><div class="programming-card-top"><span class="programming-badge ${outcome.attention?'is-warning':s.enabled?'is-enabled':''}">${escapeHtml(outcome.label)}</span></div><p class="programming-device">${s.kind==='scene'?'Scenario · ':s.kind==='daikin'?'Clima · ':''}${escapeHtml(s.deviceName)}${s.kind==='daikin'&&s.action==='on'&&window.Climate?.describeSettings(s.daikin)?' · '+escapeHtml(window.Climate.describeSettings(s.daikin)):''}${s.kind==='multi'?' · '+s.outlets.map(o=>'CH '+(o+1)).join(', '):''}</p><p class="programming-time">${escapeHtml(s.action==='on'&&s.start==='sunset'&&s.end==='sunrise'?'Crepuscolare automatico · '+description:description)}</p>${s.solarError?`<p class="programming-validation" role="status">${escapeHtml(s.solarError)}</p>`:''}<p>${escapeHtml(when)}</p>${next?`<p class="page-note">Prossimo comando: ${escapeHtml(next)}</p>`:''}${s.last?`<p class="programming-result ${outcome.attention?'is-warning':''}" role="status">${escapeHtml(outcome.message)}</p>${outcome.note?`<p class="page-note">${escapeHtml(outcome.note)}</p>`:''}`:''}<label class="programming-move">Cartella<select aria-label="Cartella di ${escapeHtml(s.name)}" onchange="moveProgramming(${jsArg(s.id)},this.value)">${programmingFolderOptions(s.folderId||'')}</select></label><div class="scene-actions"><button onclick="editProgramming(${jsArg(s.id)})">Modifica</button><button onclick="changeProgramming('toggle',${jsArg(s.id)})">${s.enabled?'Sospendi':'Riattiva'}</button><button class="btn-ghost-danger" onclick="changeProgramming('delete',${jsArg(s.id)})">Elimina</button></div></div></details>`;
+            return `<details class="programming-card programming-disclosure" style="--programming-color:${programmingColorFor(s)};--programming-ink:${programmingColorInk(programmingColorFor(s))}" data-schedule-id="${escapeHtml(s.id)}" ${expanded.has(s.id)?'open':''}><summary><span class="programming-summary-copy"><span class="programming-summary-title"><strong>${escapeHtml(s.name)}</strong><span class="programming-badge ${outcome.attention?'is-warning':s.enabled?'is-enabled':''}">${escapeHtml(outcome.label)}</span></span><span class="programming-summary-target">${escapeHtml(previewTarget)}</span><span class="programming-summary-time">${escapeHtml(previewTime)}</span><span class="programming-summary-repeat">${escapeHtml(previewRepeat)}</span></span><span class="programming-chevron" aria-hidden="true">⌄</span></summary><div class="programming-specifics"><div class="programming-card-top"><span class="programming-badge ${outcome.attention?'is-warning':s.enabled?'is-enabled':''}">${escapeHtml(outcome.label)}</span></div><p class="programming-device">${s.kind==='scene'?'Scenario · ':s.kind==='daikin'?'Clima · ':''}${escapeHtml(s.deviceName)}${s.kind==='daikin'&&s.action==='on'&&window.Climate?.describeSettings(s.daikin)?' · '+escapeHtml(window.Climate.describeSettings(s.daikin)):''}${s.kind==='multi'?' · '+s.outlets.map(o=>'CH '+(o+1)).join(', '):''}</p><p class="programming-time">${escapeHtml(s.action==='on'&&s.start==='sunset'&&s.end==='sunrise'?'Crepuscolare automatico · '+description:description)}</p>${s.solarError?`<p class="programming-validation" role="status">${escapeHtml(s.solarError)}</p>`:''}<p>${escapeHtml(when)}</p>${next?`<p class="page-note">Prossimo comando: ${escapeHtml(next)}</p>`:''}${s.last?`<p class="programming-result ${outcome.attention?'is-warning':''}" role="status">${escapeHtml(outcome.message)}</p>${outcome.note?`<p class="page-note">${escapeHtml(outcome.note)}</p>`:''}`:''}<label class="programming-move">Cartella<select aria-label="Cartella di ${escapeHtml(s.name)}" onchange="moveProgramming(${jsArg(s.id)},this.value)">${programmingFolderOptions(s.folderId||'')}</select></label><div class="scene-actions"><button onclick="editProgramming(${jsArg(s.id)})">Modifica</button><button onclick="changeProgramming('toggle',${jsArg(s.id)})">${s.enabled?'Sospendi':'Riattiva'}</button><button class="btn-ghost-danger" onclick="changeProgramming('delete',${jsArg(s.id)})">Elimina</button></div></div></details>`;
         }).join(''):'<div class="empty-state"><h3>Nessuna programmazione in questa sezione</h3><p>Premi + Nuova programmazione per aggiungerne una qui.</p></div>';
     }
     function editProgramming(id){
@@ -1927,7 +1928,7 @@
         void loadProgrammingLocations(loc.municipalityId||'018110',loc.provinceCode||'018');
         form.scrollIntoView({behavior:'smooth',block:'start'});select.focus();
     }
-    function cancelProgramming(){italianLocationEpoch++;solarPreviewEpoch++;programmingEditing=null;programmingElement('Form').hidden=true;}
+    function cancelProgramming(){window.SchedulePicker?.dismiss();italianLocationEpoch++;solarPreviewEpoch++;programmingEditing=null;programmingElement('Form').hidden=true;}
     function programmingTarget(){
         const value=programmingElement('Device').value;
         if(value.startsWith('scene:'))return {scene:sceneSyncMode==='live'&&cloudScenes?.find(s=>s.id===value.slice(6))};
@@ -1935,6 +1936,11 @@
         return {device:currentDevices.find(d=>d.deviceid===value)};
     }
     function programmingColorKey(s){return s.kind==='scene'?'scene:'+s.workspaceId+':'+s.sceneId:'device:'+s.deviceId;}
+    function programmingColorInk(color){
+        if(!/^#[0-9a-f]{6}$/i.test(color||''))return '#ffffff';
+        const rgb=[1,3,5].map(i=>parseInt(color.slice(i,i+2),16)/255).map(c=>c<=.04045?c/12.92:Math.pow((c+.055)/1.055,2.4));
+        return .2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2]>.179?'#000000':'#ffffff';
+    }
     function programmingColorFor(s){const color=programmingData.targetColors?.[programmingColorKey(s)];return /^#[0-9a-f]{6}$/i.test(color||'')?color:'#b94712';}
     function programmingSuggestedName(d){
         if(!d.name)return '';
@@ -1953,6 +1959,7 @@
         return d.name.slice(0,Math.max(8,100-suffix.length))+suffix;
     }
     function updateProgrammingIdentity(){
+        programmingElement('NameAuto').checked=programmingNameAutomatic;
         const {device,scene,daikin}=programmingTarget(),target=device||scene||daikin;
         const key=scene?'scene:'+sceneWorkspace.id+':'+scene.id:target?'device:'+(device?.deviceid||daikin?.id):'';
         if(key!==programmingColorTarget){programmingColorTarget=key;programmingElement('Color').value=programmingColorFor(scene?{kind:'scene',workspaceId:sceneWorkspace.id,sceneId:scene.id}:{deviceId:device?.deviceid||daikin?.id});programmingElement('ColorStatus').textContent='Si applica a tutte le programmazioni dello stesso dispositivo in questo account. Viene salvato anche con la programmazione.';}
@@ -1960,7 +1967,7 @@
         const start=programmingElement('StartType').value==='fixed'?programmingElement('Start').value:programmingElement('StartType').value;
         const end=programmingElement('HasEnd').checked?(programmingElement('EndType').value==='fixed'?programmingElement('End').value:programmingElement('EndType').value):null;
         if(programmingNameAutomatic)programmingElement('Name').value=programmingSuggestedName({name:target?.name,start,end,action:programmingElement('Action').value,date:programmingElement('Repeat').value==='date'?programmingElement('Date').value:programmingElement('StartDate').value,repeated:programmingElement('Repeat').value!=='date',seconds:programmingElement('HasTimer').checked?Number(programmingElement('TimerMinutes').value)*60+Number(programmingElement('TimerSeconds').value):0});
-        const preview=programmingElement('NamePreview');preview.textContent=programmingElement('Name').value||'Anteprima del titolo';preview.style.setProperty('--programming-color',programmingElement('Color').value);
+        const preview=programmingElement('NamePreview');preview.textContent=programmingElement('Name').value||'Anteprima del titolo';preview.style.setProperty('--programming-color',programmingElement('Color').value);preview.style.setProperty('--programming-ink',programmingColorInk(programmingElement('Color').value));
     }
     async function saveProgrammingColor(){
         if(!programmingColorTarget||programmingBusy)return;
@@ -2040,6 +2047,7 @@
         return validateProgrammingDraft({target:Boolean(device||scene||daikin),multi:Array.isArray(device?.params?.switches),allowedOutlets:device?.params?.switches?.map(c=>c.outlet)||[],outlets:[...document.querySelectorAll('[name="programmingOutlet"]:checked')].map(e=>Number(e.value)),timer:value('Action')==='on'&&programmingElement('HasTimer').checked,timerMinutes:value('TimerMinutes'),timerSeconds:value('TimerSeconds'),action:value('Action'),repeat:value('Repeat'),startDate:value('StartDate'),intervalDays:value('IntervalDays'),durationMode:value('DurationMode'),durationWeeks:value('DurationWeeks'),until:value('Until'),days:[...document.querySelectorAll('[name="programmingDay"]:checked')].map(e=>Number(e.value)),date:value('Date'),endDate:value('EndDate'),startType:value('StartType'),endType:value('EndType'),start:value('Start'),finish:value('End'),end:value('Action')==='on'&&programmingElement('HasEnd').checked,enabled:programmingEditing?.enabled!==false,solar:programmingUsesSolar(),custom:programmingElement('CustomLocation').checked,location:value('Location'),latitude:value('Latitude'),longitude:value('Longitude'),province:value('Province'),municipalityKnown:italianMunicipalities.some(m=>m.id===value('Municipality')),locationsLoading:italianLocationLoading,name:value('Name'),connected:programmingData.connected,consent:programmingElement('Consent').checked,today:new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),crossError:programmingElement('Validation').hidden?'':programmingElement('Validation').textContent,crossField:!programmingElement('UseToday').hidden?'Date':programmingUsesSolar()?'EndType':'EndDate'});
     }
     function focusProgrammingField(field){
+        const picker=document.getElementById('programming'+field+'Picker');if(picker){picker.scrollIntoView({behavior:'smooth',block:'center'});picker.focus({preventScroll:true});return;}
         const container=programmingElement(field),control=container.matches('input,select,button')?container:container.querySelector('input,select,button');
         container.scrollIntoView({behavior:'smooth',block:'center'});control?.focus({preventScroll:true});
     }
@@ -2122,6 +2130,7 @@
         if(solar&&!validation)programmingElement('Summary').textContent=`${action==='off'?'Spegni':action==='pulse'?'Invia impulso':action==='run'?'Esegui scenario':'Accendi'} ${programmingTimeLabel(start)}${end?'; spegni '+programmingTimeLabel(finish)+' alla prima occorrenza successiva.':'. Nessuno spegnimento automatico impostato.'} Gli orari astronomici cambiano automaticamente ogni giorno.`;
         if(timer&&start)programmingElement('Summary').textContent=`Accendi ${programmingTimeLabel(start)}; spegni dopo ${programmingTimerLabel(Number(programmingElement('TimerMinutes').value)*60+Number(programmingElement('TimerSeconds').value))||'la durata da indicare'}.`;
         renderProgrammingFeedback(programmingValidationShown?programmingDraftIssues():validation?[{field:expiredDaylight?'Date':solar?'EndType':'EndDate',message:validation}]:[]);
+        window.SchedulePicker?.refresh();
     }
     async function saveProgramming(event){
         event.preventDefault();if(programmingBusy)return;programmingFieldsChanged();
@@ -2152,6 +2161,7 @@
     async function changeProgramming(op,id){const s=programmingData.schedules.find(s=>s.id===id);if(s)await programmingRequest({op,id,expectedVersion:s.version});}
     async function disconnectProgramming(){await programmingRequest({op:'disconnect'});}
     function initProgramming(){
+        programmingElement('NameAuto').addEventListener('change',()=>{programmingNameAutomatic=programmingElement('NameAuto').checked;programmingFieldsChanged();});
         programmingElement('Name').addEventListener('input',()=>{programmingNameAutomatic=!programmingElement('Name').value.trim();updateProgrammingIdentity();});
         programmingElement('Color').addEventListener('input',updateProgrammingIdentity);
         for(const id of ['Start','End'])programmingElement(id).addEventListener('input',programmingFieldsChanged);
@@ -2215,6 +2225,101 @@
         renderScenes();
         loadDevices();
     });
+
+</script>
+<script>
+/* PACE date/time editor. Only changes form drafts; never sends a request. */
+(()=>{
+ 'use strict';
+ const ids=['Date','StartDate','EndDate','Until','Start','End'],controls=new Map();
+ const pad=n=>String(n).padStart(2,'0');
+ const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ const dateValue=d=>d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate());
+ const validDate=v=>/^\d{4}-\d{2}-\d{2}$/.test(v||'')&&Number.isFinite(Date.parse(v+'T12:00:00Z'))&&dateValue(new Date(v+'T12:00:00Z'))===v;
+ const validTime=v=>/^([01]\d|2[0-3]):[0-5]\d$/.test(v||'');
+ const dateLabel=v=>validDate(v)?new Intl.DateTimeFormat('it-IT',{timeZone:'UTC',weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date(v+'T12:00:00Z')):'Scegli la data';
+ const addDays=(v,n)=>dateValue(new Date(Date.parse(v+'T12:00:00Z')+n*86400000));
+ const monthDays=(year,month)=>new Date(Date.UTC(year,month+1,0)).getUTCDate();
+ let dialog,body,title,readout,confirm,error,active=null,kind='',picked='',month=0,year=0,returnFocus=null,context='';
+ const make=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;};
+ function button(text,fn,cls=''){const b=make('button',cls,text);b.type='button';b.addEventListener('click',fn);return b;}
+ function refresh(){
+  for(const [input,b]of controls){b.textContent=input.dataset.paceKind==='date'?dateLabel(input.value):validTime(input.value)?input.value:'Scegli l’orario';if(b.disabled!==input.disabled)b.disabled=input.disabled;if(b.hidden!==input.hidden)b.hidden=input.hidden;b.setAttribute('aria-invalid',input.getAttribute('aria-invalid')||'false');const help=input.getAttribute('aria-describedby');if(help)b.setAttribute('aria-describedby',help);else b.removeAttribute('aria-describedby');}
+ }
+ function close(){dialog.close();}
+ function updateDate(){readout.textContent=dateLabel(picked);error.hidden=true;renderCalendar();}
+ function chooseDate(value){picked=value;const d=new Date(value+'T12:00:00Z');month=d.getUTCMonth();year=d.getUTCFullYear();updateDate();}
+ function renderCalendar(focusDate){
+  body.replaceChildren();
+  const quick=make('div','pace-picker-shortcuts');quick.append(button('Oggi',()=>chooseDate(today())),button('Domani',()=>chooseDate(addDays(today(),1))),button('Tra 7 giorni',()=>chooseDate(addDays(today(),7))));body.append(quick);
+  const nav=make('div','pace-calendar-nav');
+  const changeMonth=delta=>{const d=new Date(Date.UTC(year,month+delta,1));if(d.getUTCFullYear()<1900||d.getUTCFullYear()>9999)return;month=d.getUTCMonth();year=d.getUTCFullYear();renderCalendar();};
+  const prev=button('‹',()=>changeMonth(-1)),next=button('›',()=>changeMonth(1));prev.setAttribute('aria-label','Mese precedente');next.setAttribute('aria-label','Mese successivo');
+  const label=make('strong','',new Intl.DateTimeFormat('it-IT',{timeZone:'UTC',month:'long',year:'numeric'}).format(new Date(Date.UTC(year,month,1))));label.setAttribute('aria-live','polite');nav.append(prev,label,next);body.append(nav);
+  const days=make('div','pace-calendar');days.setAttribute('role','group');days.setAttribute('aria-label','Giorni del mese');
+  for(const day of ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'])days.append(make('span','pace-weekday',day));
+  const offset=(new Date(Date.UTC(year,month,1)).getUTCDay()+6)%7;
+  for(let i=0;i<offset;i++)days.append(make('span','pace-calendar-blank'));
+  for(let n=1;n<=monthDays(year,month);n++){
+   const value=year+'-'+pad(month+1)+'-'+pad(n),b=button(String(n),()=>{picked=value;updateDate();body.querySelector('[data-day="'+value+'"]')?.focus();},'pace-calendar-day');
+   b.dataset.day=value;b.setAttribute('aria-label',dateLabel(value));b.setAttribute('aria-pressed',String(value===picked));if(value===today())b.setAttribute('aria-current','date');
+   b.addEventListener('keydown',e=>{const delta={ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7}[e.key];if(delta!==undefined){e.preventDefault();picked=addDays(value,delta);const d=new Date(picked+'T12:00:00Z');year=d.getUTCFullYear();month=d.getUTCMonth();readout.textContent=dateLabel(picked);renderCalendar(picked);}});
+   days.append(b);
+  }body.append(days);if(focusDate)body.querySelector('[data-day="'+focusDate+'"]')?.focus();
+ }
+ function timeDraft(){
+  const h=body.querySelector('#paceHour').value.trim(),m=body.querySelector('#paceMinute').value.trim();
+  return /^\d{1,2}$/.test(h)&&/^\d{1,2}$/.test(m)&&Number(h)<=23&&Number(m)<=59?pad(Number(h))+':'+pad(Number(m)):null;
+ }
+ function updateTime(){const value=timeDraft();readout.textContent=value||'Ore : minuti';error.hidden=true;for(const b of body.querySelectorAll('[data-minute]'))b.setAttribute('aria-pressed',String(value?.slice(3)===b.dataset.minute));}
+ function renderTime(){
+  body.replaceChildren();const time=validTime(picked)?picked:'12:00',parts=time.split(':');
+  const help=make('p','pace-picker-hint','Usa + e − oppure tocca i numeri e scrivi l’orario.');body.append(help);
+  const columns=make('div','pace-time-columns');
+  for(const [i,label,max,id]of [[0,'Ore',23,'paceHour'],[1,'Minuti',59,'paceMinute']]){
+   const col=make('div','pace-time-part'),name=make('label','',label),input=make('input','pace-time-number');input.type='text';input.inputMode='numeric';input.pattern='[0-9]*';input.maxLength=2;input.id=id;input.value=parts[i];input.autocomplete='off';name.htmlFor=id;
+   const step=delta=>{const n=/^\d{1,2}$/.test(input.value)?Number(input.value):0;input.value=pad((n+delta+max+1)%(max+1));updateTime();};
+   const plus=button('+',()=>step(1)),minus=button('−',()=>step(-1));plus.setAttribute('aria-label','Aumenta '+label.toLowerCase());minus.setAttribute('aria-label','Diminuisci '+label.toLowerCase());
+   input.addEventListener('input',()=>{input.value=input.value.replace(/\D/g,'').slice(0,2);updateTime();});input.addEventListener('focus',()=>input.select());input.addEventListener('keydown',e=>{if(e.key==='ArrowUp'||e.key==='ArrowDown'){e.preventDefault();step(e.key==='ArrowUp'?1:-1);}});
+   col.append(name,plus,input,minus);columns.append(col);
+  }body.append(columns);
+  const shortcuts=make('div','pace-picker-shortcuts');shortcuts.setAttribute('role','group');shortcuts.setAttribute('aria-label','Minuti rapidi');for(const m of ['00','15','30','45']){const b=button(':'+m,()=>{body.querySelector('#paceMinute').value=m;updateTime();});b.dataset.minute=m;shortcuts.append(b);}body.append(shortcuts);updateTime();
+ }
+ function open(input){
+  if(dialog.open||input.disabled)return;active=input;kind=input.dataset.paceKind;returnFocus=controls.get(input);
+  context=([...input.labels].at(-1)?.textContent||'').replace(/^\d\s*/,'').trim();if(context==='Data')context='';
+  title.textContent=(kind==='date'?'Scegli la data':'Scegli l’orario')+(context?' · '+context:'');confirm.textContent=kind==='date'?'Conferma data':'Conferma orario';
+  picked=kind==='date'?(validDate(input.value)?input.value:today()):(validTime(input.value)?input.value:'12:00');error.hidden=true;
+  if(kind==='date'){const d=new Date(picked+'T12:00:00Z');month=d.getUTCMonth();year=d.getUTCFullYear();readout.textContent=dateLabel(picked);renderCalendar();}else renderTime();
+  dialog.showModal();dialog.querySelector('.pace-picker-close').focus();
+ }
+ function build(){
+  const form=document.getElementById('programmingForm');if(!form)return;
+  dialog=make('dialog','pace-picker');dialog.id='paceSchedulePicker';dialog.setAttribute('aria-labelledby','pacePickerTitle');
+  const header=make('header','pace-picker-header');title=make('h2');title.id='pacePickerTitle';const exit=button('×',close,'pace-picker-close');exit.setAttribute('aria-label','Chiudi senza modificare');header.append(title,exit);
+  readout=make('p','pace-picker-readout');readout.setAttribute('aria-live','polite');body=make('div','pace-picker-body');error=make('p','pace-picker-error');error.setAttribute('role','alert');error.hidden=true;
+  const footer=make('footer','pace-picker-footer');confirm=button('Conferma',()=>{
+   const value=kind==='date'?picked:timeDraft();if(!(kind==='date'?validDate(value):validTime(value))){error.textContent=kind==='date'?'Scegli una data valida.':'Inserisci ore da 0 a 23 e minuti da 0 a 59.';error.hidden=false;return;}
+   // Draft can be dismissed or account-switched while the modal was open.
+   if(!active||form.hidden||!active.isConnected){close();return;}
+   active.value=value;active.dispatchEvent(new Event('input',{bubbles:true}));active.dispatchEvent(new Event('change',{bubbles:true}));refresh();close();
+  },'pace-picker-confirm');footer.append(button('Annulla',close),confirm);dialog.append(header,readout,body,error,footer);document.body.append(dialog);
+  dialog.addEventListener('click',e=>{if(e.target!==dialog)return;const rect=dialog.getBoundingClientRect();if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom)close();});
+  dialog.addEventListener('close',()=>{active=null;if(returnFocus?.isConnected&&!form.hidden)returnFocus.focus({preventScroll:true});});
+  dialog.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();confirm.click();}});
+  const observer=new MutationObserver(()=>{if(dialog.open&&form.hidden)close();refresh();});observer.observe(form,{attributes:true,attributeFilter:['hidden'],subtree:true});
+  for(const id of ids){
+   const input=document.getElementById('programming'+id);if(!input)continue;input.dataset.paceKind=input.type;input.type='text';input.readOnly=true;input.tabIndex=-1;input.classList.add('pace-picker-source');input.setAttribute('aria-hidden','true');
+   const b=button('',()=>open(input),'pace-picker-trigger');b.id=input.id+'Picker';b.setAttribute('aria-haspopup','dialog');b.setAttribute('aria-controls',dialog.id);
+   const labels=[...input.labels];let i=0;for(const label of labels){if(!label.id)label.id=input.id+'Label'+i++;}
+   b.setAttribute('aria-labelledby',labels.map(l=>l.id).join(' ')+' '+b.id);input.insertAdjacentElement('afterend',b);controls.set(input,b);
+   input.addEventListener('focus',()=>b.focus());input.addEventListener('input',refresh);input.addEventListener('change',refresh);
+   const attributes=new MutationObserver(refresh);attributes.observe(input,{attributes:true,attributeFilter:['disabled','hidden','aria-invalid','aria-describedby']});
+  }refresh();
+ }
+ window.SchedulePicker={refresh,focus(input){controls.get(input)?.focus({preventScroll:true});},dismiss(){if(dialog?.open)close();}};
+ document.addEventListener('DOMContentLoaded',build);
+})();
 
 </script>
 </body>

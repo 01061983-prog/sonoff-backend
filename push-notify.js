@@ -10,6 +10,7 @@ module.exports = function createPush({ db, identity, requireLogin, route, cloudE
   const subs = () => db().collection('pushSubscriptions');
   const configRef = () => db().collection('appConfig').doc('webPush');
   let keysPromise = null;
+  const pendingTests = new Map();
 
   function keys() {
     if (!keysPromise) keysPromise = (async () => {
@@ -47,7 +48,7 @@ module.exports = function createPush({ db, identity, requireLogin, route, cloudE
     try {
       const account=String(data.accountLabel||'').slice(0,80);
       const message=account?{...payload,title:account+' · '+payload.title}:payload;
-      await webpush.sendNotification({ endpoint: data.endpoint, keys: data.keys }, JSON.stringify(message), { TTL: 3600, urgency: 'normal' });
+      await webpush.sendNotification({ endpoint: data.endpoint, keys: data.keys }, JSON.stringify({...message,sentAt:Date.now()}), { TTL: 3600, urgency: 'high' });
       return true;
     } catch (error) {
       // Iscrizione scaduta o revocata dal dispositivo: la rimuoviamo.
@@ -113,7 +114,21 @@ module.exports = function createPush({ db, identity, requireLogin, route, cloudE
       const endpoint=endpointOf(req),owner=await identity(req),snap=await subscriptionFor(owner,endpoint);
       if(!snap)throw cloudError(404,'not_subscribed','Attiva le notifiche per questo account eWeLink su questo dispositivo.');
       await keys();
-      const sent = await deliver(snap, { title: '🔔 Notifiche attive', body: 'Riceverai un avviso quando una programmazione viene eseguita.', tag: 'push-test-'+idFor(owner).slice(0,12), url: './index.html' });
+      const delay = req.body?.delaySeconds;
+      if (delay !== undefined && delay !== 0 && delay !== 20) throw cloudError(400,'invalid_delay','La prova può essere immediata oppure dopo 20 secondi.');
+      const payload = { title: '🔔 Notifica di prova PACE', body: delay===20 ? 'Prova a schermo bloccato: notifica ricevuta.' : 'Riceverai un avviso quando una programmazione viene eseguita.', tag: 'push-test-'+idFor(owner).slice(0,12), url: './index.html' };
+      if(delay===20){
+        const key=idFor(endpoint,owner);
+        if(pendingTests.has(key))throw cloudError(409,'test_pending','Una prova è già in attesa. Blocca lo schermo e attendi 20 secondi.');
+        const timer=setTimeout(async()=>{
+          try{const current=await subscriptionFor(owner,endpoint);if(current)await deliver(current,payload);}
+          catch(error){console.error('Prova push ritardata non inviata:',error.statusCode||'unavailable');}
+          finally{pendingTests.delete(key);}
+        },20000);
+        timer.unref?.();pendingTests.set(key,timer);
+        return res.json({ok:true,scheduled:true,delaySeconds:20});
+      }
+      const sent = await deliver(snap, payload);
       if (!sent) throw cloudError(502, 'push_failed', 'Il servizio di notifiche del telefono non ha accettato il messaggio. Disattiva e riattiva le notifiche.');
       res.json({ ok: true });
     }));

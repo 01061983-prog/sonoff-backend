@@ -27,7 +27,7 @@
   if(!section)return;
   const toggle=$('pushEnabled'),test=$('pushTest'),epoch=++refreshEpoch,key=preferenceKey(),desired=preference(key);
   if(desired!==null)toggle.checked=desired==='enabled';
-  test.hidden=true;$('pushRetry').hidden=true;
+  test.hidden=true;$('pushTestLocked').hidden=true;$('pushRetry').hidden=true;
   if(!appReady){toggle.disabled=true;setStatus('Attendo l’accesso alla plancia…','');return;}
   if(!supported()){
    toggle.disabled=true;toggle.checked=false;test.hidden=true;
@@ -43,7 +43,7 @@
    else if(permission==='granted'&&desired==='disabled'&&status.subscribed){await call('/api/push/unsubscribe',{endpoint:sub.endpoint});status={subscribed:false};}
    if(status.subscribed)remember('enabled',key);
    if(busy||epoch!==refreshEpoch||key!==preferenceKey())return;
-   toggle.disabled=false;toggle.checked=Boolean(sub)&&permission==='granted'&&status.subscribed;test.hidden=!toggle.checked;
+   toggle.disabled=false;toggle.checked=Boolean(sub)&&permission==='granted'&&status.subscribed;test.hidden=!toggle.checked;$('pushTestLocked').hidden=!toggle.checked;
    const name=window.AppAccounts?.state.selectedProviderLabel||'questo account eWeLink';
    if(permission==='denied')setStatus('Le notifiche sono bloccate per questa app. Riattivale dalle impostazioni del telefono, poi torna qui.','warn');
    else if(toggle.checked)setStatus('Notifiche attive per '+name+' su questo dispositivo. Restano attive anche quando passi a un altro account.','ok');
@@ -84,7 +84,10 @@
   section.innerHTML=`<h3 id="pushSettingsTitle">Notifiche</h3>
    <label class="menu-bar-toggle"><input id="pushEnabled" type="checkbox"><span>Avvisami per questo account eWeLink</span></label>
    <p id="pushStatus" class="text-size-status" role="status"></p>
-   <button id="pushTest" type="button" hidden>Invia notifica di prova</button><button id="pushRetry" type="button" hidden>Verifica stato notifiche</button>`;
+   <button id="pushTest" type="button" hidden>Invia notifica di prova</button><button id="pushTestLocked" type="button" hidden>Prova a schermo bloccato · 20 secondi</button><button id="pushRetry" type="button" hidden>Verifica stato notifiche</button>`;
+  if(/Android/i.test(navigator.userAgent)){
+   const help=document.createElement('details');help.className='push-android-help';help.innerHTML='<summary>Notifiche sul tablet bloccato</summary><p>Se arrivano soltanto quando sblocchi lo schermo, controlla queste impostazioni di Android. I nomi possono cambiare in base al tablet.</p><ol><li>Impostazioni → Notifiche → Schermata di blocco: consenti la visualizzazione delle notifiche.</li><li>Impostazioni → App → PACE (oppure Chrome, se usi il browser) → Notifiche: consenti le notifiche. In Chrome verifica anche le notifiche del sito PACE.</li><li>Impostazioni → App → PACE o Chrome → Batteria: consenti l’attività in background e, se disponibile, scegli Senza restrizioni. Controlla anche Risparmio energetico e Non disturbare.</li></ol><p>Usa “Prova a schermo bloccato”: dopo il messaggio di conferma, blocca il tablet e attendi. Se il server si riavvia durante i 20 secondi, ripeti la prova.</p><p>La webapp non può cambiare queste impostazioni di Android.</p>';section.append(help);
+  }
   const menuBar=content.querySelector('.menu-bar-settings'),sizeTitle=[...content.querySelectorAll('h3')].find(h=>/Dimensione/i.test(h.textContent));
   content.insertBefore(section,menuBar||sizeTitle||null);
   $('pushEnabled').addEventListener('change',async e=>{
@@ -92,12 +95,14 @@
    try{if(on)await enable();else await disable();busy=false;await refresh();if(on)setStatus('Notifiche attivate per questo account. Gli altri collegamenti restano invariati. Prova con “Invia notifica di prova”.','ok');}
    catch(error){busy=false;await refresh();setStatus(error.message||'Operazione non riuscita.','warn');}
   });
-  $('pushTest').addEventListener('click',async e=>{
-   const button=e.currentTarget;button.disabled=true;setStatus('Invio della notifica di prova…','');
-   try{const sub=await currentSubscription();if(!sub)throw new Error('Questo dispositivo non è iscritto.');await call('/api/push/test',{endpoint:sub.endpoint});setStatus('Notifica di prova inviata: dovrebbe arrivare tra pochi secondi.','ok');}
+  async function testNotification(button,delaySeconds){
+   button.disabled=true;setStatus('Invio della notifica di prova…','');
+   try{const sub=await currentSubscription();if(!sub)throw new Error('Questo dispositivo non è iscritto.');await call('/api/push/test',{endpoint:sub.endpoint,delaySeconds});setStatus(delaySeconds?'Prova programmata: blocca adesso lo schermo e attendi 20 secondi.':'Il servizio push ha accettato la prova. Controlla le notifiche del dispositivo.','ok');}
    catch(error){await refresh();setStatus(error.message||'Invio non riuscito.','warn');}
    finally{button.disabled=false;}
-  });
+  }
+  $('pushTest').addEventListener('click',e=>void testNotification(e.currentTarget,0));
+  $('pushTestLocked').addEventListener('click',e=>void testNotification(e.currentTarget,20));
   $('textSizeSettings')?.addEventListener('toggle',()=>{if($('textSizeSettings').open)void refresh();});
   $('pushRetry').addEventListener('click',()=>void refresh());
   if(appReady)void refresh();

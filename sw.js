@@ -1,6 +1,6 @@
 // Solo interfaccia statica. Le API, il login e i comandi non entrano nella cache.
 const CACHE_PREFIX = "san-luigi-plancia-";
-const CACHE_NAME = CACHE_PREFIX + "2026-11-18-schedule-names-colors-v80";
+const CACHE_NAME = CACHE_PREFIX + "2026-11-18-friendly-pickers-push-v81";
 const ROOT = new URL("./", self.location.href);
 const ASSETS = ["index.html", "app.css", "text-size.js", "scene-pages.js", "room-map.js", "room-map.css", "account-auth.js", "account-auth.css", "menu-bar.js", "menu-bar.css", "push-settings.js", "climate.js", "climate.css", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable.png", "icons/apple-touch-icon.png"].map(path => new URL(path, ROOT).href);
 
@@ -41,6 +41,8 @@ self.addEventListener("push", event => {
   event.waitUntil(self.registration.showNotification(data.title || "PACE", {
     body: data.body || "",
     tag: data.tag || undefined,
+    renotify: Boolean(data.tag),
+    timestamp: Number.isFinite(data.sentAt) ? data.sentAt : Date.now(),
     icon: new URL("icons/icon-192.png", ROOT).href,
     badge: new URL("icons/icon-192.png", ROOT).href,
     data: { url: new URL(data.url || "index.html", ROOT).href }
