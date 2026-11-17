@@ -357,3 +357,18 @@ body .topbar.customer-branded #providerQuick:has(#providerQuickButton[aria-expan
 .pace-picker-readout{margin-top:8px;margin-bottom:8px;padding:12px 16px}
 .pace-calendar-nav{margin:8px 0}
 .pace-picker .pace-calendar-day{min-height:44px}
+
+/* Clear confirmation and validation dialogs for schedule actions. */
+.programming-notice{box-sizing:border-box;width:min(36rem,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;overscroll-behavior:contain;border:1px solid #dce0e5;border-radius:22px;padding:24px;color:var(--text-main,#252b35);background:#fff;box-shadow:0 24px 80px #10182845;margin:auto;font:inherit}
+.programming-notice::backdrop{background:#15202d99;backdrop-filter:blur(3px)}
+.programming-notice h2{margin:0 0 14px;font-size:1.3rem;line-height:1.4}
+.programming-notice p{margin:0 0 18px;line-height:1.65;font-size:1rem;overflow-wrap:anywhere}
+.programming-notice button{font:inherit;line-height:1.5;min-height:48px;border:1px solid #dce0e5;border-radius:12px;padding:12px 16px;background:#f5f6f8;color:inherit;cursor:pointer;touch-action:manipulation}
+.programming-notice-issues{display:grid;gap:10px;padding:0;list-style:none;margin:0 0 20px}
+.programming-notice-issues button{width:100%;text-align:left;background:#fff5e9;border-color:#efd1b0}
+.programming-notice-actions{display:flex;flex-wrap:wrap;gap:12px}
+.programming-notice-actions button{flex:1 1 180px;font-weight:650}
+.programming-notice .programming-notice-confirm{background:var(--accent,#b94712);border-color:var(--accent,#b94712);color:#fff}
+.programming-notice .programming-notice-danger{background:#b42332;border-color:#b42332;color:#fff}
+.programming-notice button:focus-visible{outline:3px solid var(--accent,#b94712);outline-offset:3px}
+@media(max-width:420px){.programming-notice{padding:20px 16px}.programming-notice-actions{flex-direction:column}.programming-notice-actions button{flex-basis:auto}}

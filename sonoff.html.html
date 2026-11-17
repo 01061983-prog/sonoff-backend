@@ -19,7 +19,7 @@
   <script src="scene-pages.js?v=46"></script>
   <script src="room-map.js?v=48"></script>
   <link rel="stylesheet" href="room-map.css?v=48">
-  <link rel="stylesheet" href="app.css?v=81">
+  <link rel="stylesheet" href="app.css?v=82">
   <script src="menu-bar.js?v=61"></script>
   <link rel="stylesheet" href="menu-bar.css?v=65">
   <script src="push-settings.js?v=81"></script>
@@ -1679,6 +1679,7 @@
     let programmingReadSerial = 0, programmingReadTask = null;
     const programmingElement = id => document.getElementById('programming'+id);
     function clearProgramming() {
+        closeProgrammingNotice();
         programmingEpoch++;programmingReadSerial++;programmingReadTask=null;italianLocationEpoch++;solarPreviewEpoch++;
         programmingData = {schedules:[],folders:[],organizationRevision:0,connected:false};programmingEditing=null;programmingFolderId="";programmingFolderEditing=null;programmingElement("FolderDialog").close();programmingElement("Folders").innerHTML="";programmingElement("FolderBar").innerHTML="";
         programmingElement('List').innerHTML='';programmingElement('Form').hidden=true;
@@ -1887,7 +1888,7 @@
     }
     function editProgramming(id){
         if(!devicesFresh||authRequired){setMessage('Aggiorna i dispositivi prima di programmare.','error');return;}
-        solarPreviewEpoch++;closeNavigation();programmingEditing=programmingData.schedules.find(s=>s.id===id)||null;
+        closeProgrammingNotice();programmingTimingWarningKey='';solarPreviewEpoch++;closeNavigation();programmingEditing=programmingData.schedules.find(s=>s.id===id)||null;
         const form=programmingElement('Form');form.reset();form.hidden=false;programmingValidationShown=false;programmingFeedbackKey='';renderProgrammingFeedback([]);programmingElement('RequestError').hidden=true;
         const select=programmingElement('Device');select.innerHTML='<option value="">Scegli uno scenario o un dispositivo…</option>';
         if(sceneSyncMode==='live'&&sceneWorkspace&&Array.isArray(cloudScenes)){
@@ -1928,7 +1929,7 @@
         void loadProgrammingLocations(loc.municipalityId||'018110',loc.provinceCode||'018');
         form.scrollIntoView({behavior:'smooth',block:'start'});select.focus();
     }
-    function cancelProgramming(){window.SchedulePicker?.dismiss();italianLocationEpoch++;solarPreviewEpoch++;programmingEditing=null;programmingElement('Form').hidden=true;}
+    function cancelProgramming(){closeProgrammingNotice();window.SchedulePicker?.dismiss();italianLocationEpoch++;solarPreviewEpoch++;programmingEditing=null;programmingElement('Form').hidden=true;}
     function programmingTarget(){
         const value=programmingElement('Device').value;
         if(value.startsWith('scene:'))return {scene:sceneSyncMode==='live'&&cloudScenes?.find(s=>s.id===value.slice(6))};
@@ -2046,6 +2047,51 @@
         const {device,scene,daikin}=programmingTarget(),value=id=>programmingElement(id).value;
         return validateProgrammingDraft({target:Boolean(device||scene||daikin),multi:Array.isArray(device?.params?.switches),allowedOutlets:device?.params?.switches?.map(c=>c.outlet)||[],outlets:[...document.querySelectorAll('[name="programmingOutlet"]:checked')].map(e=>Number(e.value)),timer:value('Action')==='on'&&programmingElement('HasTimer').checked,timerMinutes:value('TimerMinutes'),timerSeconds:value('TimerSeconds'),action:value('Action'),repeat:value('Repeat'),startDate:value('StartDate'),intervalDays:value('IntervalDays'),durationMode:value('DurationMode'),durationWeeks:value('DurationWeeks'),until:value('Until'),days:[...document.querySelectorAll('[name="programmingDay"]:checked')].map(e=>Number(e.value)),date:value('Date'),endDate:value('EndDate'),startType:value('StartType'),endType:value('EndType'),start:value('Start'),finish:value('End'),end:value('Action')==='on'&&programmingElement('HasEnd').checked,enabled:programmingEditing?.enabled!==false,solar:programmingUsesSolar(),custom:programmingElement('CustomLocation').checked,location:value('Location'),latitude:value('Latitude'),longitude:value('Longitude'),province:value('Province'),municipalityKnown:italianMunicipalities.some(m=>m.id===value('Municipality')),locationsLoading:italianLocationLoading,name:value('Name'),connected:programmingData.connected,consent:programmingElement('Consent').checked,today:new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),crossError:programmingElement('Validation').hidden?'':programmingElement('Validation').textContent,crossField:!programmingElement('UseToday').hidden?'Date':programmingUsesSolar()?'EndType':'EndDate'});
     }
+    let programmingNotice=null,programmingNoticeResolve=null,programmingTimingWarningKey='';
+    function closeProgrammingNotice(result={action:'cancel'}){
+        if(!programmingNotice?.open)return;
+        const finish=programmingNoticeResolve;programmingNoticeResolve=null;programmingNotice.close();finish?.(result);
+    }
+    function programmingNoticeOpen(){return Boolean(programmingNotice?.open);}
+    function showProgrammingNotice({title,message='',issues=[],confirm='Ho capito',cancel='',danger=false}){
+        if(programmingNoticeOpen())return Promise.resolve({action:'cancel'});
+        if(!programmingNotice){
+            programmingNotice=document.createElement('dialog');programmingNotice.id='programmingNotice';programmingNotice.className='programming-notice';programmingNotice.setAttribute('aria-labelledby','programmingNoticeTitle');programmingNotice.setAttribute('aria-describedby','programmingNoticeMessage');document.body.appendChild(programmingNotice);
+            programmingNotice.addEventListener('cancel',event=>{event.preventDefault();closeProgrammingNotice();});
+            programmingNotice.addEventListener('close',()=>{if(programmingNotice.open)return;const finish=programmingNoticeResolve;programmingNoticeResolve=null;finish?.({action:'cancel'});});
+        }
+        programmingNotice.replaceChildren();
+        const heading=document.createElement('h2');heading.id='programmingNoticeTitle';heading.textContent=title;
+        const text=document.createElement('p');text.id='programmingNoticeMessage';text.textContent=message;
+        programmingNotice.append(heading,text);
+        if(issues.length){const list=document.createElement('ul');list.className='programming-notice-issues';for(const issue of issues){const row=document.createElement('li'),button=document.createElement('button');button.type='button';button.textContent=issue.message;button.addEventListener('click',()=>closeProgrammingNotice({action:'field',field:issue.field}));row.appendChild(button);list.appendChild(row);}programmingNotice.appendChild(list);}
+        const actions=document.createElement('div');actions.className='programming-notice-actions';
+        let cancelButton=null;
+        if(cancel){cancelButton=document.createElement('button');cancelButton.type='button';cancelButton.textContent=cancel;cancelButton.addEventListener('click',()=>closeProgrammingNotice());actions.appendChild(cancelButton);}
+        const ok=document.createElement('button');ok.type='button';ok.className=danger?'programming-notice-danger':'programming-notice-confirm';ok.textContent=confirm;ok.addEventListener('click',()=>closeProgrammingNotice({action:'confirm'}));actions.appendChild(ok);programmingNotice.appendChild(actions);
+        return new Promise(resolve=>{programmingNoticeResolve=resolve;programmingNotice.showModal();(cancelButton||ok).focus();});
+    }
+    async function showProgrammingIssues(issues){
+        const epoch=programmingEpoch,result=await showProgrammingNotice({title:'Controlla la programmazione',message:'Manca qualche dato oppure ci sono valori da correggere. Tocca un avviso per andare al campo interessato.',issues,confirm:'Torna ai campi'});
+        if(epoch===programmingEpoch&&!programmingElement('Form').hidden)focusProgrammingField(result.field||issues[0].field);
+    }
+    function programmingFixedRange(){
+        const value=id=>programmingElement(id).value;
+        if(value('Action')!=='on'||!programmingElement('HasEnd').checked||value('StartType')!=='fixed'||value('EndType')!=='fixed')return null;
+        const start=value('Start'),end=value('End');if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(start)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(end))return null;
+        return {start,end,date:value('Date'),endDate:value('EndDate'),repeated:value('Repeat')!=='date'};
+    }
+    async function warnProgrammingTiming(){
+        if(programmingElement('Form').hidden||programmingNoticeOpen()||programmingBusy)return;
+        const range=programmingFixedRange();
+        if(!range||range.repeated||range.endDate!==range.date||range.end>range.start){programmingTimingWarningKey='';return;}
+        const key=JSON.stringify(range);if(key===programmingTimingWarningKey)return;programmingTimingWarningKey=key;
+        const epoch=programmingEpoch,result=await showProgrammingNotice({title:'Controlla accensione e spegnimento',message:'Hai impostato accensione alle '+range.start+' e spegnimento alle '+range.end+' nello stesso giorno. Lo spegnimento deve avvenire dopo l’accensione. Se intendi il giorno dopo, confermalo qui.',confirm:'Spegni il giorno dopo',cancel:'Correggi gli orari'});
+        if(epoch!==programmingEpoch||programmingElement('Form').hidden)return;
+        if(result.action==='confirm'&&/^\d{4}-\d{2}-\d{2}$/.test(range.date)){
+            const endDate=programmingElement('EndDate');endDate.value=new Date(Date.parse(range.date+'T12:00:00Z')+86400000).toISOString().slice(0,10);endDate.dataset.userSet='true';programmingFieldsChanged();
+        }else focusProgrammingField('End');
+    }
     function focusProgrammingField(field){
         const picker=document.getElementById('programming'+field+'Picker');if(picker){picker.scrollIntoView({behavior:'smooth',block:'center'});picker.focus({preventScroll:true});return;}
         const container=programmingElement(field),control=container.matches('input,select,button')?container:container.querySelector('input,select,button');
@@ -2125,7 +2171,7 @@
         programmingElement('UseToday').hidden=!expiredDaylight;
         if(expiredDaylight)validation='La fascia alba–tramonto della data scelta è già trascorsa. Scegli oggi o una nuova data, oppure Ogni giorno per ripeterla automaticamente.';
         finalDate.setCustomValidity(validation);programmingElement('Validation').textContent=validation;programmingElement('Validation').hidden=!validation;
-        document.getElementById('saveProgrammingBtn').disabled=programmingBusy||Boolean(validation)||(solar&&!custom&&italianLocationLoading);
+        document.getElementById('saveProgrammingBtn').disabled=programmingBusy;
         programmingElement('Summary').textContent=validation?'':(!start?'':end&&!finish?'Scegli anche l’orario di spegnimento.':end&&finish?`Accendi dalle ${start} alle ${finish}${weekly?(finish<=start?' del giorno successivo':''):finalDate.value?' del '+new Date(finalDate.value+'T12:00:00').toLocaleDateString('it-IT'):''}.`:`${action==='on'?'Accendi':action==='off'?'Spegni':action==='run'?'Esegui lo scenario':'Invia un impulso'} alle ${start}.${action==='on'?' Nessuno spegnimento automatico impostato.':''}`);
         if(solar&&!validation)programmingElement('Summary').textContent=`${action==='off'?'Spegni':action==='pulse'?'Invia impulso':action==='run'?'Esegui scenario':'Accendi'} ${programmingTimeLabel(start)}${end?'; spegni '+programmingTimeLabel(finish)+' alla prima occorrenza successiva.':'. Nessuno spegnimento automatico impostato.'} Gli orari astronomici cambiano automaticamente ogni giorno.`;
         if(timer&&start)programmingElement('Summary').textContent=`Accendi ${programmingTimeLabel(start)}; spegni dopo ${programmingTimerLabel(Number(programmingElement('TimerMinutes').value)*60+Number(programmingElement('TimerSeconds').value))||'la durata da indicare'}.`;
@@ -2133,9 +2179,11 @@
         window.SchedulePicker?.refresh();
     }
     async function saveProgramming(event){
-        event.preventDefault();if(programmingBusy)return;programmingFieldsChanged();
+        event.preventDefault();if(programmingBusy||programmingNoticeOpen())return;programmingFieldsChanged();
         programmingValidationShown=true;const issues=programmingDraftIssues();renderProgrammingFeedback(issues);
-        if(issues.length){programmingElement('Alerts').scrollIntoView({behavior:'smooth',block:'start'});programmingElement('Alerts').focus({preventScroll:true});return;}
+        if(issues.length){await showProgrammingIssues(issues);return;}
+        const fixedRange=programmingFixedRange();
+        if(fixedRange?.repeated&&fixedRange.end<=fixedRange.start){const epoch=programmingEpoch,result=await showProgrammingNotice({title:'Lo spegnimento sarà il giorno successivo',message:'Accensione alle '+fixedRange.start+' e spegnimento alle '+fixedRange.end+' del giorno dopo. Vuoi mantenere questa fascia notturna?',confirm:'Confermo, giorno successivo',cancel:'Correggi gli orari'});if(epoch!==programmingEpoch||programmingElement('Form').hidden)return;if(result.action!=='confirm'){focusProgrammingField('End');return;}}
         if(!programmingData.connected&&!programmingElement('Consent').checked){setMessage('Consenti l’esecuzione a webapp chiusa per attivare il timer.','error');return;}
         const action=programmingElement('Action').value,{scene,daikin}=programmingTarget();
         const schedule={name:programmingElement('Name').value,autoName:programmingNameAutomatic,color:programmingElement('Color').value,folderId:programmingElement('Folder').value,...(scene?{targetType:'scene',sceneId:scene.id,workspaceId:sceneWorkspace.id}:daikin?{targetType:'daikin',deviceId:daikin.id,daikin:action==='on'?window.Climate.programmingSettings(programmingElement('Daikin')):{}}:{targetType:'device',deviceId:programmingElement('Device').value}),action,repeat:programmingElement('Repeat').value,date:programmingElement('Date').value,days:[...document.querySelectorAll('[name="programmingDay"]:checked')].map(input=>Number(input.value)),outlets:[...document.querySelectorAll('[name="programmingOutlet"]:checked')].map(input=>Number(input.value)),start:programmingElement('StartType').value==='fixed'?programmingElement('Start').value:programmingElement('StartType').value,end:action==='on'&&programmingElement('HasEnd').checked?(programmingElement('EndType').value==='fixed'?programmingElement('End').value:programmingElement('EndType').value):null,enabled:programmingEditing?.enabled!==false};
@@ -2155,12 +2203,23 @@
     async function programmingRequest(body){
         if(programmingBusy)return false;programmingReadSerial++;programmingReadTask=null;programmingElement('RequestError').hidden=true;const epoch=programmingEpoch;programmingBusy=true;document.getElementById('saveProgrammingBtn').disabled=true;
         try{const data=await apiRequest('/api/programming',body);if(epoch!==programmingEpoch)return false;programmingReadSerial++;programmingReadTask=null;programmingData=data;renderProgramming();return true;}
-        catch(error){if(epoch===programmingEpoch){setMessage(error.message,'error');if(['folder-save','folder-delete','move'].includes(body.op)&&programmingElement('FolderDialog').open){programmingElement('FolderError').textContent=error.message;programmingElement('FolderError').hidden=false;}if(body.op==='save'){programmingElement('RequestError').textContent=error.message;programmingElement('RequestError').hidden=false;programmingElement('RequestError').scrollIntoView({behavior:'smooth',block:'center'});}if(['version_conflict','organization_conflict'].includes(error.code))void loadProgramming();}return false;}
+        catch(error){if(epoch===programmingEpoch){setMessage(error.message,'error');if(['folder-save','folder-delete','move'].includes(body.op)&&programmingElement('FolderDialog').open){programmingElement('FolderError').textContent=error.message;programmingElement('FolderError').hidden=false;}if(body.op==='save'){programmingElement('RequestError').textContent=error.message;programmingElement('RequestError').hidden=false;programmingElement('RequestError').scrollIntoView({behavior:'smooth',block:'center'});}if(['version_conflict','organization_conflict'].includes(error.code))void loadProgramming();if(['save','delete'].includes(body.op))await showProgrammingNotice({title:body.op==='save'?'Programmazione non salvata':'Programmazione non eliminata',message:error.message||'Operazione non riuscita. Riprova.',confirm:'Ho capito'});}return false;}
         finally{programmingBusy=false;programmingFieldsChanged();}
     }
-    async function changeProgramming(op,id){const s=programmingData.schedules.find(s=>s.id===id);if(s)await programmingRequest({op,id,expectedVersion:s.version});}
+    async function changeProgramming(op,id){
+        if(programmingBusy||programmingNoticeOpen())return;
+        const s=programmingData.schedules.find(s=>s.id===id);if(!s)return;
+        if(op==='delete'){
+            const epoch=programmingEpoch,result=await showProgrammingNotice({title:'Eliminare questa programmazione?',message:'Vuoi eliminare “'+s.name+'”? La programmazione verrà rimossa. Questa operazione non invia comandi al dispositivo.',confirm:'Sì, elimina',cancel:'Annulla',danger:true});
+            if(result.action!=='confirm'||epoch!==programmingEpoch||programmingBusy)return;
+            const current=programmingData.schedules.find(item=>item.id===id);
+            if(!current||current.version!==s.version){await showProgrammingNotice({title:'Programmazione aggiornata',message:'La programmazione è stata modificata o rimossa nel frattempo. Controlla l’elenco e riprova.'});return;}
+        }
+        if(await programmingRequest({op,id,expectedVersion:s.version})&&op==='delete')setMessage('Programmazione eliminata.','');
+    }
     async function disconnectProgramming(){await programmingRequest({op:'disconnect'});}
     function initProgramming(){
+        for(const id of ['Date','EndDate','Start','End','HasEnd','Repeat'])programmingElement(id).addEventListener('change',()=>queueMicrotask(()=>void warnProgrammingTiming()));
         programmingElement('NameAuto').addEventListener('change',()=>{programmingNameAutomatic=programmingElement('NameAuto').checked;programmingFieldsChanged();});
         programmingElement('Name').addEventListener('input',()=>{programmingNameAutomatic=!programmingElement('Name').value.trim();updateProgrammingIdentity();});
         programmingElement('Color').addEventListener('input',updateProgrammingIdentity);
