@@ -298,3 +298,11 @@ body .topbar.customer-branded #providerQuick:has(#providerQuickButton[aria-expan
 .programming-disclosure>summary{align-items:flex-start}
 .programming-chevron{flex-shrink:0;align-self:center}
 @media(max-width:700px){.programming-summary-title strong{font-size:1.05rem}.programming-summary-title{align-items:flex-start}.programming-summary-copy{gap:8px}.programming-summary-target,.programming-summary-repeat{font-size:.9rem}}
+
+/* Device colors emphasize titles without changing readable text colors. */
+.programming-summary-title strong{border-inline-start:5px solid var(--programming-color,#b94712);padding-inline-start:12px;overflow-wrap:anywhere}
+.programming-color-row{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:18px 0}
+.programming-color-row>label{flex:1 1 240px;font-weight:650}
+.programming-color-row input[type=color]{width:64px;height:48px;padding:4px;cursor:pointer}
+.programming-color-row .page-note,.programming-name-preview{flex-basis:100%;margin:0}
+.programming-name-preview{border-inline-start:5px solid var(--programming-color,#b94712);padding:12px;font-weight:650;background:var(--surface,#fff);border-radius:6px;overflow-wrap:anywhere}

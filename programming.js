@@ -237,6 +237,15 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   const solar=await astronomy.calendar(loc,date,core.addDays(date,1));
   return {ok:true,timeZone:core.ZONE,solar};
  }
+ const appearances=()=>db().collection('ewelinkProgrammingAppearance');
+ const colorValid=value=>typeof value==='string'&&/^#[0-9a-f]{6}$/i.test(value);
+ const targetColorKey=s=>s.kind==='scene'?'scene:'+s.workspaceId+':'+s.sceneId:'device:'+s.deviceId;
+ function appearanceData(snapshot){return Object.fromEntries(Object.entries(snapshot.data()?.colors||{}).filter(([key,value])=>/^(device|scene):[^\x00-\x1f]{1,240}$/.test(key)&&colorValid(value)));}
+ function withColor(colors,key,color){
+  if(!/^(device|scene):[^\x00-\x1f]{1,240}$/.test(key||'')||!colorValid(color))throw error(400,'invalid_color','Scegli un colore valido per il dispositivo.');
+  if(!Object.hasOwn(colors,key)&&Object.keys(colors).length>=1000)throw error(400,'color_limit','Hai raggiunto il limite dei colori per account.');
+  return {...colors,[key]:color.toLowerCase()};
+ }
  const organizations=()=>db().collection('ewelinkProgrammingOrganization');
  const validFolderId=id=>typeof id==='string'&&/^[\w-]{1,100}$/.test(id);
  function organizationData(snapshot){
@@ -274,9 +283,14 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   });
   return changedFolderId;
  }
- async function list(req){const owner=await identity(req),account=await accounts().doc(owner).get(),records=await owned(owner),org=organizationData(await organizations().doc(owner).get());await archiveCompleted(records);return {ok:true,accountId:owner,timeZone:core.ZONE,connected:account.exists&&automatic(account.data()),connectionError:account.data()?.lastError||null,folders:org.folders.sort((a,b)=>a.name.localeCompare(b.name,'it')),organizationRevision:org.revision,schedules:records.filter(s=>!s.archivedAt&&!completedOnce(s)).map(s=>({...visible(s),folderId:folderForSchedule(org,s.id)})).sort((a,b)=>a.nextAt-b.nextAt)};}
+ async function list(req){const owner=await identity(req),account=await accounts().doc(owner).get(),records=await owned(owner),org=organizationData(await organizations().doc(owner).get()),colors=appearanceData(await appearances().doc(owner).get());await archiveCompleted(records);return {ok:true,targetColors:colors,accountId:owner,timeZone:core.ZONE,connected:account.exists&&automatic(account.data()),connectionError:account.data()?.lastError||null,folders:org.folders.sort((a,b)=>a.name.localeCompare(b.name,'it')),organizationRevision:org.revision,schedules:records.filter(s=>!s.archivedAt&&!completedOnce(s)).map(s=>({...visible(s),folderId:folderForSchedule(org,s.id)})).sort((a,b)=>a.nextAt-b.nextAt)};}
  async function mutate(req){
   const owner=await identity(req),op=req.body?.op;
+  if(op==='color'){
+   const ref=appearances().doc(owner);
+   await db().runTransaction(async t=>{const colors=appearanceData(await t.get(ref));t.set(ref,{colors:withColor(colors,req.body.targetKey,req.body.color),updatedAt:now()});});
+   return list(req);
+  }
   if(['folder-save','folder-delete','move'].includes(op)){const changedFolderId=await organize(owner,req.body,await owned(owner));return {...await list(req),changedFolderId};}
   if(op==='connect'){if(req.body.authorize!==true)throw error(400,'consent_required','Consenti l’esecuzione dei timer a webapp chiusa.');await remember(req);return list(req);}
   if(op==='disconnect'){
@@ -330,6 +344,8 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   await db().runTransaction(async t=>{
    const snap=await t.get(ref),old=snap.exists?snap.data():null;
    const hasFolder=op==='save'&&Object.hasOwn(req.body.schedule||{},'folderId'),organization=hasFolder?organizationData(await t.get(organizations().doc(owner))):null;
+   const hasColor=op==='save'&&Object.hasOwn(req.body.schedule||{},'color');
+   const selectedColors=hasColor?withColor(appearanceData(await t.get(appearances().doc(owner))),targetColorKey(clean),req.body.schedule.color):null;
    const selectedFolder=hasFolder?req.body.schedule.folderId:null;
    if(hasFolder&&(typeof selectedFolder!=='string'||selectedFolder&&!organization.folders.some(f=>f.id===selectedFolder)))throw error(400,'folder_not_found','La cartella scelta non è disponibile. Aggiorna l’elenco e scegli una cartella oppure Senza cartella.');
    if(old&&old.owner!==owner)throw error(404,'not_found','Programmazione non trovata.');
@@ -343,6 +359,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
    if(op==='toggle'){delete next.solarPendingAt;next.enabled=!old.enabled;next.solarRefreshAt=next.enabled&&core.usesSolar(next)&&next.repeat!=='date'?now()+7*core.DAY:core.NEVER;if(clean?.solar)delete next.solarError;}
    if(op==='save'&&!clean.endDate)delete next.endDate;
    if(op==='save'){
+    next.autoName=req.body.schedule.autoName===true;
     for(const key of ['startDate','intervalDays','durationMode','durationWeeks','until','autoOffSeconds'])if(!(key in clean))delete next[key];
     if(!core.usesSolar(clean))delete next.solar;
     delete next.solarError;delete next.solarPendingAt;next.solarRefreshAt=clean.enabled&&core.usesSolar(clean)&&clean.repeat!=='date'?now()+7*core.DAY:core.NEVER;
@@ -357,6 +374,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
     const active=new Set(records.filter(s=>!s.archivedAt&&!completedOnce(s)).map(s=>s.id));active.add(id);const assignments={...Object.fromEntries(Object.entries(organization.assignments).filter(([key])=>active.has(key))),[id]:selectedFolder};if(!selectedFolder)delete assignments[id];
     t.set(organizations().doc(owner),{...organization,assignments,revision:organization.revision+1,updatedAt:now()});
    }
+   if(hasColor)t.set(appearances().doc(owner),{colors:selectedColors,updatedAt:now()});
    t.set(ref,next);
   });
   if(op==='save'||op==='toggle')await execute(ref);
