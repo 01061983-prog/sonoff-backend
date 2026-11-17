@@ -287,3 +287,14 @@ body .topbar.customer-branded #providerQuick:has(#providerQuickButton[aria-expan
 @media(max-width:700px){.programming-main-actions{width:100%}.programming-create{width:100%}.programming-folders{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.programming-folder-tile{padding:16px;min-height:135px}.programming-folder-bar{gap:10px}.programming-folder-bar h2{flex-basis:100%;order:-1}.programming-disclosure>summary{padding:18px;font-size:1.05rem}.programming-specifics{padding:0 18px 18px}}
 
 @media(max-width:700px){.programming-folder-bar h2{order:-2}.programming-folder-bar .programming-create{order:-1}}
+
+/* Visible schedule preview; native disclosure retains keyboard/touch controls. */
+.programming-summary-copy{display:grid;gap:9px;min-width:0;flex:1}
+.programming-summary-title{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 14px}
+.programming-summary-title strong{font-size:1.15rem;line-height:1.35}
+.programming-summary-title .programming-badge{font-size:.78rem;flex-shrink:0}
+.programming-summary-target,.programming-summary-repeat{font-size:.9rem;line-height:1.5;font-weight:400;color:var(--text-soft);overflow-wrap:anywhere}
+.programming-summary-time{font-size:1rem;font-weight:650;line-height:1.5;color:var(--text-main);overflow-wrap:anywhere}
+.programming-disclosure>summary{align-items:flex-start}
+.programming-chevron{flex-shrink:0;align-self:center}
+@media(max-width:700px){.programming-summary-title strong{font-size:1.05rem}.programming-summary-title{align-items:flex-start}.programming-summary-copy{gap:8px}.programming-summary-target,.programming-summary-repeat{font-size:.9rem}}
