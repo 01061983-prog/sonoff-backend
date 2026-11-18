@@ -9,6 +9,10 @@
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  let base='',sdkPromise,fbAuth,authModule,persistenceReady=false,persistenceEpoch=0,persistenceJob=Promise.resolve(),config,busy=false,readyResolve;
  const ready=new Promise(resolve=>{readyResolve=resolve;});
+ const logoutKey='pace-explicit-logout';
+ let logoutPending=false,logoutBusy=false;
+ function explicitlySignedOut(){try{return logoutPending||localStorage.getItem(logoutKey)==='yes';}catch{return logoutPending;}}
+ function rememberLogout(value){logoutPending=value;try{if(value)localStorage.setItem(logoutKey,'yes');else localStorage.removeItem(logoutKey);}catch{}}
  const request=async(path,body)=>{
   const c=new AbortController(),timer=setTimeout(()=>c.abort(),20000);
   try{const r=await fetch(base+path,{method:body===undefined?'GET':'POST',credentials:'include',cache:'no-store',signal:c.signal,...(body===undefined?{}:{headers:{'Content-Type':'application/json','X-App-CSRF':state.csrf},body:JSON.stringify(body)})});
@@ -116,10 +120,13 @@
   const status=$('startupStatus');if(status)status.textContent='Completamento dell’accesso…';
  }
  async function exchange(user,{renew=false}={}){
+  if(renew&&explicitlySignedOut()){gate('Uscita effettuata. Accedi per entrare nuovamente.');return;}
   if(!user.emailVerified){message('Conferma l’email ricevuta, poi torna qui e accedi.');return;}
   completing();
   const remember=renew||$('accountRemember').checked;
   await request(renew?'/api/app/renew':'/api/app/login',{idToken:await user.getIdToken(true),remember});
+  if(!renew)rememberLogout(false);
+  else if(explicitlySignedOut()){gate('Uscita effettuata. Accedi per entrare nuovamente.');return;}
   if(!remember)void (await sdk()).signOut(fbAuth).catch(()=>{});
   let current;
   for(const delay of [0,250,750]){
@@ -451,12 +458,32 @@
    if(!current())return;providerLogoDrafts.set(id,logo);const preview=form.querySelector('.provider-logo-preview');preview.src=logo;preview.hidden=false;form.querySelector('[data-provider-op="remove-logo"]').hidden=false;$('providerMessage').textContent='Logo pronto. Premi Salva identità per conservarlo.';
   }catch(e){if(current()){input.value='';$('providerMessage').textContent=e.message;}}finally{if(current()){providerLogoJobs.delete(id);input.setCustomValidity('');submit.disabled=false;}}
  }
- async function logout(){try{await request('/api/app/logout',{});if(fbAuth)await (await sdk()).signOut(fbAuth);location.reload();}catch(e){alert('Uscita non confermata: '+e.message);}}
+ async function logout(){
+  if(logoutBusy)return;logoutBusy=true;
+  let confirmed=false;
+  try{
+   await request('/api/app/logout',{});confirmed=true;rememberLogout(true);
+   gate('Uscita effettuata. Accedi per entrare nuovamente.');
+   // A cookie-only bootstrap has not loaded the SDK yet. Initialize it here
+   // as well, and wait for persisted auth before clearing this browser session.
+   const a=await sdk();await fbAuth.authStateReady();await a.signOut(fbAuth);
+   sessionStorage.removeItem('ewelink_auth_remember');
+   sessionStorage.removeItem('pace-dashboard-switch');
+   location.replace(dashboardUrl().href);
+  }catch(e){
+   if(confirmed)gate('Uscita effettuata. La pulizia dell’accesso locale non è terminata. Ricarica l’accesso quando torna la connessione.');
+   else alert('Uscita non confermata: '+translate(e));
+  }finally{logoutBusy=false;}
+ }
  async function bootstrap(url){
   base=url;
   try{
    config=await request('/api/app/config');if(!config.enabled)return true;
    state.enabled=true;mount();
+   if(explicitlySignedOut()){
+    const a=await sdk();await fbAuth.authStateReady();await a.signOut(fbAuth);
+    await prepareGoogle();gate('Uscita effettuata. Accedi per entrare nuovamente.');return ready;
+   }
    let sessionError='';
    try{
     const current=await request('/api/app/session');
