@@ -61,14 +61,14 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
  }
  // Access grants are stored only on the destination dashboard and rechecked per request.
  function workspaceGrant(actor,target){return target.dashboardAccess?.[actor.id]?.control===true?target.dashboardAccess[actor.id]:null;}
- async function mayOpenWorkspace(req,actor,target){return actor.status==='active'&&target.status==='active'&&(!!workspaceGrant(actor,target)||desktop(req)&&await isAdmin(actor));}
+ async function mayOpenWorkspace(req,actor,target){return actor.status==='active'&&target.status==='active'&&(!!workspaceGrant(actor,target)||await isAdmin(actor));}
  async function canReconnect(req){
   if(!req.appImpersonating)return true;
-  return req.appAccount?.status==='active'&&workspaceGrant(req.appActor,req.appAccount)?.reconnect===true;
+  return req.appAccount?.status==='active'&&(await isAdmin(req.appActor)||workspaceGrant(req.appActor,req.appAccount)?.reconnect===true);
  }
  async function workspaceChoices(actor,req){
   const root=await isAdmin(actor),rows=await profiles().get();
-  return rows.docs.filter(s=>s.id!==actor.id&&s.data().status==='active'&&s.data().providerOwner&&(root&&(!req||desktop(req))||workspaceGrant(actor,{...s.data(),id:s.id}))).map(s=>({id:'client:'+s.id,label:s.data().name,name:s.data().name,person:s.data().person||'',logo:s.data().logo||'',contextLabel:'Plancia autorizzata'})).sort((a,b)=>a.name.localeCompare(b.name,'it'));
+  return rows.docs.filter(s=>s.id!==actor.id&&s.data().status==='active'&&s.data().providerOwner&&(root||workspaceGrant(actor,{...s.data(),id:s.id}))).map(s=>({id:'client:'+s.id,label:s.data().name,name:s.data().name,person:s.data().person||'',logo:s.data().logo||'',contextLabel:'Plancia autorizzata'})).sort((a,b)=>a.name.localeCompare(b.name,'it'));
  }
  async function switchChoices(req,a){
   const host=req.appImpersonating?req.appActor:a,root=await isAdmin(host),clients=await workspaceChoices(host,req),rows=[];
