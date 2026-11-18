@@ -3,7 +3,7 @@ const crypto=require('crypto');
 const core=require('./programming-core');
 module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch,authorizeOwner=async()=>null,isImpulseDevice=id=>id==='1000ac81a0',wakeSetTimeout=setTimeout,wakeClearTimeout=clearTimeout,onExecuted=()=>{}}){
  const astronomy=require('./astronomy')({db,fetch:solarFetch,now});
- const recovery=require('./programming-recovery')({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,api,runScene,getScene,completedOnce});
+ const recovery=require('./programming-recovery')({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,readScheduledDevices,api,runScene,getScene,completedOnce});
  const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
  const encryptionKey=crypto.hkdfSync('sha256',Buffer.from(secret),Buffer.from(appid),Buffer.from('ewelink-programming-token-v1'),32);
  const accounts=()=>db().collection('ewelinkProgrammingAccounts'), schedules=()=>db().collection('ewelinkProgrammingSchedules'), aliases=()=>db().collection('ewelinkProgrammingSessions');
@@ -112,7 +112,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
    const same=previous?.refreshToken===credentials.refreshToken;
    if(same)credentials.rtExpiredTime=previous.rtExpiredTime;
    const generation=!browserLogin&&same&&data.generation?data.generation:crypto.randomUUID();
-   t.set(ref,{...data,generation,credentials:seal(credentials),renewAt:credentials.atExpiredTime-5*60000,revoked:false,reauthRequired:false,
+   t.set(ref,{...data,generation,credentials:seal(credentials),renewAt:credentials.atExpiredTime-5*60000,revoked:false,reauthRequired:false,reauthReason:null,accessRejectedHash:null,accessRetryAfter:0,
     automationEnabled:browserLogin?automatic(data):true,
     browserUntil:browserLogin?Math.max(data.browserUntil||0,now()+60*core.DAY):(data.browserUntil||0),
     ...(browserLogin?{refreshClaim:null,refreshUntil:0}:{}),lastError:null,updatedAt:now()});
@@ -146,7 +146,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   if(!req.programmingOwner)return;
   const ref=accounts().doc(req.programmingOwner),used=req.cookies.ewelink_access;
   await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();
-   if(data?.credentials&&open(data.credentials).accessToken===used)t.set(ref,{...data,reauthRequired:true,renewAt:core.NEVER,lastError:'Ricollega eWeLink da un dispositivo: il collegamento verrà aggiornato anche sugli altri.'});
+   if(data?.credentials&&open(data.credentials).accessToken===used)t.set(ref,{...data,accessRejectedHash:hash(used),accessRetryAfter:now()+60000,renewAt:now()+60000,lastError:'Accesso eWeLink temporaneamente rifiutato. Nuovo rinnovo automatico tra un minuto.'});
   });
  }
  async function access(owner,{scheduled=false,inspection=false,rejectedToken}={}){
@@ -155,7 +155,8 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   const ref=accounts().doc(owner),claim=crypto.randomUUID();
   const result=await db().runTransaction(async t=>{
    const snap=await t.get(ref),data=snap.exists?snap.data():{};
-   if(data.reauthRequired)throw error(401,'not_authenticated','Ricollega eWeLink da questo dispositivo per aggiornare anche gli altri.');
+   const legacyAccessRejection=data.reauthRequired&&data.lastError==='Ricollega eWeLink da un dispositivo: il collegamento verrà aggiornato anche sugli altri.';
+   if(data.reauthRequired&&!legacyAccessRejection)throw error(401,'not_authenticated','Ricollega eWeLink da questo dispositivo per aggiornare anche gli altri.');
    if(scheduled&&!automatic(data))throw error(401,'automation_disabled','Esecuzione automatica disattivata.');
    if(!inspection&&!linkedAccount&&!automatic(data)&&(data.browserUntil||0)<=now()&&data.automationEnabled===false)throw error(401,'not_authenticated','Accesso della plancia scaduto. Accedi nuovamente.');
    if(data.revoked||!data.credentials)throw error(401,'not_authenticated','Ricollega eWeLink nella sezione Programmazione.');
@@ -163,7 +164,9 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
    const credentials=open(data.credentials);
    // A provider rejection can precede the advertised expiry. Reuse a newer grant
    // saved by another device; otherwise rotate the rejected token once.
-   if(credentials.atExpiredTime>now()+5*60000&&credentials.accessToken!==rejectedToken)return {credentials};
+   const accessRejected=data.accessRejectedHash===hash(credentials.accessToken);
+   if(accessRejected&&data.accessRetryAfter>now())throw error(503,'provider_auth_wait','Rinnovo automatico eWeLink in attesa. Riprova tra un minuto.');
+   if(!legacyAccessRejection&&!accessRejected&&credentials.atExpiredTime>now()+5*60000&&credentials.accessToken!==rejectedToken)return {credentials};
    if(data.refreshUntil>now())throw error(409,'refresh_busy','Rinnovo dell’accesso in corso.');
    if(credentials.rtExpiredTime<=now())throw error(401,'not_authenticated','Autorizzazione dei timer scaduta. Ricollega eWeLink.');
    t.set(ref,{...data,refreshClaim:claim,refreshUntil:now()+120000});return {credentials,refresh:true};
@@ -174,8 +177,23 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
    const response=await api('/v2/user/refresh',null,body,'Sign '+crypto.createHmac('sha256',secret).update(JSON.stringify(body)).digest('base64'));
    if(!response.data?.at||!response.data?.rt)throw error(502,'refresh_failed','Rinnovo eWeLink non valido.');
    const c={accessToken:response.data.at,refreshToken:response.data.rt,atExpiredTime:Number(response.data.atExpiredTime)||now()+30*core.DAY,rtExpiredTime:Number(response.data.rtExpiredTime)||now()+60*core.DAY};
-   await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data.refreshClaim!==claim)throw error(409,'refresh_lost','Rinnovo non confermato.');t.set(ref,{...data,credentials:seal(c),renewAt:c.atExpiredTime-5*60000,refreshUntil:0,lastError:null,updatedAt:now()});t.set(aliasRef(c.refreshToken),{owner,generation:data.generation,validUntil:c.rtExpiredTime});});identityCache.set(hash(c.accessToken),{owner,until:now()+5*60000});return c;
-  }catch(e){await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data?.refreshClaim===claim)t.set(ref,{...data,refreshUntil:0,...(e.status===401?{reauthRequired:true}:{}),renewAt:e.status===401?core.NEVER:now()+5*60000,lastError:e.status===401?'Ricollega l’account eWeLink per i timer.':'Rinnovo temporaneamente non disponibile. Nuovo tentativo tra 5 minuti.'});});throw e;}
+   await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data.refreshClaim!==claim)throw error(409,'refresh_lost','Rinnovo non confermato.');t.set(ref,{...data,credentials:seal(c),renewAt:c.atExpiredTime-5*60000,refreshUntil:0,reauthRequired:false,reauthReason:null,accessRejectedHash:null,accessRetryAfter:0,lastError:null,updatedAt:now()});t.set(aliasRef(c.refreshToken),{owner,generation:data.generation,validUntil:c.rtExpiredTime});});identityCache.set(hash(c.accessToken),{owner,until:now()+5*60000});return c;
+  }catch(e){await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data?.refreshClaim===claim)t.set(ref,{...data,refreshUntil:0,...(e.status===401?{reauthRequired:true,reauthReason:'refresh_rejected'}:{}),renewAt:e.status===401?core.NEVER:now()+5*60000,lastError:e.status===401?'Ricollega l’account eWeLink per i timer.':'Rinnovo temporaneamente non disponibile. Nuovo tentativo tra 5 minuti.'});});throw e;}
+ }
+ // Retry only the read used to prepare a scheduled action. Never replay a
+ // physical command: a rejected or uncertain impulse must remain a single attempt.
+ async function readScheduledDevices(owner){
+  let credentials=await access(owner,{scheduled:true});
+  try{return {credentials,devices:await listDevices(credentials.accessToken)};}
+  catch(e){
+   if(e.status!==401)throw e;
+   credentials=await access(owner,{scheduled:true,rejectedToken:credentials.accessToken});
+   try{return {credentials,devices:await listDevices(credentials.accessToken)};}
+   catch(retryError){
+    if(retryError.status===401)await markAuthenticationRequired({programmingOwner:owner,cookies:{ewelink_access:credentials.accessToken}});
+    throw retryError;
+   }
+  }
  }
  async function linkedDevices(token){
   const owner=await identity({cookies:{ewelink_access:token}}),snap=await db().collection('ewelinkLinkedDevices').doc(owner).get();
@@ -442,7 +460,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
     if(!daikin())throw new Error('Integrazione Daikin non disponibile.');
     await recovery.renew(ref,claim,s);message=await daikin().runSchedule(s,active[0].p.event.state);status='succeeded';
    }else if(active.length){
-    const credentials=await access(s.owner,{scheduled:true}),devices=await listDevices(credentials.accessToken);
+    const {credentials,devices}=await readScheduledDevices(s.owner);
     let actions=active.map(({target,p})=>{
      const device=devices.find(d=>d.deviceid===target.deviceId);
      if(!device?.online)throw new Error('Dispositivo offline o non più autorizzato. Nessun comando inviato.');
@@ -505,5 +523,5 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   }finally{busy=false;await armWake();}
  }
  function start(){if(timer)return;timer=setInterval(()=>{void tick().catch(()=>console.error('Controllo programmazioni non riuscito.'));},30000);timer.unref?.();void tick().catch(()=>console.error('Avvio programmazioni non riuscito.'));}
- return {protectManual,solarPreview,linkedDevices,registerLinkedDevice,list,mutate,identity,resolveOAuthOwner,restoreSession,connectBrowser,logoutBrowser,markAuthenticationRequired,remember,access,start,tick,seal,open,stop(){if(timer)clearInterval(timer);timer=null;++wakeEpoch;if(wakeTimer)wakeClearTimeout(wakeTimer);wakeTimer=null;}};
+ return {protectManual,solarPreview,linkedDevices,registerLinkedDevice,list,mutate,identity,resolveOAuthOwner,restoreSession,connectBrowser,logoutBrowser,markAuthenticationRequired,remember,access,readScheduledDevices,start,tick,seal,open,stop(){if(timer)clearInterval(timer);timer=null;++wakeEpoch;if(wakeTimer)wakeClearTimeout(wakeTimer);wakeTimer=null;}};
 };

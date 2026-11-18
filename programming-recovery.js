@@ -7,7 +7,8 @@ function latest(s,time){
  const from=s.repeat==='date'?0:time-Math.max(8,(s.intervalDays||0)+2)*core.DAY;
  return core.events(s,from,time).filter(e=>e.at>=(s.updatedAt||s.createdAt||0)).at(-1)||null;
 }
-module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,api,runScene,getScene,completedOnce}){
+module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,readScheduledDevices,api,runScene,getScene,completedOnce}){
+ const readDevices=readScheduledDevices||async function(owner){const credentials=await access(owner,{scheduled:true});return {credentials,devices:await listDevices(credentials.accessToken)};};
  const ledger=owner=>db().collection('ewelinkProgrammingIntents').doc(owner);
  function eligible(s){return ['on','off'].includes(s.action)&&targets(s).length>0&&targets(s).every(t=>['on','off'].includes(t.action)&&!isImpulseDevice(t.deviceId)&&['single','multi'].includes(t.kind));}
  function fold(entries,s,event,extra={}){
@@ -73,9 +74,9 @@ module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar
   });if(!acquired)return;
   const {s,claim}=acquired;let status='unknown',message='Ripristino non confermato.',needsReview=false;
   try{
-   const credentials=await access(s.owner,{scheduled:true}),records=await owned(s.owner),stored=(await ledger(s.owner).get()).data()?.entries;
+   const {credentials,devices}=await readDevices(s.owner),records=await owned(s.owner),stored=(await ledger(s.owner).get()).data()?.entries;
    if(s.kind==='scene'){const scene=getScene&&await getScene({cookies:{ewelink_access:credentials.accessToken}},s.sceneId,s.workspaceId);if(!scene||scene.mode!=='toggle'||scene.signature!==s.sceneSignature)throw Object.assign(new Error('Scenario modificato o eliminato: apri e salva di nuovo la programmazione.'),{status:409,code:'scene_changed'});}
-   const devices=await listDevices(credentials.accessToken),groups=new Map();
+   const groups=new Map();
    const intended=desired(s,records,stored,now()).filter(item=>{const device=devices.find(d=>d.deviceid===item.deviceId);return item.kind!=='multi'||!device?.controlOutlets||device.controlOutlets.includes(item.outlet);});
    if(!intended.length)throw Object.assign(new Error('Nessun canale fisico selezionato. Controlla la programmazione.'),{status:409});
    // Validate every target before sending anything, including scene targets.
@@ -122,7 +123,7 @@ module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar
    try{
     // Read once per account. Even a brief outage missed between polls is detected
     // by the relay returning OFF inside a currently active ON interval.
-    const credentials=await access(owner,{scheduled:true}),devices=await listDevices(credentials.accessToken);
+    const {devices}=await readDevices(owner);
     for(const{doc,s}of records){
      const inconsistent=targets(s).some(target=>{
       const device=devices.find(d=>d.deviceid===target.deviceId);
