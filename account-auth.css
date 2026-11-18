@@ -92,3 +92,22 @@ body.account-admin-page>main,body.account-admin-page>#navigationDialog,body.acco
  #accountGate #accountCredentials{grid-column:2;grid-row:1/span 6;border-left:1px solid #e3e6eb;padding-left:40px;box-sizing:border-box}
  #accountGate .app-login-card>.pace-login-brand{margin-bottom:64px}#accountGate .app-login-card>#accountMessage{margin-top:16px;max-width:300px;color:#687180}#accountGate .app-login-card>#accountRetry{align-self:end;width:auto;justify-self:start;padding-left:0}#accountGate .pace-login-signature{text-align:left;margin-top:20px}
 }
+
+/* Keep the complete account form inside phone/tablet dialogs, also at large text sizes. */
+#providerAccounts{max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overscroll-behavior:contain;overflow-x:hidden;scrollbar-gutter:stable;padding:clamp(14px,4vw,24px)}
+#providerAccounts *,#providerAccounts *::before,#providerAccounts *::after{box-sizing:border-box}
+#providerAccounts>header{position:sticky;top:calc(-1 * clamp(14px,4vw,24px));z-index:2;background:#f7f8fa;padding:12px 0;border-bottom:1px solid #e3e6eb;align-items:flex-start}
+#providerAccounts>header h2{min-width:0;overflow-wrap:anywhere;font-size:1.3rem;line-height:1.25}
+#providerClose{flex:none;max-width:40%;padding:10px 14px;font-size:.9rem}
+#providerList,#providerAccounts .provider-row,#providerAccounts form,#providerAccounts label,#providerAccounts fieldset,#providerAccounts .provider-transfer,#providerAccounts .provider-row-identity>div{min-width:0;min-inline-size:0;max-width:100%}
+#providerAccounts .provider-row{grid-template-columns:minmax(0,1fr);padding:clamp(12px,3.5vw,20px)}
+#providerAccounts input,#providerAccounts select,#providerAccounts button,#providerAccounts p,#providerAccounts small{max-width:100%;min-width:0;overflow-wrap:anywhere}
+#providerAccounts input,#providerAccounts select{width:100%;font:inherit;font-size:1rem;min-height:48px}
+#providerAccounts select{border:1px solid #cbd0d9;border-radius:12px;background:#fff;color:#252b35;padding:12px;text-overflow:ellipsis}
+#providerAccounts fieldset{margin:0;padding:0;border:0}
+#providerAccounts .provider-row-identity>div{flex:1}
+#providerAccounts button{width:100%}
+#providerAccounts .provider-access-note{margin:0;color:#687180;font-size:.85rem;line-height:1.4}
+@media(max-width:500px){#providerAccounts{width:calc(100vw - 16px);max-width:calc(100vw - 16px);border-radius:20px}#providerAccounts .provider-avatar{width:36px;height:36px;flex-basis:36px}#providerAccounts .provider-row-identity{gap:10px}}
+#providerAccounts #providerClose{width:auto;max-width:40%;flex:0 0 auto}
+#providerAccounts>header h2{flex:1}

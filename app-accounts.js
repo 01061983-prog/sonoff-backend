@@ -56,6 +56,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   if(d.accountId!==req.appAccount.id||d.uid!==req.appActor.uid||d.until<=now())throw fail(403,'app_oauth_account','Richiesta di collegamento scaduta. Riparti dalla tua plancia.');
   if(d.add){if(!/^[a-f0-9]{64}$/.test(d.slot||''))throw fail(400,'app_link','Collegamento non valido.');return d;}
   const c=connections(req.appAccount).find(c=>c.owner===d.owner);
+  if(c?.workspaceAccountId)throw fail(409,'app_link_workspace','Questo collegamento usa la plancia cliente. Ricollega eWeLink accedendo con l’account del cliente.');
   if(!c)throw fail(403,'app_provider_forbidden','Collegamento non disponibile.');return {...d,slot:c.slot||'',label:c.label};
  }
  async function workspaceChoices(actor){
@@ -102,7 +103,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
    const adminBranding=!req.appImpersonating&&await isAdmin(req.appActor);
    const brandingAccounts=adminBranding?(await profiles().get()).docs.map(s=>({id:s.id,name:s.data().name})).sort((x,y)=>x.name.localeCompare(y.name)):[];
    const switches=await switchChoices(req,a);
-   return {ok:true,selected:selected?.owner||'',switchSelected:switches.selected,switchChoices:switches.choices,impersonating:!!req.appImpersonating,connections:await Promise.all(list.map(async c=>({...await displayConnectionIdentity(a,c),workspaceAccountId:c.workspaceAccountId||''}))),...(adminBranding?{brandingAccounts,canTransfer:desktop(req),transferTargets:(await workspaceChoices(req.appActor)).map(c=>({id:c.id.slice(7),name:c.name}))}:{})};
+   return {ok:true,selected:selected?.owner||'',switchSelected:switches.selected,switchChoices:switches.choices,impersonating:!!req.appImpersonating,connections:await Promise.all(list.map(async c=>({...await displayConnectionIdentity(a,c),workspaceAccountId:c.workspaceAccountId||'',canSelect:!c.workspaceAccountId||desktop(req),canReconnect:!req.appImpersonating&&!c.workspaceAccountId}))),...(adminBranding?{brandingAccounts,canTransfer:desktop(req),transferTargets:(await workspaceChoices(req.appActor)).map(c=>({id:c.id.slice(7),name:c.name}))}:{})};
   }
   csrf(req);if(req.appReadOnly)throw fail(403,'app_readonly','Plancia disponibile soltanto in consultazione.');
   const b=req.body||{};
@@ -135,6 +136,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   if(!['add','reauthorize'].includes(b.op))throw fail(400,'app_operation','Operazione non valida.');
   const c=list.find(c=>c.owner===b.id),label=String(b.label||'').trim();
   if(b.op==='add'&&(!label||label.length>80))throw fail(400,'app_link_name','Dai un nome al nuovo account eWeLink (massimo 80 caratteri).');
+  if(b.op==='reauthorize'&&c?.workspaceAccountId)throw fail(409,'app_link_workspace','Questo collegamento usa la plancia cliente. Ricollega eWeLink accedendo con l’account del cliente.');
   if(b.op==='reauthorize'&&!c)throw fail(403,'app_provider_forbidden','Collegamento non disponibile.');
   const d={accountId:a.id,uid:req.appActor.uid,until:now()+10*60000,add:b.op==='add',...(b.op==='add'?{slot:crypto.randomBytes(32).toString('hex'),label}:{owner:c.owner})};
   res.cookie(INTENT,sealPending(d),{...opts,path:'/login',maxAge:10*60000});
@@ -228,6 +230,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
    if(current?.status!=='active')throw fail(403,'app_blocked','Account non attivo.');
    if(l.exists&&!l.data().deleted&&l.data().accountId!==a.id)throw fail(409,'app_provider_taken','Questo account eWeLink è già collegato a un’altra plancia.');
    const rows=connections(current),known=rows.find(c=>c.owner===owner);
+   if(rows.some(c=>c.owner===(expectedOwner||owner)&&c.workspaceAccountId))throw fail(409,'app_link_workspace','Il collegamento appartiene alla plancia cliente. Accedi con l’account del cliente per ricollegarlo.');
    if(!add&&(expectedOwner||current.providerOwner)&&(expectedOwner||current.providerOwner)!==owner)throw fail(409,'app_provider_changed','Hai scelto un account eWeLink diverso. Usa Aggiungi account per conservarli entrambi.');
    if(!known)rows.push({owner,label:label||'Account principale',slot});
    t.set(lr,{accountId:a.id,deleted:false,updatedAt:now()});t.set(pr,{providerOwner:current.providerOwner||owner,providerConnections:rows,setupDone:true,updatedAt:now()},{merge:true});
