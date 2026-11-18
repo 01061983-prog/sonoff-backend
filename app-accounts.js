@@ -59,26 +59,28 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   if(c?.workspaceAccountId)throw fail(409,'app_link_workspace','Questo collegamento usa la plancia cliente. Ricollega eWeLink accedendo con l’account del cliente.');
   if(!c)throw fail(403,'app_provider_forbidden','Collegamento non disponibile.');return {...d,slot:c.slot||'',label:c.label};
  }
- async function workspaceChoices(actor){
-  if(!await isAdmin(actor))return [];
-  return (await profiles().get()).docs.filter(s=>s.id!==actor.id&&s.data().status==='active'&&s.data().providerOwner).map(s=>({id:'client:'+s.id,label:s.data().name,name:s.data().name,person:s.data().person||'',logo:s.data().logo||'',contextLabel:'Plancia cliente'})).sort((a,b)=>a.name.localeCompare(b.name,'it'));
+ // Access grants are stored only on the destination dashboard and rechecked per request.
+ function workspaceGrant(actor,target){return target.dashboardAccess?.[actor.id]?.control===true?target.dashboardAccess[actor.id]:null;}
+ async function mayOpenWorkspace(req,actor,target){return actor.status==='active'&&target.status==='active'&&(!!workspaceGrant(actor,target)||desktop(req)&&await isAdmin(actor));}
+ async function canReconnect(req){
+  if(!req.appImpersonating)return true;
+  return req.appAccount?.status==='active'&&workspaceGrant(req.appActor,req.appAccount)?.reconnect===true;
+ }
+ async function workspaceChoices(actor,req){
+  const root=await isAdmin(actor),rows=await profiles().get();
+  return rows.docs.filter(s=>s.id!==actor.id&&s.data().status==='active'&&s.data().providerOwner&&(root&&(!req||desktop(req))||workspaceGrant(actor,{...s.data(),id:s.id}))).map(s=>({id:'client:'+s.id,label:s.data().name,name:s.data().name,person:s.data().person||'',logo:s.data().logo||'',contextLabel:'Plancia autorizzata'})).sort((a,b)=>a.name.localeCompare(b.name,'it'));
  }
  async function switchChoices(req,a){
-  const host=req.appWorkspace?req.appActor:a;
-  if(!await isAdmin(host))return {selected:selectedConnection(req,a)?.owner||'',choices:await Promise.all(connections(a).map(c=>displayConnectionIdentity(a,c)))};
-  const clients=desktop(req)?await workspaceChoices(host):[],rows=[];
+  const host=req.appImpersonating?req.appActor:a,root=await isAdmin(host),clients=await workspaceChoices(host,req),rows=[];
   for(const c of connections(host)){
    if(c.workspaceAccountId)continue;
    rows.push({...await displayConnectionIdentity(host,c),id:'provider:'+c.owner,contextLabel:'Collegamento personale'});
   }
-  return {selected:req.appWorkspace?'client:'+a.id:'provider:'+(selectedConnection(req,a)?.owner||''),choices:[...rows,...clients]};
+  return {selected:req.appImpersonating?'client:'+a.id:'provider:'+(selectedConnection(req,a)?.owner||''),choices:[...rows,...clients]};
  }
  async function selectWorkspace(req,res,id){
-  if(!desktop(req))throw fail(403,'app_desktop','L’amministratore può aprire le plance clienti solo da computer. Su tablet o smartphone accedi con l’account del cliente.');
-  if(!await isAdmin(req.appActor))throw fail(403,'app_forbidden','Accesso riservato all’amministratore.');
   const target=await read(id);
-  if(target.id===req.appActor.id||target.status!=='active'||!target.providerOwner)throw fail(403,'app_workspace','Plancia cliente non disponibile.');
-  // Selection is not an access grant: the administrator is verified on every request.
+  if(target.id===req.appActor.id||!target.providerOwner||!await mayOpenWorkspace(req,req.appActor,target))throw fail(403,'app_workspace','Questa plancia non è autorizzata per il tuo account. Il consenso si gestisce dal computer in Gestione account.');
   res.clearCookie(ACT,opts);res.cookie(WORKSPACE,sealPending({actorId:req.appActor.id,targetId:target.id}),{...opts,maxAge:365*DAY});
  }
  async function transferPrograms(req,body){
@@ -97,13 +99,15 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   await audit(req.appActor,'transfer-programming',customer.id);return {ok:true,...result};
  }
  async function manageProviders(req,res){
+  if(req.method!=='GET'&&req.body?.op==='stop-workspace'){await session(req,{allowActAs:false});csrf(req);res.clearCookie(ACT,opts);res.cookie(WORKSPACE,sealPending({actorId:req.appActor.id,targetId:''}),{...opts,maxAge:365*DAY});return {ok:true};}
   const a=await session(req),list=connections(a),selected=selectedConnection(req,a);
   if(req.method!=='GET'&&['preview-transfer','transfer-programming'].includes(req.body?.op))return transferPrograms(req,req.body);
   if(req.method==='GET'){
    const adminBranding=!req.appImpersonating&&await isAdmin(req.appActor);
    const brandingAccounts=adminBranding?(await profiles().get()).docs.map(s=>({id:s.id,name:s.data().name})).sort((x,y)=>x.name.localeCompare(y.name)):[];
-   const switches=await switchChoices(req,a);
-   return {ok:true,selected:selected?.owner||'',switchSelected:switches.selected,switchChoices:switches.choices,impersonating:!!req.appImpersonating,connections:await Promise.all(list.map(async c=>({...await displayConnectionIdentity(a,c),workspaceAccountId:c.workspaceAccountId||'',canSelect:!c.workspaceAccountId||desktop(req),canReconnect:!req.appImpersonating&&!c.workspaceAccountId}))),...(adminBranding?{brandingAccounts,canTransfer:desktop(req),transferTargets:(await workspaceChoices(req.appActor)).map(c=>({id:c.id.slice(7),name:c.name}))}:{})};
+   const switches=await switchChoices(req,a),canRelink=await canReconnect(req);
+   const connectionRows=await Promise.all(list.map(async c=>{const target=c.workspaceAccountId?await read(c.workspaceAccountId):null;return {...await displayConnectionIdentity(a,c),workspaceAccountId:c.workspaceAccountId||'',canSelect:!target||await mayOpenWorkspace(req,req.appActor,target),canReconnect:canRelink&&!c.workspaceAccountId};}));
+   return {ok:true,selected:selected?.owner||'',switchSelected:switches.selected,switchChoices:switches.choices,impersonating:!!req.appImpersonating,connections:connectionRows,...(adminBranding?{brandingAccounts,canTransfer:desktop(req),transferTargets:(await workspaceChoices(req.appActor)).map(c=>({id:c.id.slice(7),name:c.name}))}:{})};
   }
   csrf(req);if(req.appReadOnly)throw fail(403,'app_readonly','Plancia disponibile soltanto in consultazione.');
   const b=req.body||{};
@@ -113,7 +117,6 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   if(b.op==='select'){
    if(typeof b.id==='string'&&b.id.startsWith('client:')){await selectWorkspace(req,res,b.id.slice(7));return {ok:true};}
    if(typeof b.id==='string'&&b.id.startsWith('provider:')){
-    if(!await isAdmin(req.appActor))throw fail(403,'app_forbidden','Accesso riservato all’amministratore.');
     const host=await read(req.appActor.id),c=connections(host).find(c=>c.owner===b.id.slice(9));
     if(!c)throw fail(403,'app_provider_forbidden','Collegamento non disponibile.');
     if(c.workspaceAccountId){await selectWorkspace(req,res,c.workspaceAccountId);return {ok:true};}
@@ -123,7 +126,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
    const raw=list.find(c=>c.owner===b.id);if(raw?.workspaceAccountId&&await isAdmin(req.appActor)){await selectWorkspace(req,res,raw.workspaceAccountId);return {ok:true};}
    await selectConnection(req,res,b.id);return {ok:true};
   }
-  if(req.appImpersonating)throw fail(403,'app_link_owner','Solo il titolare può collegare o modificare i propri account eWeLink.');
+  if(req.appImpersonating&&!(b.op==='reauthorize'&&await canReconnect(req)))throw fail(403,'app_link_owner','Non hai il permesso di ricollegare eWeLink per questa plancia. L’amministratore può assegnarlo da Gestione account sul computer.');
   if(b.op==='rename'){
    const label=String(b.label||'').trim();if(!label||label.length>80)throw fail(400,'app_link_name','Inserisci un nome da 1 a 80 caratteri.');
    const identity={};if(Object.hasOwn(b,'logo'))identity.logo=accountLogo(b.logo);if(Object.hasOwn(b,'person')){const person=String(b.person||'').trim();if(person.length>120)throw fail(400,'app_link_name','Il nome del titolare deve contenere al massimo 120 caratteri.');identity.person=person;}
@@ -147,7 +150,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
  function desktop(req){return !/Mobile|Android|iPhone|iPad|Tablet/i.test(req.headers?.['user-agent']||'');}
  async function read(id){if(!/^[a-f0-9]{64}$/.test(id||''))throw fail(400,'app_account','Account non valido.');const s=await profiles().doc(id).get();if(!s.exists)throw fail(404,'app_account','Account non trovato.');return {...s.data(),id};}
  async function audit(actor,action,target){await db().collection('ewelinkAppAudit').doc(crypto.randomBytes(16).toString('hex')).set({actor:actor.uid,action,target,at:now()});}
- async function isAdmin(actor){const s=await adminRef().get();return actor.role==='admin'&&s.data()?.uid===actor.uid;}
+ async function isAdmin(actor){if(actor?.role!=='admin')return false;const s=await adminRef().get();return actor.role==='admin'&&s.data()?.uid===actor.uid;}
  async function session(req,{active=true,allowActAs=true}={}){
   const cookie=req.cookies?.[COOKIE];
   if(!cookie)throw fail(401,'app_auth_required','Accedi con il tuo account della webapp.');
@@ -165,13 +168,14 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   const savedWorkspace=allowActAs?openPending(req.cookies?.[WORKSPACE]):null;
   const explicitWorkspace=savedWorkspace?.actorId===actor.id?savedWorkspace:null;
   const mapped=!explicitWorkspace&&allowActAs&&!req.cookies?.[ACT]&&await isAdmin(actor)?selectedConnection(req,actor)?.workspaceAccountId:null;
-  if(explicitWorkspace?.targetId&&!desktop(req))throw fail(403,'app_desktop','L’accesso amministratore alle plance clienti è disponibile solo da computer. Su tablet o smartphone accedi con l’account del cliente.');
-  req.appPersonal=!!explicitWorkspace&&!explicitWorkspace.targetId||!!mapped&&!desktop(req);
-  const workspace=explicitWorkspace||(mapped&&desktop(req)?{actorId:actor.id,targetId:mapped}:null);
+  const mappedAllowed=!!mapped&&await mayOpenWorkspace(req,actor,await read(mapped));
+  req.appPersonal=!!explicitWorkspace&&!explicitWorkspace.targetId||!!mapped&&!mappedAllowed;
+  let workspace=explicitWorkspace||(mappedAllowed?{actorId:actor.id,targetId:mapped}:null);
+  if(!workspace&&!actor.providerOwner){const first=(await workspaceChoices(actor,req))[0];if(first){workspace={actorId:actor.id,targetId:first.id.slice(7)};req.appAutoWorkspace=workspace;}}
   if(workspace?.actorId===actor.id&&workspace.targetId){
-   if(!await isAdmin(actor))throw fail(403,'app_forbidden','Accesso alla plancia cliente non disponibile.');
    const target=await read(workspace.targetId);
    if(target.status!=='active'||!target.providerOwner)throw fail(403,'app_blocked',disabledMessage);
+   if(!await mayOpenWorkspace(req,actor,target))throw fail(403,'app_workspace','Il tuo account non è autorizzato ad aprire questa plancia su questo dispositivo. Contatta l’amministratore.');
    req.appAccount=target;req.appImpersonating=true;req.appWorkspace=true;req.appReadOnly=false;
   }
   if(allowActAs&&req.cookies?.[ACT]){
@@ -222,7 +226,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   }
   return {ok:true,account:publicProfile(await read(a.id))};
  }
- async function status(req){const a=await session(req,{active:false}),identity=await displayConnectionIdentity(a,selectedConnection(req,a));return {ok:true,authenticated:true,account:publicProfile(a),actor:publicProfile(req.appActor),impersonating:!!req.appImpersonating,workspaceView:!!req.appWorkspace,quickSelection:req.appWorkspace?'client:'+a.id:await isAdmin(req.appActor)?'provider:'+(selectedConnection(req,a)?.owner||''):selectedConnection(req,a)?.owner||'',readOnly:!!req.appReadOnly,adminDesktop:desktop(req)&&await isAdmin(req.appActor),primaryProvider:a.providerOwner||'',selectedProvider:selectedConnection(req,a)?.owner||'',selectedProviderLabel:connectionIdentity(a,selectedConnection(req,a))?.label||'',selectedProviderIdentity:identity,providerCount:connections(a).length,csrf:mac(req.cookies[COOKIE])};}
+ async function status(req){const a=await session(req,{active:false}),identity=await displayConnectionIdentity(a,selectedConnection(req,a));return {ok:true,authenticated:true,account:publicProfile(a),actor:publicProfile(req.appActor),impersonating:!!req.appImpersonating,workspaceView:!!req.appWorkspace,quickSelection:req.appWorkspace?'client:'+a.id:'provider:'+(selectedConnection(req,a)?.owner||''),readOnly:!!req.appReadOnly,canReconnectProvider:await canReconnect(req),adminDesktop:desktop(req)&&await isAdmin(req.appActor),primaryProvider:a.providerOwner||'',selectedProvider:selectedConnection(req,a)?.owner||'',selectedProviderLabel:connectionIdentity(a,selectedConnection(req,a))?.label||'',selectedProviderIdentity:identity,providerCount:connections(a).length,csrf:mac(req.cookies[COOKIE])};}
  async function bind(a,owner,{add=false,slot='',label,expectedOwner}={}){
   const pr=profiles().doc(a.id),lr=links().doc(owner);
   await db().runTransaction(async t=>{
@@ -305,7 +309,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
     pageToken=page.pageToken;
    }while(pageToken);
   }catch{warning='Non è stato possibile verificare tutti gli accessi Firebase. Le plance già salvate sono conservate: aggiorna l’elenco per riprovare.';}
-  return {ok:true,accounts:[...records.values()].map(publicProfile).sort((a,b)=>a.name.localeCompare(b.name)),...(warning?{registrationWarning:warning}:{})};
+  return {ok:true,accounts:[...records.values()].map(a=>({...publicProfile(a),dashboardAccess:a.dashboardAccess||{}})).sort((a,b)=>a.name.localeCompare(b.name)),...(warning?{registrationWarning:warning}:{})};
  }
  async function manage(req,res){
   const actor=await admin(req);
@@ -326,9 +330,21 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   }
   if(a.id===actor.id&&['block','delete'].includes(b.op))throw fail(400,'app_self','Non puoi bloccare o rimuovere l’unico amministratore.');
   if(b.op==='edit'){
+   const permissions={};
+   if(Object.hasOwn(b,'dashboardAccess')){
+    if(a.id===actor.id)throw fail(400,'app_self','Assegna i permessi dalla plancia cliente.');
+    if(!b.dashboardAccess||typeof b.dashboardAccess!=='object'||Array.isArray(b.dashboardAccess)||Object.keys(b.dashboardAccess).length>200)throw fail(400,'app_permissions','Elenco permessi non valido.');
+    const grants={};
+    for(const[id,g]of Object.entries(b.dashboardAccess)){
+     if(!/^[a-f0-9]{64}$/.test(id)||id===a.id||!g||g.control!==true||typeof g.reconnect!=='boolean')throw fail(400,'app_permissions','Permessi non validi.');
+     const recipient=await read(id);if(recipient.status!=='active'&&!a.dashboardAccess?.[id]?.control)throw fail(400,'app_permissions','Puoi autorizzare soltanto account abilitati.');
+     grants[id]={control:true,reconnect:g.reconnect};
+    }
+    permissions.dashboardAccess=grants;
+   }
    const name=String(b.name||'').trim();
    if(!name||name.length>80)throw fail(400,'app_name','Inserisci un nome tra 1 e 80 caratteri.');
-   await profiles().doc(a.id).set({name,logo:accountLogo(b.logo??''),updatedAt:now()},{merge:true});
+   const logo=accountLogo(b.logo??'');await db().runTransaction(async t=>{const ref=profiles().doc(a.id),current=await t.get(ref);if(!current.exists)throw fail(404,'app_account','Account non trovato.');t.set(ref,{...current.data(),name,logo,...permissions,updatedAt:now()});});
   }else if(b.op==='rename'){
    const name=String(b.name||'').trim();if(!name||name.length>80)throw fail(400,'app_name','Inserisci un nome tra 1 e 80 caratteri.');await profiles().doc(a.id).set({name,updatedAt:now()},{merge:true});
   }else if(b.op==='delete'){
@@ -350,7 +366,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
  }
  function install(app,wrap){
   app.get('/api/app/config',(_req,res)=>res.json({ok:true,enabled:true,firebase:webConfig}));
-  app.get('/api/app/session',wrap(async(req,res)=>{try{res.json(await status(req));}catch(e){if(e.code==='app_auth_required'){if(req.cookies?.[COOKIE])res.clearCookie(COOKIE,opts);return res.json({ok:true,authenticated:false});}if(e.code==='app_actas_expired')res.clearCookie(ACT,opts);throw e;}}));
+  app.get('/api/app/session',wrap(async(req,res)=>{try{const data=await status(req);if(req.appAutoWorkspace)res.cookie(WORKSPACE,sealPending(req.appAutoWorkspace),{...opts,maxAge:365*DAY});res.json(data);}catch(e){if(e.code==='app_auth_required'){if(req.cookies?.[COOKIE])res.clearCookie(COOKIE,opts);return res.json({ok:true,authenticated:false});}if(e.code==='app_actas_expired')res.clearCookie(ACT,opts);throw e;}}));
   app.post('/api/app/login',wrap(async(req,res)=>res.json(await login(req,res))));
   app.post('/api/app/renew',wrap(async(req,res)=>res.json(await login(req,res,{renew:true}))));
   app.get('/api/app/providers',wrap(async(req,res)=>res.json(await manageProviders(req,res))));
@@ -360,5 +376,5 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   app.get('/api/app/accounts',wrap(async(req,res)=>res.json(await manage(req,res))));
   app.post('/api/app/accounts',wrap(async(req,res)=>res.json(await manage(req,res))));
  }
- return {install,session,provider,bind,selectedConnection,connectionIdentity,climateOwner,climateScheduleOwner,selectConnection,linkIntent,context,authorizeOwner,tokenAllowed,sealPending,openPending,csrf,publicProfile,providerAccount,accountId};
+ return {install,session,provider,canReconnect,bind,selectedConnection,connectionIdentity,climateOwner,climateScheduleOwner,selectConnection,linkIntent,context,authorizeOwner,tokenAllowed,sealPending,openPending,csrf,publicProfile,providerAccount,accountId};
 };

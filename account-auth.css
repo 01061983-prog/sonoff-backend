@@ -111,3 +111,5 @@ body.account-admin-page>main,body.account-admin-page>#navigationDialog,body.acco
 @media(max-width:500px){#providerAccounts{width:calc(100vw - 16px);max-width:calc(100vw - 16px);border-radius:20px}#providerAccounts .provider-avatar{width:36px;height:36px;flex-basis:36px}#providerAccounts .provider-row-identity{gap:10px}}
 #providerAccounts #providerClose{width:auto;max-width:40%;flex:0 0 auto}
 #providerAccounts>header h2{flex:1}
+
+#accountAccessField{min-width:0;border:1px solid #e3e6eb;border-radius:14px;padding:16px}#accountAccessField[hidden]{display:none}#accountAccessField legend{font-weight:700}#accountAccessList{display:grid;gap:12px;margin-top:12px}.account-access-row{display:grid;gap:7px;border-top:1px solid #e3e6eb;padding-top:12px;min-width:0}.account-access-row small{overflow-wrap:anywhere;color:#687180}#accountAccessList input[type=checkbox]{width:22px;min-height:22px;flex:0 0 22px}.account-access-row label{font-size:.9rem;line-height:1.4}

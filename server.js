@@ -114,6 +114,10 @@ function requireLogin(req, res, next) {
   return renewSession(req, res).then(() => next()).catch(error => failure(res, error, req));
 }
 function failure(res, error, req) {
+  if(['app_link_owner','app_link_workspace','app_oauth_account','app_workspace','app_desktop'].includes(error.code)&&['/login','/oauth/callback'].includes(req?.path)){
+    const message=String(error.message||'Accesso non autorizzato.').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    return res.status(error.status||403).type('html').send('<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Collegamento eWeLink · PACE</title><style>body{font:18px/1.5 system-ui;background:#f7f8fa;color:#252b35;margin:0;padding:24px}main{max-width:560px;margin:10vh auto;background:white;padding:28px;border:1px solid #e3e6eb;border-radius:24px}a{display:inline-block;padding:12px;background:#b94712;color:white;border-radius:12px;text-decoration:none}</style><main><h1>Collegamento eWeLink</h1><p>'+message+'</p><a href="/app/index.html">Torna alla plancia</a><p><small>PACE · powered by #gm83</small></p></main></html>');
+  }
   if (error.code === "not_authenticated") {
     // Conserva il refresh token: /login potrà tentare un rinnovo senza chiedere credenziali.
     res.clearCookie("ewelink_access", COOKIE_OPTIONS);
@@ -287,7 +291,7 @@ app.get("/", (_req, res) => res.json({ ok: true, message: "Backend Sonoff OAuth 
 app.get("/login", route(async (req, res) => {
   if (appAccounts) {
     await appAccounts.session(req);
-    if(req.appImpersonating) throw cloudError(403,"app_link_owner","Il collegamento eWeLink deve essere completato dal titolare dell’account.");
+    if(!await appAccounts.canReconnect(req))throw cloudError(403,'app_link_owner','Non hai il permesso di ricollegare eWeLink per questa plancia. L’amministratore può assegnarlo da Gestione account sul computer.');
     req.oauthConnection=appAccounts.linkIntent(req);
     res.clearCookie("ewelink_link_intent",{...COOKIE_OPTIONS,path:"/login"});
     if(req.appAccount.providerOwner&&!req.oauthConnection&&req.query.reauthorize!=="1"){
@@ -354,7 +358,7 @@ app.get("/oauth/callback", route(async (req, res) => {
   if (req.query.error || typeof req.query.code !== "string" || !req.query.code) {
     return res.status(400).send("Accesso eWeLink non completato. Riprova dalla plancia.");
   }
-  if(appAccounts){await appAccounts.session(req);if(req.appImpersonating||pending.accountId!==req.appAccount.id||pending.actorUid!==req.appActor.uid)throw cloudError(403,"app_oauth_account","Accesso eWeLink iniziato da un altro account. Riparti dalla tua plancia.");}
+  if(appAccounts){await appAccounts.session(req);if(!await appAccounts.canReconnect(req)||pending.accountId!==req.appAccount.id||pending.actorUid!==req.appActor.uid)throw cloudError(403,"app_oauth_account","Accesso eWeLink iniziato da un altro account. Riparti dalla tua plancia.");}
   const body = { code: req.query.code, redirectUrl: REDIRECT_URL, grantType: "authorization_code" };
   const data = await api("/v2/user/oauth/token", null, body, "Sign " + sign(JSON.stringify(body)));
   saveSession(req, res, data.data || {});
