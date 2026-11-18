@@ -13,13 +13,13 @@
   <link rel="manifest" href="manifest.webmanifest?v=65">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg?v=65">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=65">
-  <script src="account-auth.js?v=89"></script>
-  <link rel="stylesheet" href="account-auth.css?v=89">
+  <script src="account-auth.js?v=90"></script>
+  <link rel="stylesheet" href="account-auth.css?v=90">
   <script src="text-size.js?v=64"></script>
   <script src="scene-pages.js?v=46"></script>
   <script src="room-map.js?v=48"></script>
   <link rel="stylesheet" href="room-map.css?v=48">
-  <link rel="stylesheet" href="app.css?v=89">
+  <link rel="stylesheet" href="app.css?v=90">
   <script src="menu-bar.js?v=61"></script>
   <link rel="stylesheet" href="menu-bar.css?v=65">
   <script src="push-settings.js?v=81"></script>
@@ -1964,7 +1964,7 @@
         const s=programmingEditing;
         programmingElement('Folder').innerHTML=programmingFolderOptions(s?.folderId||programmingFolderId);programmingElement('Folder').value=s?.folderId??programmingFolderId;
         programmingElement('EditorTitle').textContent=s?'Modifica programmazione':'Nuova programmazione';
-        select.value=s?.kind==='scene'?'scene:'+s.sceneId:s?.deviceId||'';programmingElement('Name').value=s?programmingDisplayName(s):'';programmingNameAutomatic=!s||s.autoName===true;programmingColorTarget='';
+        select.value=s?.kind==='scene'?'scene:'+s.sceneId:s?.deviceId||'';programmingElement('Name').value=s?programmingDisplayName(s):'';programmingNameAutomatic=!s||programmingUsesAutomaticName(s);programmingColorTarget='';
         programmingElement('Action').value=s?.action||'on';programmingElement('Repeat').value=isDailyProgramming(s)?'daily':s?.repeat||'date';
         const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
         programmingElement('Date').value=s?.date||today;
@@ -2029,8 +2029,14 @@
         const suffix=' · '+(d.repeated?'dal ':'')+date+' · '+hours;
         return d.name.slice(0,Math.max(8,100-suffix.length))+suffix;
     }
+    function programmingUsesAutomaticName(s){
+        if(s.autoName===true)return true;
+        // Older drafts could store the generated placeholder as a manual name.
+        // Match the complete generated title, never arbitrary custom titles.
+        return Boolean(s.start&&s.name?.includes('orario da scegliere')&&s.name===programmingSuggestedName({name:s.deviceName,start:'',end:null,action:s.action,date:s.repeat==='date'?s.date:s.startDate,repeated:s.repeat!=='date'}));
+    }
     function programmingDisplayName(s){
-        return s.autoName===true?programmingSuggestedName({name:s.deviceName,start:s.start,end:s.end,action:s.action,date:s.repeat==='date'?s.date:s.startDate,repeated:s.repeat!=='date',seconds:s.autoOffSeconds||0}):s.name;
+        return programmingUsesAutomaticName(s)?programmingSuggestedName({name:s.deviceName,start:s.start,end:s.end,action:s.action,date:s.repeat==='date'?s.date:s.startDate,repeated:s.repeat!=='date',seconds:s.autoOffSeconds||0}):s.name;
     }
     function updateProgrammingIdentity(){
         programmingElement('NameAuto').checked=programmingNameAutomatic;
@@ -2041,6 +2047,7 @@
         const start=programmingElement('StartType').value==='fixed'?programmingElement('Start').value:programmingElement('StartType').value;
         const end=programmingElement('HasEnd').checked?(programmingElement('EndType').value==='fixed'?programmingElement('End').value:programmingElement('EndType').value):null;
         if(programmingNameAutomatic)programmingElement('Name').value=programmingSuggestedName({name:target?.name,start,end,action:programmingElement('Action').value,date:programmingElement('Repeat').value==='date'?programmingElement('Date').value:programmingElement('StartDate').value,repeated:programmingElement('Repeat').value!=='date',seconds:programmingElement('HasTimer').checked?Number(programmingElement('TimerMinutes').value)*60+Number(programmingElement('TimerSeconds').value):0});
+        programmingElement('Name').dataset.generatedName=programmingNameAutomatic?programmingElement('Name').value:'';
         const preview=programmingElement('NamePreview');preview.textContent=programmingElement('Name').value||'Anteprima del titolo';preview.style.setProperty('--programming-color',programmingTitleColor(programmingElement('Color').value));preview.style.setProperty('--programming-ink',programmingColorInk(programmingElement('Color').value));
     }
     async function saveProgrammingColor(){
@@ -2295,7 +2302,7 @@
     function initProgramming(){
         for(const id of ['Date','EndDate','Start','End','HasEnd','Repeat'])programmingElement(id).addEventListener('change',()=>queueMicrotask(()=>void warnProgrammingTiming()));
         programmingElement('NameAuto').addEventListener('change',()=>{programmingNameAutomatic=programmingElement('NameAuto').checked;programmingFieldsChanged();});
-        programmingElement('Name').addEventListener('input',()=>{programmingNameAutomatic=!programmingElement('Name').value.trim();updateProgrammingIdentity();});
+        programmingElement('Name').addEventListener('input',()=>{const name=programmingElement('Name');if(!programmingNameAutomatic||name.value!==name.dataset.generatedName)programmingNameAutomatic=!name.value.trim();updateProgrammingIdentity();});
         programmingElement('Color').addEventListener('input',updateProgrammingIdentity);
         for(const id of ['Start','End'])programmingElement(id).addEventListener('input',programmingFieldsChanged);
         programmingElement('FolderForm').addEventListener('submit',saveProgrammingFolder);
