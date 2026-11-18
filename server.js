@@ -291,7 +291,17 @@ app.get("/login", route(async (req, res) => {
     req.oauthConnection=appAccounts.linkIntent(req);
     res.clearCookie("ewelink_link_intent",{...COOKIE_OPTIONS,path:"/login"});
     if(req.appAccount.providerOwner&&!req.oauthConnection&&req.query.reauthorize!=="1"){
-      try{await appAccounts.provider(req);return res.redirect(returnUrl(req.query.returnUrl));}
+      try{
+        await appAccounts.provider(req);
+        try{await families(req.cookies.ewelink_access);}
+        catch(error){
+          if(error.code!=='not_authenticated')throw error;
+          const c=await programming.access(req.programmingOwner,{rejectedToken:req.cookies.ewelink_access});
+          req.cookies={...req.cookies,ewelink_access:c.accessToken,ewelink_refresh:c.refreshToken,ewelink_expires:String(c.atExpiredTime)};
+          await families(c.accessToken);
+        }
+        return res.redirect(returnUrl(req.query.returnUrl));
+      }
       catch(error){if(error.code!=="not_authenticated")throw error;}
     }
     for(const name of ["ewelink_access","ewelink_refresh","ewelink_expires","ewelink_session"])delete req.cookies[name];
@@ -470,7 +480,12 @@ async function listDevices(token, homes, {includeOwnership = false, deviceIds = 
   const result=[...devices.values()];if(warnings.length)Object.defineProperty(result,"warnings",{value:warnings});
   return result;
 }
-app.get("/api/session", requireLogin, (_req, res) => res.json({ok:true}));
+// Validate the shared grant upstream, not only its advertised expiry. The route
+// can adopt a grant renewed by another browser; it retries reads only.
+app.get("/api/session", requireLogin, route(async (req, res) => {
+  await families(req.cookies.ewelink_access);
+  res.json({ok:true});
+}));
 app.get("/api/devices", requireLogin, route(async (req, res) => {
   const devices=await listDevices(req.cookies.ewelink_access);
   res.json({ok:true,devices,warnings:devices.warnings||[]});

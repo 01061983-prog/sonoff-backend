@@ -19,7 +19,7 @@
   <script src="scene-pages.js?v=46"></script>
   <script src="room-map.js?v=48"></script>
   <link rel="stylesheet" href="room-map.css?v=48">
-  <link rel="stylesheet" href="app.css?v=82">
+  <link rel="stylesheet" href="app.css?v=83">
   <script src="menu-bar.js?v=61"></script>
   <link rel="stylesheet" href="menu-bar.css?v=65">
   <script src="push-settings.js?v=81"></script>
@@ -259,7 +259,25 @@
 
     function jsArg(value) { return escapeHtml(JSON.stringify(String(value))); }
 
-    async function apiRequest(path, body) {
+    let sharedSessionRecovery=null;
+    const sessionContextKey=()=>JSON.stringify(window.AppAccounts?.headers()||{});
+    async function recoverSharedSession(contextKey){
+        if(sharedSessionRecovery?.key===contextKey)return sharedSessionRecovery.task;
+        const job={key:contextKey,task:null};
+        job.task=(async()=>{
+            const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);
+            try{
+                const response=await fetch(BACKEND_URL+'/api/session',{credentials:'include',headers:window.AppAccounts?.headers()||{},cache:'no-store',signal:controller.signal});
+                const data=await response.json();
+                if(contextKey!==sessionContextKey())return {changed:true};
+                return {ok:response.ok&&data.ok===true,waiting:response.status!==401&&response.status!==403,data};
+            }catch{return {waiting:true};}
+            finally{clearTimeout(timeout);}
+        })().finally(()=>{if(sharedSessionRecovery===job)sharedSessionRecovery=null;});
+        sharedSessionRecovery=job;return job.task;
+    }
+    async function apiRequest(path, body, sessionRetried=false) {
+        const requestContext=sessionContextKey();
         if (navigator.onLine === false) throw new Error("Sei offline. Riconnettiti prima di inviare comandi.");
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), body === undefined ? 15000 : 60000);
@@ -278,8 +296,24 @@
             let data;
             try { data = await response.json(); }
             catch { throw new Error("Risposta non JSON dal server (HTTP " + response.status + ")."); }
+            if(requestContext!==sessionContextKey())throw Object.assign(new Error('Account cambiato durante la richiesta. Riprova nella plancia selezionata.'),{code:'app_context_changed'});
             if(window.AppAccounts?.handleError(data))throw Object.assign(new Error(data.msg),{auth:true});
             if (response.status === 401 || data?.error === "not_authenticated") {
+                if(!sessionRetried){
+                    const recovery=await recoverSharedSession(requestContext);
+                    if(recovery.changed||requestContext!==sessionContextKey())throw Object.assign(new Error('Account cambiato durante il ripristino. Riprova nella plancia selezionata.'),{code:'app_context_changed'});
+                    if(recovery.data&&window.AppAccounts?.handleError(recovery.data))throw Object.assign(new Error(recovery.data.msg),{auth:true});
+                    if(recovery.ok){
+                        if(body===undefined)return apiRequest(path,undefined,true);
+                        // A light, gate or pulse must never be replayed automatically.
+                        requestConnectionRecovery(0);
+                        throw Object.assign(new Error('Collegamento eWeLink ripristinato. Attendi l’aggiornamento dello stato e premi nuovamente il comando.'),{code:'session_updated'});
+                    }
+                    if(recovery.waiting){
+                        requestConnectionRecovery(2000);
+                        throw Object.assign(new Error('Ripristino del collegamento eWeLink in corso. Riprovo automaticamente: non serve accedere di nuovo.'),{code:'session_recovering'});
+                    }
+                }
                 resumableSession = data?.canResume === true;
                 const error = new Error(data?.msg || "Collegamento eWeLink da ripristinare.");
                 error.auth = true;
@@ -1259,7 +1293,7 @@
         document.getElementById("authMessage").textContent = crossSite
             ? "Per usare Safari senza dipendere dai cookie tra siti, apri la plancia ospitata insieme al backend su Render."
             : message;
-        document.getElementById("loginBtn").textContent = crossSite ? "Apri plancia su Render" : "Accedi a eWeLink";
+        document.getElementById("loginBtn").textContent = crossSite ? "Apri plancia su Render" : "Ripristina eWeLink";
         updateControlLocks();
     }
     async function tryResumeDeviceSession() {
@@ -1276,11 +1310,19 @@
             } else if (data.canResume === false) resumableSession = false;
         } catch {} finally { clearTimeout(timeout); sessionCheckBusy = false; }
     }
-    function beginLogin() {
-        if (commandBusy || devicesLoading) return;
-        window.location.href = window.location.origin !== BACKEND_URL
-            ? BACKEND_URL + "/app/index.html"
-            : BACKEND_URL + "/login?reauthorize=1&returnUrl=" + encodeURIComponent(BACKEND_URL + "/app/index.html");
+    function beginLogin() {void resumeOrLinkEwelink();}
+    async function resumeOrLinkEwelink(){
+        if(commandBusy||devicesLoading||sessionCheckBusy)return;
+        if(window.location.origin!==BACKEND_URL){window.location.href=BACKEND_URL+'/app/index.html';return;}
+        const key=sessionContextKey(),button=document.getElementById('loginBtn');sessionCheckBusy=true;button.disabled=true;button.textContent='Verifica collegamento…';
+        try{
+            const result=await recoverSharedSession(key);
+            if(result.changed||key!==sessionContextKey())return;
+            if(result.data&&window.AppAccounts?.handleError(result.data))return;
+            if(result.ok){resumableSession=false;await loadDevices();if(document.body.dataset.view==='programming'&&devicesFresh)await loadProgramming();return;}
+            if(result.waiting){resumableSession=true;document.getElementById('authMessage').textContent='Ripristino del collegamento in corso. Riprovo automaticamente senza chiederti un nuovo accesso.';return;}
+            window.location.href=BACKEND_URL+'/login?returnUrl='+encodeURIComponent(BACKEND_URL+'/app/index.html');
+        }finally{sessionCheckBusy=false;button.disabled=false;button.textContent='Ripristina eWeLink';}
     }
     function exportScenes() {
         const data = JSON.stringify({version: 1, scenes: loadUserScenes()}, null, 2);
