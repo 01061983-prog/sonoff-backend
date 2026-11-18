@@ -250,7 +250,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   if(uid){await auth().revokeRefreshTokens(uid).catch(()=>{});await auth().deleteUser(uid).catch(()=>{});}
  }
  async function providerAccount(owner){const s=await links().doc(owner).get();if(!s.exists)return null;if(s.data().deleted)throw fail(403,'app_blocked','Plancia rimossa: comandi automatici bloccati.');return read(s.data().accountId);}
- async function authorizeOwner(owner){const a=await providerAccount(owner);if(a&&a.status!=='active')throw fail(403,'app_blocked','Account sospeso: comandi automatici bloccati.');return a;}
+ async function authorizeOwner(owner){const a=await providerAccount(owner);if(a&&a.status!=='active')throw fail(403,'app_blocked','Account sospeso: comandi automatici bloccati.');if(a&&connections(a).some(c=>c.owner===owner&&c.workspaceAccountId))throw fail(403,'app_link_workspace','Questo vecchio collegamento è stato sostituito dalla plancia cliente. Usa la plancia cliente per dispositivi e programmazioni.');return a;}
  async function provider(req){
   const a=await session(req);
   const expected=req.headers?.['x-app-account']||req.query?.accountContext;
