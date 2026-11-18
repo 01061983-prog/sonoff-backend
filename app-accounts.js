@@ -36,6 +36,12 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   const brand=ref.data();
   return {...local,name:brand.name,person:brand.person||'',logo:brand.logo||'',brandingAccountId:c.brandingAccountId,localPerson:local.person,localLogo:local.logo};
  }
+ async function dashboardConnectionIdentity(a,c){
+  const identity=await displayConnectionIdentity(a,c);
+  // Branding supplies the logo, but must not disguise the administrator's own archive as a client dashboard.
+  if(identity&&c.owner===a.providerOwner&&await isAdmin(a))return {...identity,name:a.name,person:a.person||'',personalAccount:true};
+  return identity;
+ }
  const climateKey=(a,owner)=>owner===a.providerOwner?a.id:hash(a.id+':daikin:'+owner);
  function climateOwner(req){const a=req.appAccount;if(!a)throw fail(403,'climate_account','Account non disponibile.');const c=selectedConnection(req,a);if(!c)throw fail(409,'climate_account','Collega e seleziona un account eWeLink per il clima.');return climateKey(a,c.owner);}
  async function climateScheduleOwner(s){
@@ -68,13 +74,13 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
  }
  async function workspaceChoices(actor,req){
   const root=await isAdmin(actor),rows=await profiles().get();
-  return rows.docs.filter(s=>s.id!==actor.id&&s.data().status==='active'&&s.data().providerOwner&&(root||workspaceGrant(actor,{...s.data(),id:s.id}))).map(s=>({id:'client:'+s.id,label:s.data().name,name:s.data().name,person:s.data().person||'',logo:s.data().logo||'',contextLabel:'Plancia autorizzata'})).sort((a,b)=>a.name.localeCompare(b.name,'it'));
+  return rows.docs.filter(s=>s.id!==actor.id&&s.data().status==='active'&&s.data().providerOwner&&(root||workspaceGrant(actor,{...s.data(),id:s.id}))).map(s=>({id:'client:'+s.id,label:s.data().name,name:s.data().name,person:s.data().person||'',logo:s.data().logo||'',contextLabel:'Plancia cliente'})).sort((a,b)=>a.name.localeCompare(b.name,'it'));
  }
  async function switchChoices(req,a){
   const host=req.appImpersonating?req.appActor:a,root=await isAdmin(host),clients=await workspaceChoices(host,req),rows=[];
   for(const c of connections(host)){
    if(c.workspaceAccountId)continue;
-   rows.push({...await displayConnectionIdentity(host,c),id:'provider:'+c.owner,contextLabel:'Collegamento personale'});
+   rows.push({...await dashboardConnectionIdentity(host,c),id:'provider:'+c.owner,contextLabel:'Collegamento personale'});
   }
   return {selected:req.appImpersonating?'client:'+a.id:'provider:'+(selectedConnection(req,a)?.owner||''),choices:[...rows,...clients]};
  }
@@ -226,7 +232,7 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   }
   return {ok:true,account:publicProfile(await read(a.id))};
  }
- async function status(req){const a=await session(req,{active:false}),identity=await displayConnectionIdentity(a,selectedConnection(req,a));return {ok:true,authenticated:true,account:publicProfile(a),actor:publicProfile(req.appActor),impersonating:!!req.appImpersonating,workspaceView:!!req.appWorkspace,quickSelection:req.appWorkspace?'client:'+a.id:'provider:'+(selectedConnection(req,a)?.owner||''),readOnly:!!req.appReadOnly,canReconnectProvider:await canReconnect(req),adminDesktop:desktop(req)&&await isAdmin(req.appActor),primaryProvider:a.providerOwner||'',selectedProvider:selectedConnection(req,a)?.owner||'',selectedProviderLabel:connectionIdentity(a,selectedConnection(req,a))?.label||'',selectedProviderIdentity:identity,providerCount:connections(a).length,csrf:mac(req.cookies[COOKIE])};}
+ async function status(req){const a=await session(req,{active:false}),identity=await dashboardConnectionIdentity(a,selectedConnection(req,a));return {ok:true,authenticated:true,account:publicProfile(a),actor:publicProfile(req.appActor),impersonating:!!req.appImpersonating,workspaceView:!!req.appWorkspace,quickSelection:req.appWorkspace?'client:'+a.id:'provider:'+(selectedConnection(req,a)?.owner||''),readOnly:!!req.appReadOnly,canReconnectProvider:await canReconnect(req),adminDesktop:desktop(req)&&await isAdmin(req.appActor),primaryProvider:a.providerOwner||'',selectedProvider:selectedConnection(req,a)?.owner||'',selectedProviderLabel:connectionIdentity(a,selectedConnection(req,a))?.label||'',selectedProviderIdentity:identity,providerCount:connections(a).length,csrf:mac(req.cookies[COOKIE])};}
  async function bind(a,owner,{add=false,slot='',label,expectedOwner}={}){
   const pr=profiles().doc(a.id),lr=links().doc(owner);
   await db().runTransaction(async t=>{

@@ -322,12 +322,16 @@
   if(list)list.inert=true;
   try{
    await request('/api/app/accounts',body);
-   if(destination){navigateAdmin(destination==='accounts');return;}
+   if(destination){if(destination==='dashboard')location.assign(prepareDashboardSwitch());else navigateAdmin(true);return;}
    await openAdmin();
   }catch(e){
    if(list){await openAdmin();$('accountAdminMessage').textContent=e.message;}
    else message(e.message);
   }finally{adminBusy=false;if(list)list.inert=false;}
+ }
+ function prepareDashboardSwitch(){
+  try{sessionStorage.setItem('pace-dashboard-switch',JSON.stringify({at:Date.now(),path:dashboardUrl().pathname}));return dashboardUrl().href;}
+  catch{const url=dashboardUrl();url.searchParams.set('switch','1');return url.href;}
  }
  let providerChoices=[],providerChoicesJob,quickSwitchBusy=false;
  const quickSelection=()=>state.quickSelection||state.selectedProvider;
@@ -337,7 +341,7 @@
  }
  function renderQuickProviders(){
   const list=$('providerQuickList');if(!list)return;
-  list.innerHTML=providerChoices.map(c=>`<button type="button" class="provider-quick-option${c.id===quickSelection()?' current':''}" data-quick-provider="${esc(c.id)}" ${c.id===quickSelection()?'disabled aria-current="true"':''}>${providerBadge(c)}<span class="provider-choice-copy"><strong>${esc(c.name||c.label)}</strong>${c.name&&c.name!==c.label?`<small>${esc(c.label)}</small>`:''}${c.person&&c.person!==c.label?`<small>${esc(c.person)}</small>`:''}${c.contextLabel?`<small>${esc(c.contextLabel)}</small>`:''}</span>${c.id===quickSelection()?'<small>In uso ✓</small>':'<span aria-hidden="true">→</span>'}</button>`).join('');
+  list.innerHTML=providerChoices.map(c=>`<button type="button" class="provider-quick-option${c.id===quickSelection()?' current':''}" data-quick-provider="${esc(c.id)}" ${c.id===quickSelection()?'disabled aria-current="true"':''}>${providerBadge(c)}<span class="provider-choice-copy"><strong>${esc(c.name||c.label)}</strong>${c.name&&c.name!==c.label?`<small>${esc(c.label)}</small>`:''}${c.person&&c.person!==c.label&&c.person!==c.name?`<small>${esc(c.person)}</small>`:''}${c.contextLabel?`<small>${esc(c.contextLabel)}</small>`:''}</span>${c.id===quickSelection()?'<small>In uso ✓</small>':'<span aria-hidden="true">→</span>'}</button>`).join('');
   providerImages(list);
  }
  async function refreshQuickProviders(){
@@ -346,8 +350,8 @@
  }
  function showQuickProvider(){
   const wrapper=$('providerQuick');if(!wrapper)return;
-  wrapper.hidden=false;$('providerQuickLabel').textContent=state.selectedProviderLabel||'Collega eWeLink';
-  $('providerQuickButton').setAttribute('aria-label','Cambia account eWeLink. Attuale: '+(state.selectedProviderLabel||'nessuno'));
+  const title=state.selectedProviderIdentity?.name||state.selectedProviderLabel;wrapper.hidden=false;$('providerQuickLabel').textContent=title||'Collega eWeLink';
+  $('providerQuickButton').setAttribute('aria-label','Cambia account eWeLink. Attuale: '+(title||'nessuno'));
   void refreshQuickProviders().catch(()=>{});
  }
  async function toggleQuickProvider(){
@@ -365,7 +369,7 @@
   $('providerQuick').querySelectorAll('button').forEach(b=>b.disabled=true);
   const controls=[document.querySelector('main'),$('menuBar'),$('accountToolbar'),$('navigationDialog')].filter(Boolean),inertBefore=controls.map(el=>el.inert);
   controls.forEach(el=>el.inert=true);
-  try{await request('/api/app/providers',{op:'select',id});location.replace(dashboardUrl().href);}
+  try{await request('/api/app/providers',{op:'select',id});location.replace(prepareDashboardSwitch());}
   catch(e){controls.forEach((el,i)=>el.inert=inertBefore[i]);$('providerQuickMessage').textContent=e.message;quickSwitchBusy=false;$('providerQuickPanel').setAttribute('aria-busy','false');$('providerQuick').querySelectorAll('button').forEach(b=>b.disabled=false);renderQuickProviders();}
  }
  function mountQuickProvider(){
@@ -397,7 +401,7 @@
   try{
    const result=await request('/api/app/providers',body);
    if(result.url){location.assign(result.url);return;}
-   if(['select','stop-workspace'].includes(body.op)){location.replace(dashboardUrl().href);return;}
+   if(['select','stop-workspace'].includes(body.op)){location.replace(prepareDashboardSwitch());return;}
    if(body.op==='rename'){const current=await request('/api/app/session');if(current.authenticated!==false){Object.assign(state,current);branding();showQuickProvider();}}
    dialog.close();await openProviders();
   }catch(e){$('providerMessage').textContent=e.message;}

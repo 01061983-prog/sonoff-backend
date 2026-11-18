@@ -13,13 +13,13 @@
   <link rel="manifest" href="manifest.webmanifest?v=65">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg?v=65">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=65">
-  <script src="account-auth.js?v=86"></script>
-  <link rel="stylesheet" href="account-auth.css?v=86">
+  <script src="account-auth.js?v=87"></script>
+  <link rel="stylesheet" href="account-auth.css?v=87">
   <script src="text-size.js?v=64"></script>
   <script src="scene-pages.js?v=46"></script>
   <script src="room-map.js?v=48"></script>
   <link rel="stylesheet" href="room-map.css?v=48">
-  <link rel="stylesheet" href="app.css?v=86">
+  <link rel="stylesheet" href="app.css?v=87">
   <script src="menu-bar.js?v=61"></script>
   <link rel="stylesheet" href="menu-bar.css?v=65">
   <script src="push-settings.js?v=81"></script>
@@ -56,30 +56,49 @@
     @media(prefers-reduced-motion:reduce){#startupScreen,#startupScreen *,#startupScreen .pace-symbol{animation:none!important;transform:none!important;opacity:1!important}.pace-signal{stroke-dashoffset:0}.pace-outline,.pace-ripple,.pace-link,.pace-sheen{display:none}#startupScreen progress{background:#ff7a21}}
 
 
+
+    #startupScreen.pace-switch-loading{background:#f7f8fa;color:#252b35}
+    #startupScreen.pace-switch-loading .pace-splash-glow,#startupScreen.pace-switch-loading .pace-symbol,#startupScreen.pace-switch-loading h1,#startupScreen.pace-switch-loading .pace-descriptor,#startupScreen.pace-switch-loading .pace-signature{display:none}
+    #startupScreen.pace-switch-loading .pace-splash-content{gap:18px}
+    #startupScreen.pace-switch-loading progress{width:min(320px,78vw);height:8px;background:linear-gradient(90deg,#e4e7ec 0 20%,#b94712 45%,#f19b64 55%,#e4e7ec 80%);background-size:220% 100%}
+    #startupScreen.pace-switch-loading #startupStatus{font-size:1.1rem;color:#252b35;margin:0;min-height:0;font-weight:600}
+    #startupScreen.pace-switch-loading.pace-exiting{animation:none}
+    #startupScreen #switchAccountLogo{width:clamp(110px,28vw,160px);height:clamp(110px,28vw,160px);object-fit:contain;background:#fff;padding:16px;border:1px solid #e3e6eb;border-radius:24px}
+    #startupScreen #switchAccountLogo[hidden]{display:none}
+    #startupScreen.pace-switch-loaded progress{display:none}
   </style>
 </head>
 <body data-view="scenes" class="app-starting">
-<section id="startupScreen" aria-label="Avvio di PACE" aria-busy="true"><div class="pace-splash-glow" aria-hidden="true"></div><div class="pace-splash-content"><svg class="pace-symbol" viewBox="0 0 320 360" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="pace-orange" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#ffb064"/><stop offset=".5" stop-color="#ff7a21"/><stop offset="1" stop-color="#ec5a12"/></linearGradient><linearGradient id="pace-light"><stop stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".8"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient><clipPath id="pace-silhouette"><path d="M28 24h140c73 0 120 49 120 120S241 264 168 264h-66v45l-74 43z"/></clipPath><mask id="pace-cut"><rect width="320" height="360" fill="white"/><path d="M0 144H115" stroke="black" stroke-width="15"/><circle cx="73" cy="144" r="18"/><path d="M140 96a56 56 0 1 0 56 0" fill="none" stroke="black" stroke-width="20" stroke-linecap="round"/><path d="M168 80v53" stroke="black" stroke-width="16" stroke-linecap="round"/></mask></defs><path class="pace-body" fill="url(#pace-orange)" mask="url(#pace-cut)" d="M28 24h140c73 0 120 49 120 120S241 264 168 264h-66v45l-74 43z"/><path class="pace-outline" d="M28 24h140c73 0 120 49 120 120S241 264 168 264h-66v45l-74 43z"/><g mask="url(#pace-cut)" clip-path="url(#pace-silhouette)"><rect class="pace-sheen" x="-180" y="0" width="150" height="360" fill="url(#pace-light)"/></g><circle class="pace-ripple" cx="73" cy="144" r="24"/><circle class="pace-ripple second" cx="73" cy="144" r="24"/><path class="pace-link" d="M15 144h100"/><circle class="pace-node" cx="73" cy="144" r="9" fill="#fff0e5"/><path class="pace-signal" d="M140 96a56 56 0 1 0 56 0M168 80v53" fill="none" stroke="#fff0e5" stroke-width="8" stroke-linecap="round"/></svg><h1>PACE</h1><p class="pace-descriptor">Property Automation<br>&amp; Control Environment</p><progress aria-label="Caricamento della plancia"></progress><p id="startupStatus" role="status">Collegamento alla tua plancia…</p><p class="pace-signature">powered by <strong>#gm83</strong></p><button id="startupContinue" type="button" onclick="finishStartup()" hidden>Mostra la plancia</button></div></section>
+<section id="startupScreen" aria-label="Avvio di PACE" aria-busy="true"><div class="pace-splash-glow" aria-hidden="true"></div><div class="pace-splash-content"><svg class="pace-symbol" viewBox="0 0 320 360" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="pace-orange" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#ffb064"/><stop offset=".5" stop-color="#ff7a21"/><stop offset="1" stop-color="#ec5a12"/></linearGradient><linearGradient id="pace-light"><stop stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".8"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient><clipPath id="pace-silhouette"><path d="M28 24h140c73 0 120 49 120 120S241 264 168 264h-66v45l-74 43z"/></clipPath><mask id="pace-cut"><rect width="320" height="360" fill="white"/><path d="M0 144H115" stroke="black" stroke-width="15"/><circle cx="73" cy="144" r="18"/><path d="M140 96a56 56 0 1 0 56 0" fill="none" stroke="black" stroke-width="20" stroke-linecap="round"/><path d="M168 80v53" stroke="black" stroke-width="16" stroke-linecap="round"/></mask></defs><path class="pace-body" fill="url(#pace-orange)" mask="url(#pace-cut)" d="M28 24h140c73 0 120 49 120 120S241 264 168 264h-66v45l-74 43z"/><path class="pace-outline" d="M28 24h140c73 0 120 49 120 120S241 264 168 264h-66v45l-74 43z"/><g mask="url(#pace-cut)" clip-path="url(#pace-silhouette)"><rect class="pace-sheen" x="-180" y="0" width="150" height="360" fill="url(#pace-light)"/></g><circle class="pace-ripple" cx="73" cy="144" r="24"/><circle class="pace-ripple second" cx="73" cy="144" r="24"/><path class="pace-link" d="M15 144h100"/><circle class="pace-node" cx="73" cy="144" r="9" fill="#fff0e5"/><path class="pace-signal" d="M140 96a56 56 0 1 0 56 0M168 80v53" fill="none" stroke="#fff0e5" stroke-width="8" stroke-linecap="round"/></svg><h1>PACE</h1><p class="pace-descriptor">Property Automation<br>&amp; Control Environment</p><img id="switchAccountLogo" alt="" hidden><progress aria-label="Caricamento della plancia"></progress><p id="startupStatus" role="status">Collegamento alla tua plancia…</p><p class="pace-signature">powered by <strong>#gm83</strong></p><button id="startupContinue" type="button" onclick="finishStartup()" hidden>Mostra la plancia</button></div></section>
 <script>
 (()=>{
  const splash=document.getElementById('startupScreen');
- const MINIMUM=6000,now=()=>performance.now();
- let shownAt=now(),timer=null,exiting=false,callbacks=new Set();
+ let switching=false;
+ try{const raw=sessionStorage.getItem('pace-dashboard-switch');sessionStorage.removeItem('pace-dashboard-switch');if(raw){const entry=JSON.parse(raw);switching=entry.path===location.pathname&&Date.now()-entry.at>=0&&Date.now()-entry.at<60000;}}catch{}
+ if(new URLSearchParams(location.search).get('switch')==='1'){switching=true;const url=new URL(location.href);url.searchParams.delete('switch');history.replaceState(null,'',url.href);}
+ if(switching){splash.classList.add('pace-switch-loading');splash.setAttribute('aria-label','Cambio plancia');document.getElementById('startupStatus').textContent='Caricamento dispositivi in corso…';splash.querySelector('progress').setAttribute('aria-label','Caricamento dispositivi in corso');}
+ const MINIMUM=switching?0:6000,now=()=>performance.now();
+ let shownAt=now(),timer=null,exiting=false,successUntil=0,callbacks=new Set();
  function hide(){splash.hidden=true;splash.classList.remove('pace-exiting');splash.setAttribute('aria-busy','false');exiting=false;timer=null;document.body.classList.remove('app-starting');const gate=document.getElementById('accountGate');if(gate)gate.inert=false;const ready=[...callbacks];callbacks.clear();ready.forEach(fn=>fn());}
- function finish(done){
+ function finish(done,loadedIdentity){
   if(done)callbacks.add(done);
+  if(switching&&loadedIdentity&&!successUntil){
+   successUntil=now()+1000;splash.classList.add('pace-switch-loaded');splash.setAttribute('aria-busy','false');
+   const image=document.getElementById('switchAccountLogo');image.hidden=false;image.alt='Logo di '+(loadedIdentity.name||'questa plancia');image.onerror=()=>{image.onerror=null;image.src='icons/icon.svg';};image.src=loadedIdentity.logo||'icons/icon.svg';
+   document.getElementById('startupStatus').textContent='Dispositivi caricati';
+  }
   if(splash.hidden){hide();return;}
   if(exiting)return;
   const gate=document.getElementById('accountGate');if(gate)gate.inert=true;
   clearTimeout(timer);
-  const leave=()=>{const remaining=MINIMUM-(now()-shownAt);if(remaining>0){timer=setTimeout(leave,remaining);return;}exiting=true;splash.classList.add('pace-exiting');timer=setTimeout(hide,matchMedia('(prefers-reduced-motion: reduce)').matches?0:350);};
-  timer=setTimeout(leave,Math.max(0,MINIMUM-(now()-shownAt)));
+  const leave=()=>{const remaining=Math.max(shownAt+MINIMUM,successUntil)-now();if(remaining>0){timer=setTimeout(leave,remaining);return;}exiting=true;splash.classList.add('pace-exiting');timer=setTimeout(hide,switching||matchMedia('(prefers-reduced-motion: reduce)').matches?0:350);};
+  timer=setTimeout(leave,Math.max(0,Math.max(shownAt+MINIMUM,successUntil)-now()));
  }
  function show(){
   if(!splash.hidden&&!exiting)return;
-  clearTimeout(timer);callbacks.clear();exiting=false;shownAt=now();splash.classList.remove('pace-exiting');splash.hidden=false;splash.setAttribute('aria-busy','true');document.body.classList.add('app-starting');const gate=document.getElementById('accountGate');if(gate)gate.inert=true;
+  clearTimeout(timer);callbacks.clear();exiting=false;successUntil=0;shownAt=now();splash.classList.remove('pace-exiting','pace-switch-loaded');document.getElementById('switchAccountLogo').hidden=true;splash.hidden=false;splash.setAttribute('aria-busy','true');document.body.classList.add('app-starting');const gate=document.getElementById('accountGate');if(gate)gate.inert=true;
  }
- window.PaceSplash={finish,show};
+ window.PaceSplash={finish,show,switching};
 })();
 </script>
 <noscript><style>#startupScreen{display:none}body.app-starting>main{visibility:visible}</style><p>Attiva JavaScript nel browser per usare la plancia.</p></noscript>
@@ -464,11 +483,11 @@
 
     // CARICAMENTO DISPOSITIVI
     let startupComplete=false;
-    function startupStatus(message){if(!startupComplete)document.getElementById('startupStatus').textContent=message;}
+    function startupStatus(message){if(!startupComplete)document.getElementById('startupStatus').textContent=window.PaceSplash?.switching?'Caricamento dispositivi in corso…':message;}
     function finishStartup(){
         if(startupComplete)return;startupComplete=true;
         const reveal=()=>{const splash=document.getElementById('startupScreen');splash.hidden=true;splash.setAttribute('aria-busy','false');document.getElementById('mainContent').inert=false;document.body?.classList?.remove?.('app-starting');};
-        if(window.PaceSplash)window.PaceSplash.finish(reveal);else reveal();
+        if(window.PaceSplash)window.PaceSplash.finish(reveal,window.PaceSplash.switching&&devicesFresh&&!authRequired?(window.AppAccounts?.displayIdentity?.()||{name:'questa plancia'}):null);else reveal();
     }
     function applyDeviceSnapshot(data) {
     if (!Array.isArray(data.devices)) throw new Error("Elenco dispositivi non valido dal server.");
