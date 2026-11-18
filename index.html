@@ -13,13 +13,13 @@
   <link rel="manifest" href="manifest.webmanifest?v=65">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg?v=65">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=65">
-  <script src="account-auth.js?v=88"></script>
-  <link rel="stylesheet" href="account-auth.css?v=88">
+  <script src="account-auth.js?v=89"></script>
+  <link rel="stylesheet" href="account-auth.css?v=89">
   <script src="text-size.js?v=64"></script>
   <script src="scene-pages.js?v=46"></script>
   <script src="room-map.js?v=48"></script>
   <link rel="stylesheet" href="room-map.css?v=48">
-  <link rel="stylesheet" href="app.css?v=88">
+  <link rel="stylesheet" href="app.css?v=89">
   <script src="menu-bar.js?v=61"></script>
   <link rel="stylesheet" href="menu-bar.css?v=65">
   <script src="push-settings.js?v=81"></script>
@@ -1945,7 +1945,7 @@
             const previewTarget=(s.kind==='scene'?'Scenario · ':s.kind==='daikin'?'Clima · ':'Dispositivo · ')+s.deviceName+(s.kind==='multi'?' · '+s.outlets.map(o=>'CH '+(o+1)).join(', '):'');
             const previewTime=(s.action==='on'&&s.start==='sunset'&&s.end==='sunrise'?'Crepuscolare automatico · '+description:description)+(s.action==='on'&&!s.end&&!s.autoOffSeconds?' · Nessuno spegnimento automatico':'');
             const previewRepeat=(s.repeat==='date'?'Solo il ':s.repeat==='weekly'&&!isDailyProgramming(s)?'Ogni settimana · ':'')+when;
-            return `<details class="programming-card programming-disclosure" style="--programming-color:${programmingColorFor(s)};--programming-ink:${programmingColorInk(programmingColorFor(s))}" data-schedule-id="${escapeHtml(s.id)}" ${expanded.has(s.id)?'open':''}><summary><span class="programming-summary-copy"><span class="programming-summary-title"><strong>${escapeHtml(s.name)}</strong><span class="programming-badge ${outcome.attention?'is-warning':s.enabled?'is-enabled':''}">${escapeHtml(outcome.label)}</span></span><span class="programming-summary-target">${escapeHtml(previewTarget)}</span><span class="programming-summary-time">${escapeHtml(previewTime)}</span><span class="programming-summary-repeat">${escapeHtml(previewRepeat)}</span></span><span class="programming-chevron" aria-hidden="true">⌄</span></summary><div class="programming-specifics"><div class="programming-card-top"><span class="programming-badge ${outcome.attention?'is-warning':s.enabled?'is-enabled':''}">${escapeHtml(outcome.label)}</span></div><p class="programming-device">${s.kind==='scene'?'Scenario · ':s.kind==='daikin'?'Clima · ':''}${escapeHtml(s.deviceName)}${s.kind==='daikin'&&s.action==='on'&&window.Climate?.describeSettings(s.daikin)?' · '+escapeHtml(window.Climate.describeSettings(s.daikin)):''}${s.kind==='multi'?' · '+s.outlets.map(o=>'CH '+(o+1)).join(', '):''}</p><p class="programming-time">${escapeHtml(s.action==='on'&&s.start==='sunset'&&s.end==='sunrise'?'Crepuscolare automatico · '+description:description)}</p>${s.solarError?`<p class="programming-validation" role="status">${escapeHtml(s.solarError)}</p>`:''}<p>${escapeHtml(when)}</p>${next?`<p class="page-note">Prossimo comando: ${escapeHtml(next)}</p>`:''}${s.last?`<p class="programming-result ${outcome.attention?'is-warning':''}" role="status">${escapeHtml(outcome.message)}</p>${outcome.note?`<p class="page-note">${escapeHtml(outcome.note)}</p>`:''}`:''}<label class="programming-move">Cartella<select aria-label="Cartella di ${escapeHtml(s.name)}" onchange="moveProgramming(${jsArg(s.id)},this.value)">${programmingFolderOptions(s.folderId||'')}</select></label><div class="scene-actions"><button onclick="editProgramming(${jsArg(s.id)})">Modifica</button><button onclick="changeProgramming('toggle',${jsArg(s.id)})">${s.enabled?'Sospendi':'Riattiva'}</button><button class="btn-ghost-danger" onclick="changeProgramming('delete',${jsArg(s.id)})">Elimina</button></div></div></details>`;
+            return `<details class="programming-card programming-disclosure" style="--programming-color:${programmingTitleColor(programmingColorFor(s))};--programming-ink:${programmingColorInk(programmingColorFor(s))}" data-schedule-id="${escapeHtml(s.id)}" ${expanded.has(s.id)?'open':''}><summary><span class="programming-summary-copy"><span class="programming-summary-title"><strong>${escapeHtml(programmingDisplayName(s))}</strong><span class="programming-badge ${outcome.attention?'is-warning':s.enabled?'is-enabled':''}">${escapeHtml(outcome.label)}</span></span><span class="programming-summary-target">${escapeHtml(previewTarget)}</span><span class="programming-summary-time">${escapeHtml(previewTime)}</span><span class="programming-summary-repeat">${escapeHtml(previewRepeat)}</span></span><span class="programming-chevron" aria-hidden="true">⌄</span></summary><div class="programming-specifics"><div class="programming-card-top"><span class="programming-badge ${outcome.attention?'is-warning':s.enabled?'is-enabled':''}">${escapeHtml(outcome.label)}</span></div><p class="programming-device">${s.kind==='scene'?'Scenario · ':s.kind==='daikin'?'Clima · ':''}${escapeHtml(s.deviceName)}${s.kind==='daikin'&&s.action==='on'&&window.Climate?.describeSettings(s.daikin)?' · '+escapeHtml(window.Climate.describeSettings(s.daikin)):''}${s.kind==='multi'?' · '+s.outlets.map(o=>'CH '+(o+1)).join(', '):''}</p><p class="programming-time">${escapeHtml(s.action==='on'&&s.start==='sunset'&&s.end==='sunrise'?'Crepuscolare automatico · '+description:description)}</p>${s.solarError?`<p class="programming-validation" role="status">${escapeHtml(s.solarError)}</p>`:''}<p>${escapeHtml(when)}</p>${next?`<p class="page-note">Prossimo comando: ${escapeHtml(next)}</p>`:''}${s.last?`<p class="programming-result ${outcome.attention?'is-warning':''}" role="status">${escapeHtml(outcome.message)}</p>${outcome.note?`<p class="page-note">${escapeHtml(outcome.note)}</p>`:''}`:''}<label class="programming-move">Cartella<select aria-label="Cartella di ${escapeHtml(programmingDisplayName(s))}" onchange="moveProgramming(${jsArg(s.id)},this.value)">${programmingFolderOptions(s.folderId||'')}</select></label><div class="scene-actions"><button onclick="editProgramming(${jsArg(s.id)})">Modifica</button><button onclick="changeProgramming('toggle',${jsArg(s.id)})">${s.enabled?'Sospendi':'Riattiva'}</button><button class="btn-ghost-danger" onclick="changeProgramming('delete',${jsArg(s.id)})">Elimina</button></div></div></details>`;
         }).join(''):'<div class="empty-state"><h3>Nessuna programmazione in questa sezione</h3><p>Premi + Nuova programmazione per aggiungerne una qui.</p></div>';
     }
     function editProgramming(id){
@@ -1964,7 +1964,7 @@
         const s=programmingEditing;
         programmingElement('Folder').innerHTML=programmingFolderOptions(s?.folderId||programmingFolderId);programmingElement('Folder').value=s?.folderId??programmingFolderId;
         programmingElement('EditorTitle').textContent=s?'Modifica programmazione':'Nuova programmazione';
-        select.value=s?.kind==='scene'?'scene:'+s.sceneId:s?.deviceId||'';programmingElement('Name').value=s?.name||'';programmingNameAutomatic=!s||s.autoName===true;programmingColorTarget='';
+        select.value=s?.kind==='scene'?'scene:'+s.sceneId:s?.deviceId||'';programmingElement('Name').value=s?programmingDisplayName(s):'';programmingNameAutomatic=!s||s.autoName===true;programmingColorTarget='';
         programmingElement('Action').value=s?.action||'on';programmingElement('Repeat').value=isDailyProgramming(s)?'daily':s?.repeat||'date';
         const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
         programmingElement('Date').value=s?.date||today;
@@ -2002,7 +2002,15 @@
     function programmingColorInk(color){
         if(!/^#[0-9a-f]{6}$/i.test(color||''))return '#ffffff';
         const rgb=[1,3,5].map(i=>parseInt(color.slice(i,i+2),16)/255).map(c=>c<=.04045?c/12.92:Math.pow((c+.055)/1.055,2.4));
-        return .2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2]>.179?'#000000':'#ffffff';
+        return .2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2]>.25?'#000000':'#ffffff';
+    }
+    function programmingTitleColor(color){
+        if(!/^#[0-9a-f]{6}$/i.test(color||''))return '#b94712';
+        if(programmingColorInk(color)!=='#ffffff')return color;
+        let rgb=[1,3,5].map(i=>parseInt(color.slice(i,i+2),16));
+        const luminance=()=>rgb.map(c=>c/255).map(c=>c<=.04045?c/12.92:Math.pow((c+.055)/1.055,2.4)).reduce((n,c,i)=>n+c*[.2126,.7152,.0722][i],0);
+        while(1.05/(luminance()+.05)<4.5)rgb=rgb.map(c=>Math.max(0,c-1));
+        return '#'+rgb.map(c=>c.toString(16).padStart(2,'0')).join('');
     }
     function programmingColorFor(s){const color=programmingData.targetColors?.[programmingColorKey(s)];return /^#[0-9a-f]{6}$/i.test(color||'')?color:'#b94712';}
     function programmingSuggestedName(d){
@@ -2021,6 +2029,9 @@
         const suffix=' · '+(d.repeated?'dal ':'')+date+' · '+hours;
         return d.name.slice(0,Math.max(8,100-suffix.length))+suffix;
     }
+    function programmingDisplayName(s){
+        return s.autoName===true?programmingSuggestedName({name:s.deviceName,start:s.start,end:s.end,action:s.action,date:s.repeat==='date'?s.date:s.startDate,repeated:s.repeat!=='date',seconds:s.autoOffSeconds||0}):s.name;
+    }
     function updateProgrammingIdentity(){
         programmingElement('NameAuto').checked=programmingNameAutomatic;
         const {device,scene,daikin}=programmingTarget(),target=device||scene||daikin;
@@ -2030,7 +2041,7 @@
         const start=programmingElement('StartType').value==='fixed'?programmingElement('Start').value:programmingElement('StartType').value;
         const end=programmingElement('HasEnd').checked?(programmingElement('EndType').value==='fixed'?programmingElement('End').value:programmingElement('EndType').value):null;
         if(programmingNameAutomatic)programmingElement('Name').value=programmingSuggestedName({name:target?.name,start,end,action:programmingElement('Action').value,date:programmingElement('Repeat').value==='date'?programmingElement('Date').value:programmingElement('StartDate').value,repeated:programmingElement('Repeat').value!=='date',seconds:programmingElement('HasTimer').checked?Number(programmingElement('TimerMinutes').value)*60+Number(programmingElement('TimerSeconds').value):0});
-        const preview=programmingElement('NamePreview');preview.textContent=programmingElement('Name').value||'Anteprima del titolo';preview.style.setProperty('--programming-color',programmingElement('Color').value);preview.style.setProperty('--programming-ink',programmingColorInk(programmingElement('Color').value));
+        const preview=programmingElement('NamePreview');preview.textContent=programmingElement('Name').value||'Anteprima del titolo';preview.style.setProperty('--programming-color',programmingTitleColor(programmingElement('Color').value));preview.style.setProperty('--programming-ink',programmingColorInk(programmingElement('Color').value));
     }
     async function saveProgrammingColor(){
         if(!programmingColorTarget||programmingBusy)return;
@@ -2184,7 +2195,6 @@
     }
     function programmingDateToday(){programmingElement('Date').value=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());programmingElement('EndDate').dataset.userSet='';programmingElement('RequestError').hidden=true;programmingFieldsChanged();}
     function programmingFieldsChanged(){
-        updateProgrammingIdentity();
         const action=programmingElement('Action').value,weekly=programmingElement('Repeat').value!=='date',end=action==='on'&&programmingElement('HasEnd').checked;
         programmingElement('Daikin').hidden=!programmingElement('Device').value.startsWith('daikin:')||action!=='on';
         const timer=action==='on'&&programmingElement('HasTimer').checked;
@@ -2238,6 +2248,7 @@
         if(solar&&!validation)programmingElement('Summary').textContent=`${action==='off'?'Spegni':action==='pulse'?'Invia impulso':action==='run'?'Esegui scenario':'Accendi'} ${programmingTimeLabel(start)}${end?'; spegni '+programmingTimeLabel(finish)+' alla prima occorrenza successiva.':'. Nessuno spegnimento automatico impostato.'} Gli orari astronomici cambiano automaticamente ogni giorno.`;
         if(timer&&start)programmingElement('Summary').textContent=`Accendi ${programmingTimeLabel(start)}; spegni dopo ${programmingTimerLabel(Number(programmingElement('TimerMinutes').value)*60+Number(programmingElement('TimerSeconds').value))||'la durata da indicare'}.`;
         renderProgrammingFeedback(programmingValidationShown?programmingDraftIssues():validation?[{field:expiredDaylight?'Date':solar?'EndType':'EndDate',message:validation}]:[]);
+        updateProgrammingIdentity();
         window.SchedulePicker?.refresh();
     }
     async function saveProgramming(event){
@@ -2259,6 +2270,7 @@
         if(schedule.repeat==='daily'){schedule.repeat='weekly';schedule.days=[0,1,2,3,4,5,6];}
         if(programmingUsesSolar()){try{schedule.location=programmingLocationValue();}catch(error){setMessage(error.message,'error');return;}}
         if(schedule.end&&schedule.repeat==='date'&&!programmingUsesSolar())schedule.endDate=programmingElement('EndDate').value;
+        if(programmingNameAutomatic)schedule.name=programmingDisplayName({...schedule,deviceName:(programmingTarget().device||scene||daikin)?.name,autoName:true});
         const success=await programmingRequest({op:'save',...(programmingEditing?{id:programmingEditing.id,expectedVersion:programmingEditing.version}:{}),schedule,authorize:programmingElement('Consent').checked});
         if(success){programmingFolderId=schedule.folderId||'';cancelProgramming();renderProgramming();window.scrollTo({top:0,behavior:'instant'});setMessage('Programmazione salvata.','');}
     }
