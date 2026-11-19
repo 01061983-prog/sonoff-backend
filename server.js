@@ -437,7 +437,7 @@ app.post("/api/linked-devices",requireLogin,route(async(req,res)=>{
   res.json({...result,channels:2});
 }));
 
-async function listDevices(token, homes, {includeOwnership = false, deviceIds = null, linkedRegistry} = {}) {
+async function listDevices(token, homes, {includeOwnership = false, nativeOwnership = false, deviceIds = null, linkedRegistry} = {}) {
   homes = homes || await families(token);
   const devices = new Map();
   for (const home of homes) {
@@ -454,13 +454,13 @@ async function listDevices(token, homes, {includeOwnership = false, deviceIds = 
         const singleRelay=String(d.productModel||'').toUpperCase()==='MINIR4';
         if(singleRelay)singleRelayDevices.add(d.deviceid);
         const params=singleRelay&&Array.isArray(d.params?.switches)?{...d.params,switches:d.params.switches.filter(channel=>channel.outlet===0)}:d.params||{};
-        if (includeOwnership && devices.get(d.deviceid)?.itemType === 1 && thing.itemType !== 1) continue;
+        if ((includeOwnership||nativeOwnership) && devices.get(d.deviceid)?.itemType === 1 && thing.itemType !== 1) continue;
         devices.set(d.deviceid, {
-          deviceid: d.deviceid, name: d.name, online: d.online === true,
+          deviceid: d.deviceid, name: d.name, online: nativeOwnership ? (typeof d.online === "boolean" ? d.online : null) : d.online === true,
           params, familyId: home.id, itemType: thing.itemType,
           ownership:mergeDeviceOwnership(devices.get(d.deviceid)?.ownership,deviceOwnership(thing)),
           ...(singleRelay?{controlOutlets:[0]}:{}),
-          ...(includeOwnership && thing.itemType === 1 && !d.sharedBy && typeof d.apikey === "string" ? {ownerApikey:d.apikey} : {})
+          ...((includeOwnership||nativeOwnership) && thing.itemType === 1 && !d.sharedBy && typeof d.apikey === "string" ? {ownerApikey:d.apikey} : {})
         });
       }
       if (things.length < 30) break;
@@ -978,6 +978,15 @@ app.post("/api/programming", requireLogin, route(async(req,res) => res.json(awai
 daikinModule=require("./daikin-onecta")({db:getSceneDatabase,home:HOME,requireLogin,route,cloudError,ownerFor:req=>appAccounts?appAccounts.climateOwner(req):'default',scheduleOwner:s=>appAccounts?appAccounts.climateScheduleOwner(s):Promise.resolve(s.daikinOwner||'default')});
 daikinModule.install(app);
 
+if (process.env.PACE_WIDGETS_ENABLED === "true") {
+  if (!appAccounts || !programming) throw new Error("PACE Widgets richiede l’accesso account e la programmazione server attivi.");
+  require("./widgets")({app,db:getSceneDatabase,accounts:appAccounts,
+    firebaseAuth:()=>require('firebase-admin/auth').getAuth(require('firebase-admin/app').getApps().find(a=>a.name==='san-luigi-scenes')),
+    programming,api,listDevices,assertNoSceneRunning,assertLinkedDeviceChannels,protectManualCommands,physicalOutlets,
+    appid:APPID,region:new URL(API_BASE).hostname.split('-')[0],projectId:process.env.FIREBASE_PROJECT_ID||'ewelink-oratorio',
+    googleAccessToken:async()=>{getSceneDatabase();const firebaseApp=require('firebase-admin/app').getApps().find(a=>a.name==='san-luigi-scenes');return (await firebaseApp.options.credential.getAccessToken()).access_token;}});
+}
+
 app.use((error, _req, res, _next) => {
   res.status(error.type === "entity.parse.failed" ? 400 : 500).json({
     ok: false, error: "invalid_request", msg: "Richiesta non valida."
@@ -985,4 +994,5 @@ app.use((error, _req, res, _next) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => console.log("Server avviato sulla porta", PORT));
