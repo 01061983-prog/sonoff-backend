@@ -1,12 +1,12 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');
 const {createWidgetService}=require(process.env.PACE_WIDGET_SERVICE||'../service.cjs');
-function fixture(){
+function fixture(extraDevices=[]){
  const data={alice:{id:'alice',uid:'uid-a',status:'active',name:'Alice'},bob:{id:'bob',uid:'uid-b',status:'active',name:'Bob'},root:{id:'root',uid:'uid-r',status:'active',name:'Root'}};
  const sent=[],notifications=[],records=new Map(),subs=[];
  const service=createWidgetService({
   authenticate:async token=>({id:token,uid:data[token]?.uid,authTime:1000,installationId:'installation-001',grantId:'grant-test'}),
   directory:{account:async id=>data[id],isSuperadmin:async a=>a.id==='root'&&a.uid==='uid-r',activeAccounts:async()=>Object.values(data),grantedAccounts:async id=>Object.values(data).filter(a=>a.dashboardAccess?.[id]?.control)},
-  snapshots:{read:async a=>({version:1,observedAt:1000,devices:[{id:a.id+'-light',kind:'switch',online:true,state:'off'},{id:a.id+'-gate',kind:'pulse',online:true}]})},
+  snapshots:{read:async a=>({version:1,observedAt:1000,devices:[{id:a.id+'-light',kind:'switch',online:true,state:'off'},{id:a.id+'-gate',kind:'pulse',online:true},...extraDevices]})},
   commands:{setState:async c=>{sent.push(c);return {}; }},
   receipts:{claim:async(key,fingerprint)=>{if(records.has(key))return {...records.get(key),fresh:false};const value={fingerprint};records.set(key,value);return {...value,fresh:true};},complete:async(key,result)=>{records.get(key).result=result;}},
   subscriptions:{save:async s=>subs.push(s),forWorkspace:async id=>subs.filter(s=>s.workspaceId===id),remove:async s=>subs.splice(subs.indexOf(s),1)},
@@ -24,3 +24,5 @@ test('provider acceptance does not falsely confirm ON',async()=>{const {service}
 test('invalidating an account removes existing push subscriptions',async()=>{const {service,data,notifications,subs}=fixture();await service.subscribe('alice',{workspaceId:'alice',deviceIds:['alice-light'],installationId:'installation-001',transport:'fcm',token:'test-token-123456789'});data.alice.invalidBefore=2000;await service.changed('alice','alice-light',2);assert.equal(subs.length,0);assert.equal(notifications.length,0);});
 test('all widgets share one cached usage fetch',async()=>{const createCache=require('../usage-cache.cjs');let calls=0,time=1000;const cache=createCache({now:()=>time,fetchUsage:async()=>{calls++;return {reads:1300,project:'test',periodStart:'start',periodEnd:'end'};}});const values=await Promise.all(Array.from({length:50},()=>cache.read()));assert.equal(calls,1);assert.equal(values[0].reads,1300);await cache.read();assert.equal(calls,1);time+=900001;await cache.read();assert.equal(calls,2);});
 test('Monitoring failure is cached and can recover after TTL',async()=>{const createCache=require('../usage-cache.cjs');let calls=0,time=0;const cache=createCache({now:()=>time,ttl:10,fetchUsage:async()=>{calls++;if(calls===1)throw new Error('offline');return {reads:15,periodStart:'start',periodEnd:'end'};}});assert.equal((await cache.read()).status,'unavailable');await cache.read();assert.equal(calls,1);time=11;assert.equal((await cache.read()).reads,15);assert.equal(calls,2);});
+
+test('a board with more than 20 switches receives changes beyond the visible favorites',async()=>{const devices=Array.from({length:31},(_,i)=>({id:'alice-extra-'+i,kind:'switch',online:true,state:'off'}));const {service,notifications}=fixture(devices);const subscription={workspaceId:'alice',deviceIds:devices.map(d=>d.id),installationId:'installation-001',transport:'fcm',token:'test-token-123456789'};await service.subscribe('alice',subscription);await service.changed('alice','alice-extra-30',2);assert.equal(notifications.length,1);await assert.rejects(service.subscribe('alice',{...subscription,deviceIds:[...subscription.deviceIds,'bob-forged']}),{code:'device_forbidden'});await assert.rejects(service.subscribe('alice',{...subscription,deviceIds:Array.from({length:501},(_,i)=>'x'+i)}),{code:'invalid_subscription'});});

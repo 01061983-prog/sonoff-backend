@@ -60,7 +60,7 @@ function createWidgetService({authenticate,directory,snapshots,commands,receipts
   async subscribe(credential,{workspaceId,deviceIds,installationId,transport,token}){
    const {actor:a}=await access(credential,workspaceId);
    if(a.verifiedInstallationId!==installationId)throw error(403,'installation_forbidden');
-   if(!Array.isArray(deviceIds)||!deviceIds.length||deviceIds.length>20||!deviceIds.every(x=>typeof x==='string')||! /^[a-zA-Z0-9_-]{16,100}$/.test(installationId||'')||!['apns','fcm'].includes(transport)||typeof token!=='string'||token.length<16||token.length>4096)throw error(400,'invalid_subscription');
+   if(!Array.isArray(deviceIds)||!deviceIds.length||deviceIds.length>500||!deviceIds.every(x=>typeof x==='string')||! /^[a-zA-Z0-9_-]{16,100}$/.test(installationId||'')||!['apns','fcm'].includes(transport)||typeof token!=='string'||token.length<16||token.length>4096)throw error(400,'invalid_subscription');
    const snapshot=await this.snapshot(credential,workspaceId);
    if(deviceIds.some(id=>!snapshot.devices.some(d=>d.id===id)))throw error(403,'device_forbidden');
    await subscriptions.save({actorId:a.id,uid:a.uid,authTime:a.verifiedAuthTime,grantId:a.verifiedGrantId,workspaceId,deviceIds:[...new Set(deviceIds)],installationId,transport,token});return {ok:true};
