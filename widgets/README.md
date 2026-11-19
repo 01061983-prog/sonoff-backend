@@ -6,7 +6,7 @@ Opt-in integration; existing web routes and schedules retain their behavior. Ena
 
 Required existing configuration: PACE accounts and programming enabled, `EWELINK_APP_SECRET`, Firebase credential. No new billing plan is needed by this code.
 
-Push requires `PACE_APNS_TEAM_ID`, `PACE_APNS_KEY_ID`, `PACE_APNS_PRIVATE_KEY` (PEM with actual newlines), `PACE_APNS_WIDGET_TOPIC` and `PACE_APNS_PRODUCTION=true` for TestFlight. Confirm the widget topic on a physical installation; expected extension topic is `it.gm83.pacewidgets.widget.push-type.widgets`. Store secrets in Render environment, never in Git or client code. Missing push configuration is reported as unavailable.
+Push requires `PACE_APNS_TEAM_ID`, `PACE_APNS_KEY_ID`, `PACE_APNS_PRIVATE_KEY` (PEM with actual newlines), `PACE_APNS_WIDGET_TOPIC` and `PACE_APNS_PRODUCTION=true` for TestFlight. Confirm the widget topic on a physical installation; verified WidgetKit token topic is `it.gm83.pacewidgets.push-type.widgets` (the containing app bundle ID, not the extension ID). Store secrets in Render environment, never in Git or client code. Missing push configuration is reported as unavailable.
 
 Cloud Monitoring requires read permission for the server service account and the Monitoring API. Without it, usage is unavailable rather than zero. Usage is project-wide and estimated; cache 15 minutes, requested only by superadmin.
 
