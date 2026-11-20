@@ -67,7 +67,7 @@ function createWidgetService({authenticate,directory,snapshots,commands,receipts
   },
   // Feed only verified provider changes here. Recheck grants before every push.
   async changed(workspaceId,deviceId,version){
-   const registered=await subscriptions.forWorkspace(workspaceId);let remaining=registered.length;
+   const registered=await subscriptions.forWorkspace(workspaceId);let remaining=registered.length,failed=0;
    for(const sub of registered){
     const changed=Array.isArray(deviceId)?deviceId:[deviceId];
     if(!sub.deviceIds.some(id=>changed.includes(id)))continue;
@@ -75,9 +75,10 @@ function createWidgetService({authenticate,directory,snapshots,commands,receipts
     if(!a||a.uid!==sub.uid||a.status!=='active'||sub.authTime<Number(a.invalidBefore||0)){await subscriptions.remove(sub);remaining--;continue;}
     try{await permitted(a,workspaceId);}catch(e){if(e.status===403){await subscriptions.remove(sub);remaining--;continue;}throw e;}
     // Invalidation only: no device names, tokens or state in lock-screen payloads.
-    await push.invalidate(sub,{workspaceId,version});
+    try{await push.invalidate(sub,{workspaceId,version});}
+    catch(e){if(e.invalidSubscription){await subscriptions.remove(sub);remaining--;}else{failed++;console.warn("PACE widget push delivery failed",{transport:sub.transport,status:e.status||0,reason:e.reason||e.code||"push_unavailable"});}}
    }
-   return {subscribers:remaining};
+   return {subscribers:remaining,failed};
   }
  };
 }

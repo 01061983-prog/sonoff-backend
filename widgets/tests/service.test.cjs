@@ -1,6 +1,6 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');
 const {createWidgetService}=require(process.env.PACE_WIDGET_SERVICE||'../service.cjs');
-function fixture(extraDevices=[]){
+function fixture(extraDevices=[],pushAdapter=null){
  const data={alice:{id:'alice',uid:'uid-a',status:'active',name:'Alice'},bob:{id:'bob',uid:'uid-b',status:'active',name:'Bob'},root:{id:'root',uid:'uid-r',status:'active',name:'Root'}};
  const sent=[],notifications=[],records=new Map(),subs=[];
  const service=createWidgetService({
@@ -10,7 +10,7 @@ function fixture(extraDevices=[]){
   commands:{setState:async c=>{sent.push(c);return {}; }},
   receipts:{claim:async(key,fingerprint)=>{if(records.has(key))return {...records.get(key),fresh:false};const value={fingerprint};records.set(key,value);return {...value,fresh:true};},complete:async(key,result)=>{records.get(key).result=result;}},
   subscriptions:{save:async s=>subs.push(s),forWorkspace:async id=>subs.filter(s=>s.workspaceId===id),remove:async s=>subs.splice(subs.indexOf(s),1)},
-  push:{invalidate:async(s,event)=>notifications.push({s,event})},usage:{read:async()=>({status:'unavailable',reason:'monitoring_not_configured'})}
+  push:pushAdapter||{invalidate:async(s,event)=>notifications.push({s,event})},usage:{read:async()=>({status:'unavailable',reason:'monitoring_not_configured'})}
  });return {service,data,sent,notifications,subs};
 }
 test('each user sees only their own board; root sees all',async()=>{const {service}=fixture();assert.deepEqual((await service.boards('alice')).map(x=>x.id),['alice']);assert.equal((await service.boards('root')).length,3);});
@@ -26,3 +26,5 @@ test('all widgets share one cached usage fetch',async()=>{const createCache=requ
 test('Monitoring failure is cached and can recover after TTL',async()=>{const createCache=require('../usage-cache.cjs');let calls=0,time=0;const cache=createCache({now:()=>time,ttl:10,fetchUsage:async()=>{calls++;if(calls===1)throw new Error('offline');return {reads:15,periodStart:'start',periodEnd:'end'};}});assert.equal((await cache.read()).status,'unavailable');await cache.read();assert.equal(calls,1);time=11;assert.equal((await cache.read()).reads,15);assert.equal(calls,2);});
 
 test('a board with more than 20 switches receives changes beyond the visible favorites',async()=>{const devices=Array.from({length:31},(_,i)=>({id:'alice-extra-'+i,kind:'switch',online:true,state:'off'}));const {service,notifications}=fixture(devices);const subscription={workspaceId:'alice',deviceIds:devices.map(d=>d.id),installationId:'installation-001',transport:'fcm',token:'test-token-123456789'};await service.subscribe('alice',subscription);await service.changed('alice','alice-extra-30',2);assert.equal(notifications.length,1);await assert.rejects(service.subscribe('alice',{...subscription,deviceIds:[...subscription.deviceIds,'bob-forged']}),{code:'device_forbidden'});await assert.rejects(service.subscribe('alice',{...subscription,deviceIds:Array.from({length:501},(_,i)=>'x'+i)}),{code:'invalid_subscription'});});
+
+test('a failed Android delivery does not block Apple widgets on the same board',async()=>{const delivered=[];const {service,subs}=fixture([], {invalidate:async sub=>{if(sub.transport==='fcm')throw Object.assign(new Error('expired'),{invalidSubscription:true});delivered.push(sub.transport);}});const input={workspaceId:'alice',deviceIds:['alice-light'],installationId:'installation-001',token:'test-token-123456789'};await service.subscribe('alice',{...input,transport:'fcm'});await service.subscribe('alice',{...input,transport:'apns'});const result=await service.changed('alice','alice-light',2);assert.deepEqual(delivered,['apns']);assert.equal(subs.length,1);assert.equal(result.subscribers,1);});
