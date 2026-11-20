@@ -7,6 +7,7 @@ module.exports=function installWidgets({app,db,accounts,firebaseAuth,programming
  const collection=name=>db().collection(name),hash=s=>crypto.createHash('sha256').update(s).digest('hex');
  const auth=createAuth({db,accounts,firebaseAuth,secret:process.env.EWELINK_APP_SECRET});
  const apns=createAPNs({teamId:process.env.PACE_APNS_TEAM_ID,keyId:process.env.PACE_APNS_KEY_ID,privateKey:process.env.PACE_APNS_PRIVATE_KEY,topic:process.env.PACE_APNS_WIDGET_TOPIC,production:process.env.PACE_APNS_PRODUCTION!=='false'});
+ const fcm=require('./fcm.cjs')({enabled:process.env.PACE_WIDGETS_FCM_ENABLED==='true',projectId,accessToken:googleAccessToken});
  const directory={
   async account(id){if(!/^[a-f0-9]{64}$/.test(id||''))return null;const s=await collection('ewelinkAppAccounts').doc(id).get();return s.exists?{...s.data(),id:s.id}:null;},
   async isSuperadmin(actor){if(actor.role!=='admin')return false;const s=await collection('ewelinkAppSettings').doc('administrator').get();return s.data()?.uid===actor.uid;},
@@ -26,7 +27,7 @@ module.exports=function installWidgets({app,db,accounts,firebaseAuth,programming
  let service;
  const snapshots=createSnapshots({access:owner=>programming.access(owner),listDevices,appid,region,onChanged:async(id,devices,version)=>{const r=await service.changed(id,devices,version);if(!r.subscribers)snapshots.unwatch(id);}});
  service=createWidgetService({authenticate:token=>auth.authenticate(token),directory,snapshots,receipts,subscriptions,
-  push:{async invalidate(sub,event){const g=await collection('paceWidgetGrants').doc(sub.grantId).get();if(!g.exists||g.data().revoked){await subscriptions.remove(sub);return;}await apns.invalidate(sub,event);}},
+  push:{async invalidate(sub,event){const g=await collection('paceWidgetGrants').doc(sub.grantId).get();if(!g.exists||g.data().revoked){await subscriptions.remove(sub);return;}if(sub.transport==='fcm')await fcm.invalidate(sub,event);else await apns.invalidate(sub,event);}},
   usage:createUsage({fetchUsage:require('./monitoring.cjs')({projectId,accessToken:googleAccessToken})}),
   commands:{async setState({actor,workspace,device,state}){
    const credentials=await programming.access(workspace.providerOwner),token=credentials.accessToken;
@@ -55,16 +56,16 @@ module.exports=function installWidgets({app,db,accounts,firebaseAuth,programming
  const route=fn=>async(req,res)=>{res.set('Cache-Control','no-store');try{res.json(await fn(req));}catch(e){res.status(e.status||503).json({ok:false,error:e.code||'temporarily_unavailable'});}};
  app.get('/widgets/connect.html',(_req,res)=>{res.set('Referrer-Policy','no-referrer');res.set('X-Frame-Options','DENY');res.sendFile(path.join(__dirname,'connect.html'));});
  app.get('/widgets/connect.js',(_req,res)=>res.sendFile(path.join(__dirname,'connect.js')));
- app.get('/api/widgets/config',(_req,res)=>res.json({ok:true,enabled:true,pushAvailable:apns.configured}));
+ app.get('/api/widgets/config',(_req,res)=>res.json({ok:true,enabled:true,pushAvailable:apns.configured,androidPushAvailable:fcm.configured}));
  app.post('/api/widgets/pair',limit,route(req=>auth.pair(req,req.body)));
  app.post('/api/widgets/token',limit,route(req=>auth.exchange(req.body)));
  app.post('/api/widgets/logout',limit,route(req=>auth.revoke(bearer(req))));
  app.post('/api/widgets/subscriptions/sync',limit,route(async req=>{
   const token=bearer(req),identity=await auth.authenticate(token),body=req.body;
-  if(!body||body.installationId!==identity.installationId||body.transport!=='apns'||!Array.isArray(body.boards)||body.boards.length>20)throw failure(400,'invalid_subscription');
-  if(!apns.configured)throw failure(503,'push_not_configured');
+  if(!body||body.installationId!==identity.installationId||!['apns','fcm'].includes(body.transport)||!Array.isArray(body.boards)||body.boards.length>20)throw failure(400,'invalid_subscription');
+  if(body.transport==='apns'?!apns.configured:!fcm.configured)throw failure(503,'push_not_configured');
   for(const board of body.boards){
-   await service.subscribe(token,{...board,installationId:body.installationId,transport:'apns',token:body.token});
+   await service.subscribe(token,{...board,installationId:body.installationId,transport:body.transport,token:body.token});
    const workspace=await directory.account(board.workspaceId);if(workspace)await snapshots.watch(workspace);
   }
   const existing=await collection('paceWidgetSubscriptions').where('grantId','==',identity.grantId).get();
@@ -75,10 +76,10 @@ module.exports=function installWidgets({app,db,accounts,firebaseAuth,programming
   }
   return {ok:true};
  }));
- app.get('/api/widgets/me',limit,route(async req=>{const token=bearer(req),identity=await auth.authenticate(token),a=await directory.account(identity.id);return {ok:true,userName:a.name,isSuperadmin:await directory.isSuperadmin(a),primaryWorkspaceId:a.id,boards:await service.boards(token),pushAvailable:apns.configured};}));
+ app.get('/api/widgets/me',limit,route(async req=>{const token=bearer(req),identity=await auth.authenticate(token),a=await directory.account(identity.id);return {ok:true,userName:a.name,isSuperadmin:await directory.isSuperadmin(a),primaryWorkspaceId:a.id,boards:await service.boards(token),pushAvailable:apns.configured,androidPushAvailable:fcm.configured};}));
  installRoutes(app,service,{limit});
  // Resume event streams once at process start for existing subscriptions, no periodic DB reads.
- if(apns.configured)void collection('paceWidgetSubscriptions').get().then(async rows=>{
+ if(apns.configured||fcm.configured)void collection('paceWidgetSubscriptions').get().then(async rows=>{
   for(const id of new Set(rows.docs.map(s=>s.data().workspaceId))){const a=await directory.account(id);if(a?.status==='active')await snapshots.watch(a).catch(()=>{});}
  }).catch(()=>{});
  return {stop:()=>snapshots.stop()};

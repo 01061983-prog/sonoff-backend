@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "262867107714",
+    "project_id": "ewelink-oratorio",
+    "storage_bucket": "ewelink-oratorio.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:262867107714:android:162674065c9816ac00599b",
+        "android_client_info": {
+          "package_name": "it.gm83.pacewidgets"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "262867107714-9qhaj83eoljebs5t7kv6rj9gkgig1nu1.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB-tcB26gX7D1NwtanvklfwRBdccRtww6c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "262867107714-9qhaj83eoljebs5t7kv6rj9gkgig1nu1.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

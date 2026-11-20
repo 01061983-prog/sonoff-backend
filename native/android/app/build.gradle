@@ -1,0 +1,48 @@
+plugins { id 'com.android.application'; id 'com.google.gms.google-services' }
+android {
+ namespace 'it.gm83.pacewidgets'
+ compileSdk 36
+ defaultConfig {
+  applicationId 'it.gm83.pacewidgets'
+  minSdk 26
+  targetSdk 36
+  versionCode 1
+  versionName '0.1.0'
+  testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+ }
+ compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+ signingConfigs {
+  beta {
+   def key = rootProject.file('signing/pace-widgets-beta.p12')
+   def secret = rootProject.file('signing/password')
+   if (key.exists() && secret.exists()) {
+    storeFile key
+    storePassword secret.text.trim()
+    keyAlias 'pace-widgets-beta'
+    keyPassword secret.text.trim()
+   }
+  }
+  debug {
+   def key = rootProject.file('signing/pace-widgets-beta.p12')
+   def secret = rootProject.file('signing/password')
+   if (key.exists() && secret.exists()) {
+    storeFile key
+    storePassword secret.text.trim()
+    keyAlias 'pace-widgets-beta'
+    keyPassword secret.text.trim()
+   }
+  }
+ }
+ buildTypes { release { signingConfig signingConfigs.beta; minifyEnabled false; debuggable false } }
+ testOptions { unitTests.returnDefaultValues = true }
+}
+dependencies {
+ implementation 'androidx.browser:browser:1.8.0'
+ implementation 'androidx.work:work-runtime:2.10.1'
+ implementation platform('com.google.firebase:firebase-bom:33.9.0')
+ implementation 'com.google.firebase:firebase-messaging'
+ testImplementation 'junit:junit:4.13.2'
+ testImplementation 'org.json:json:20240303'
+ androidTestImplementation 'androidx.test:runner:1.6.2'
+ androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+}
