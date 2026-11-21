@@ -123,9 +123,10 @@ function failure(res, error, req) {
     res.clearCookie("ewelink_access", COOKIE_OPTIONS);
     res.clearCookie("ewelink_expires", COOKIE_OPTIONS);
   }
+  if(error.retryAfterMs)res.set("Retry-After",String(Math.ceil(error.retryAfterMs/1000)));
   return res.status(error.status || 502).json({
     ok: false, error: error.code || "upstream_error", msg: error.message,
-    providerError: error.providerError,
+    providerError: error.providerError, retryAfterMs:error.retryAfterMs,
     canResume: error.code === "not_authenticated" && Boolean(req?.browserSession || req?.appAccount?.providerOwner)
   });
 }
@@ -214,23 +215,16 @@ if(APP_AUTH_ENABLED){
   appAccounts.install(app,route);
 }else app.get('/api/app/config',(_req,res)=>res.json({ok:true,enabled:false}));
 
-// Spazia le richieste verso eWeLink. Nessun reinvio automatico dei comandi.
-let queue = Promise.resolve();
-let lastRequest = 0;
-async function api(path, token, body, authorization) {
-  const slot = queue.then(async () => {
-    const delay = Math.max(0, 550 - (Date.now() - lastRequest));
-    if (delay) await new Promise(resolve => setTimeout(resolve, delay));
-    lastRequest = Date.now();
-  });
-  queue = slot.catch(() => {});
-  await slot;
+// Shared across webapp, widgets and scheduled jobs. Commands are never replayed.
+const providerRequests=require('./provider-requests.cjs')({onLimit:endpoint=>console.warn('eWeLink request cooldown',{endpoint})});
+async function api(path, token, body, authorization, requestOptions = {}) {
   if (appAccounts && body !== undefined && path === "/v2/device/thing/status") await appAccounts.tokenAllowed(token);
   if(path==="/v2/device/thing/status"&&body?.params?.switches&&singleRelayDevices.has(body.id)){
     const switches=body.params.switches.filter(channel=>channel.outlet===0);
     if(!switches.length)throw cloudError(400,"invalid_channels","Questo MINIR4 dispone soltanto del canale 1. Modifica il comando selezionando CH1.");
     body={...body,params:{...body.params,switches}};
   }
+ return providerRequests.run({path,token,body,authorization,fresh:requestOptions.fresh},async()=>{
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 60000);
   try {
@@ -246,7 +240,12 @@ async function api(path, token, body, authorization) {
     });
     let data;
     try { data = await response.json(); }
-    catch { throw new Error("Risposta non JSON da eWeLink (HTTP " + response.status + ")."); }
+    catch { if(response.status===429)throw providerRequests.limit(path);throw new Error("Risposta non JSON da eWeLink (HTTP " + response.status + ")."); }
+    if(response.status===429||/invoke too much|too many requests|rate.?limit/i.test(String(data?.msg||''))){
+      const retry=response.headers.get('retry-after');const seconds=Number(retry);
+      const wait=retry?(Number.isFinite(seconds)?seconds*1000:Math.max(0,Date.parse(retry)-Date.now())):60000;
+      throw providerRequests.limit(path,wait);
+    }
     if (!response.ok || data?.error !== 0) {
       const error = new Error(data?.msg || "Errore eWeLink HTTP " + response.status);
       const authError = response.status === 401 || [401, 402].includes(data?.error) ||
@@ -261,6 +260,7 @@ async function api(path, token, body, authorization) {
     if (error.name === "AbortError") throw new Error("Tempo scaduto: esito non confermato. Verifica lo stato prima di riprovare.");
     throw error;
   } finally { clearTimeout(timer); }
+ });
 }
 
 // Pagina e API sullo stesso sito: i cookie non dipendono da accessi cross-site.
@@ -269,7 +269,7 @@ app.use("/app", express.static(path.join(__dirname, "public"), { index: "index.h
 // Compatibilità con i file caricati accanto a server.js su GitHub.
 // Sono esposti soltanto gli asset elencati, mai il codice del backend.
 const WEBAPP_ASSETS = [
-  "index.html", "sonoff.html.html", "app.css", "text-size.js", "scene-pages.js", "room-map.js", "room-map.css", "account-auth.js", "account-auth.css", "menu-bar.js", "menu-bar.css", "push-settings.js", "climate.js", "climate.css", "manifest.webmanifest", "sw.js",
+  "index.html", "sonoff.html.html", "request-backoff.js", "app.css", "text-size.js", "scene-pages.js", "room-map.js", "room-map.css", "account-auth.js", "account-auth.css", "menu-bar.js", "menu-bar.css", "push-settings.js", "climate.js", "climate.css", "manifest.webmanifest", "sw.js",
   "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png",
   "icons/icon-maskable.png", "icons/apple-touch-icon.png"
 ];
@@ -383,8 +383,8 @@ app.post("/logout", route(async (req, res) => {
   res.json({ ok: true });
 }));
 
-async function families(token) {
-  const response = await api("/v2/family", token);
+async function families(token, {fresh=false} = {}) {
+  const response = await api("/v2/family", token, undefined, undefined, {fresh});
   if (!Array.isArray(response.data?.familyList)) throw new Error("Elenco family non valido.");
   return response.data.familyList;
 }
@@ -437,15 +437,15 @@ app.post("/api/linked-devices",requireLogin,route(async(req,res)=>{
   res.json({...result,channels:2});
 }));
 
-async function listDevices(token, homes, {includeOwnership = false, nativeOwnership = false, deviceIds = null, linkedRegistry} = {}) {
-  homes = homes || await families(token);
+async function listDevices(token, homes, {includeOwnership = false, nativeOwnership = false, deviceIds = null, linkedRegistry, fresh=false} = {}) {
+  homes = homes || await families(token,{fresh});
   const devices = new Map();
   for (const home of homes) {
     let beginIndex = -9999999;
     const seen = new Set();
     while (true) {
       const query = new URLSearchParams({ familyid: home.id, num: "30", beginIndex: String(beginIndex) });
-      const response = await api("/v2/device/thing?" + query.toString(), token);
+      const response = await api("/v2/device/thing?" + query.toString(), token, undefined, undefined, {fresh});
       const things = response.data?.thingList;
       if (!Array.isArray(things)) throw new Error("Elenco dispositivi non valido.");
       for (const thing of things) {

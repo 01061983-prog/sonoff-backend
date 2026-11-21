@@ -53,7 +53,7 @@ module.exports=function installWidgets({app,db,accounts,firebaseAuth,programming
   if(attempts.size>5000)return res.status(503).json({ok:false,error:'temporarily_unavailable'});attempts.set(key,window);next();
  }
  const bearer=req=>{const m=/^Bearer ([A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43})$/.exec(req.get('authorization')||'');if(!m)throw failure(401,'login_required');return m[1];};
- const route=fn=>async(req,res)=>{res.set('Cache-Control','no-store');try{res.json(await fn(req));}catch(e){res.status(e.status||503).json({ok:false,error:e.code||'temporarily_unavailable'});}};
+ const route=fn=>async(req,res)=>{res.set('Cache-Control','no-store');try{res.json(await fn(req));}catch(e){if(e.retryAfterMs)res.set('Retry-After',String(Math.ceil(e.retryAfterMs/1000)));res.status(e.status||503).json({ok:false,error:e.code||'temporarily_unavailable',retryAfterMs:e.retryAfterMs});}};
  app.get('/widgets/connect.html',(_req,res)=>{res.set('Referrer-Policy','no-referrer');res.set('X-Frame-Options','DENY');res.sendFile(path.join(__dirname,'connect.html'));});
  app.get('/widgets/connect.js',(_req,res)=>res.sendFile(path.join(__dirname,'connect.js')));
  app.get('/api/widgets/config',(_req,res)=>res.json({ok:true,enabled:true,pushAvailable:apns.configured,androidPushAvailable:fcm.configured}));

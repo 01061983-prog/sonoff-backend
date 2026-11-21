@@ -184,11 +184,11 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
  // physical command: a rejected or uncertain impulse must remain a single attempt.
  async function readScheduledDevices(owner){
   let credentials=await access(owner,{scheduled:true});
-  try{return {credentials,devices:await listDevices(credentials.accessToken)};}
+  try{return {credentials,devices:await listDevices(credentials.accessToken,undefined,{fresh:true})};}
   catch(e){
    if(e.status!==401)throw e;
    credentials=await access(owner,{scheduled:true,rejectedToken:credentials.accessToken});
-   try{return {credentials,devices:await listDevices(credentials.accessToken)};}
+   try{return {credentials,devices:await listDevices(credentials.accessToken,undefined,{fresh:true})};}
    catch(retryError){
     if(retryError.status===401)await markAuthenticationRequired({programmingOwner:owner,cookies:{ewelink_access:credentials.accessToken}});
     throw retryError;
