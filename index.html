@@ -14,6 +14,7 @@
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg?v=65">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=65">
   <script src="account-auth.js?v=91"></script>
+  <script src="request-backoff.js?v=92"></script>
   <link rel="stylesheet" href="account-auth.css?v=91">
   <script src="text-size.js?v=64"></script>
   <script src="scene-pages.js?v=46"></script>
@@ -297,6 +298,8 @@
     }
     async function apiRequest(path, body, sessionRetried=false) {
         const requestContext=sessionContextKey();
+        const providerWait=body===undefined?window.PaceRequestBackoff.wait(requestContext,path):0;
+        if(providerWait)throw window.PaceRequestBackoff.error(requestContext,path);
         if (navigator.onLine === false) throw new Error("Sei offline. Riconnettiti prima di inviare comandi.");
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), body === undefined ? 15000 : 60000);
@@ -316,6 +319,13 @@
             try { data = await response.json(); }
             catch { throw new Error("Risposta non JSON dal server (HTTP " + response.status + ")."); }
             if(requestContext!==sessionContextKey())throw Object.assign(new Error('Account cambiato durante la richiesta. Riprova nella plancia selezionata.'),{code:'app_context_changed'});
+            if(response.status===429||data?.error==='rate_limited'||/invoke too much/i.test(String(data?.msg||''))){
+                const header=Number(response.headers.get('Retry-After'))*1000;
+                const delay=Math.max(1000,Number(data?.retryAfterMs)||header||60000);
+                window.PaceRequestBackoff.block(requestContext,path,delay);
+                if(path==='/api/devices')requestConnectionRecovery(delay);
+                throw window.PaceRequestBackoff.error(requestContext,path);
+            }
             if(window.AppAccounts?.handleError(data))throw Object.assign(new Error(data.msg),{auth:true});
             if (response.status === 401 || data?.error === "not_authenticated") {
                 if(!sessionRetried){
@@ -570,6 +580,8 @@
     }
     async function loadDevices() {
         if (devicesLoading) return false;
+        const cooldown=window.PaceRequestBackoff.wait(sessionContextKey(),'/api/devices');
+        if(cooldown){requestConnectionRecovery(cooldown);return false;}
         devicesLoading = true;
         const readSerial=++devicesReadSerial;
         devicesFresh = false;
@@ -1594,7 +1606,7 @@
     let backgroundDevicesBusy = false;
     let lastBackgroundAttempt = 0;
     async function refreshDeviceStatus() {
-        if (document.visibilityState === 'hidden' || navigator.onLine === false || authRequired || backgroundDevicesBusy ||
+        if (window.PaceRequestBackoff.wait(sessionContextKey(),'/api/devices') || document.visibilityState === 'hidden' || navigator.onLine === false || authRequired || backgroundDevicesBusy ||
             devicesLoading || commandBusy || activeCloudExecution() || sceneSyncTask || programmingBusy ||
             sceneEditorEl.style.display === 'block' || !programmingElement('Form').hidden ||
             document.getElementById('roomEditorDialog').open || document.getElementById('channelDialog').open || deviceGesture) return false;
@@ -1617,7 +1629,7 @@
             document.getElementById('lastSync').textContent = 'Ultima lettura · ' + lastSyncTime.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
             return true;
         } catch (error) {
-            if (!error.auth) requestConnectionRecovery();
+            if (!error.auth) requestConnectionRecovery(error.retryAfterMs||800);
             return false;
         } finally { backgroundDevicesBusy = false; }
     }
@@ -1641,12 +1653,16 @@
         connectionPending = true;
         connectionEpoch++;
         if (!connectionInitialized) return;
-        connectionNotice('Riconnessione in corso… Gli eventuali comandi non vengono ripetuti.');
+        const cooldown=window.PaceRequestBackoff.wait(sessionContextKey(),'/api/devices');
+        delay=Math.max(delay,cooldown);
+        connectionNotice(cooldown?'eWeLink ha richiesto una pausa. Aggiornamento automatico in attesa…':'Riconnessione in corso… Gli eventuali comandi non vengono ripetuti.');
         if (connectionTimer !== null) clearTimeout(connectionTimer);
         connectionTimer = setTimeout(() => { connectionTimer = null; void checkConnection(); }, delay);
     }
     async function checkConnection() {
         if (document.visibilityState === 'hidden' || connectionProbeBusy) return;
+        const cooldown=window.PaceRequestBackoff.wait(sessionContextKey(),'/api/devices');
+        if(cooldown){requestConnectionRecovery(cooldown);return;}
         connectionProbeBusy = true;
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 8000);
@@ -1686,7 +1702,7 @@
             clearTimeout(timeout);
             connectionProbeBusy = false;
             if (connectionPending && !authRequired && document.visibilityState !== 'hidden' && connectionTimer === null) {
-                const delay = [2000,5000,10000,20000,30000][Math.min(connectionRetry++,4)];
+                const delay = Math.max(window.PaceRequestBackoff.wait(sessionContextKey(),'/api/devices'),[2000,5000,10000,20000,30000][Math.min(connectionRetry++,4)]);
                 connectionTimer = setTimeout(() => { connectionTimer = null; void checkConnection(); }, delay);
             }
         }
