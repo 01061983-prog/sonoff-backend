@@ -216,7 +216,7 @@ if(APP_AUTH_ENABLED){
 }else app.get('/api/app/config',(_req,res)=>res.json({ok:true,enabled:false}));
 
 // Shared across webapp, widgets and scheduled jobs. Commands are never replayed.
-const providerRequests=require('./provider-requests.cjs')({onLimit:endpoint=>console.warn('eWeLink request cooldown',{endpoint})});
+const providerRequests=require('./provider-requests.cjs')({onLimit:(endpoint,providerError)=>console.warn('eWeLink request cooldown',{endpoint,providerError:providerError??'unknown'})});
 async function api(path, token, body, authorization, requestOptions = {}) {
   if (appAccounts && body !== undefined && path === "/v2/device/thing/status") await appAccounts.tokenAllowed(token);
   if(path==="/v2/device/thing/status"&&body?.params?.switches&&singleRelayDevices.has(body.id)){
@@ -241,10 +241,10 @@ async function api(path, token, body, authorization, requestOptions = {}) {
     let data;
     try { data = await response.json(); }
     catch { if(response.status===429)throw providerRequests.limit(path);throw new Error("Risposta non JSON da eWeLink (HTTP " + response.status + ")."); }
-    if(response.status===429||/invoke too much|too many requests|rate.?limit/i.test(String(data?.msg||''))){
+    if(response.status===429||Number(data?.error)===412||/invoke too much|too many requests|rate.?limit/i.test(String(data?.msg||''))){
       const retry=response.headers.get('retry-after');const seconds=Number(retry);
       const wait=retry?(Number.isFinite(seconds)?seconds*1000:Math.max(0,Date.parse(retry)-Date.now())):60000;
-      throw providerRequests.limit(path,wait);
+      throw providerRequests.limit(path,wait,Number(data?.error));
     }
     if (!response.ok || data?.error !== 0) {
       const error = new Error(data?.msg || "Errore eWeLink HTTP " + response.status);

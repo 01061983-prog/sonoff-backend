@@ -52,3 +52,13 @@ test('scheduled reads bypass the short display cache and refresh it for other cl
  assert.equal((await c.run({...args,fresh:true},op)).version,2);
  assert.equal((await c.run(args,op)).version,2);assert.equal(reads,2);
 });
+
+test('APPID quota 412 is preserved, distinct from frequency throttling, and suppresses other provider endpoints',async()=>{
+ let time=0,codeLogged,calls=0;const c=create({now:()=>time,globalGap:0,endpointGap:0,onLimit:(_path,code)=>codeLogged=code});
+ await assert.rejects(c.run(request('/v2/family'),async()=>{calls++;throw c.limit('/v2/family',60000,412);}),e=>e.code==='provider_quota'&&e.providerError===412&&e.retryAfterMs===300000);
+ await assert.rejects(c.run(request('/v2/device/thing/status','alice',{state:'on'}),async()=>{calls++;}),{code:'provider_quota',providerError:412});assert.equal(calls,1);assert.equal(codeLogged,412);
+ time=300001;await c.run(request('/v2/family'),async()=>{calls++;return {};});assert.equal(calls,2);
+});
+test('the browser preserves the specific provider quota explanation during cooldown',()=>{
+ const c=require('../request-backoff.js')(()=>0);c.block('account','/api/devices',300000,{message:'Quota integrazione raggiunta',code:'provider_quota'});const error=c.error('account','/api/devices');assert.equal(error.message,'Quota integrazione raggiunta');assert.equal(error.code,'provider_quota');assert.equal(error.retryAfterMs,300000);
+});
