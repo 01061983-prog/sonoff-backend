@@ -27,7 +27,7 @@ test('rate limit suppresses provider retries while keeping other endpoints usabl
 });
 test('cached reads expire instead of inventing a fresh provider observation',async()=>{
  let time=0,calls=0;const c=create({now:()=>time,globalGap:0,endpointGap:0});const op=async()=>({version:++calls});
- assert.equal((await c.run(request('/v2/device/thing'),op)).version,1);time=1999;assert.equal((await c.run(request('/v2/device/thing'),op)).version,1);time=2001;assert.equal((await c.run(request('/v2/device/thing'),op)).version,2);
+ assert.equal((await c.run(request('/v2/device/thing'),op)).version,1);time=9999;assert.equal((await c.run(request('/v2/device/thing'),op)).version,1);time=10001;assert.equal((await c.run(request('/v2/device/thing'),op)).version,2);
 });
 test('shared IP pacing applies per interface and commands overtake queued reads',async()=>{
  let time=0,serial=0;const timers=new Map(),starts=[];
@@ -55,10 +55,21 @@ test('scheduled reads bypass the short display cache and refresh it for other cl
 
 test('APPID quota 412 is preserved, distinct from frequency throttling, and suppresses other provider endpoints',async()=>{
  let time=0,codeLogged,calls=0;const c=create({now:()=>time,globalGap:0,endpointGap:0,onLimit:(_path,code)=>codeLogged=code});
- await assert.rejects(c.run(request('/v2/family'),async()=>{calls++;throw c.limit('/v2/family',60000,412);}),e=>e.code==='provider_quota'&&e.providerError===412&&e.retryAfterMs===300000);
+ await assert.rejects(c.run(request('/v2/family'),async()=>{calls++;throw c.limit('/v2/family',60000,412);}),e=>e.code==='provider_quota'&&e.providerError===412&&e.retryAfterMs===3600000);
  await assert.rejects(c.run(request('/v2/device/thing/status','alice',{state:'on'}),async()=>{calls++;}),{code:'provider_quota',providerError:412});assert.equal(calls,1);assert.equal(codeLogged,412);
- time=300001;await c.run(request('/v2/family'),async()=>{calls++;return {};});assert.equal(calls,2);
+ time=3600001;await c.run(request('/v2/family'),async()=>{calls++;return {};});assert.equal(calls,2);
 });
 test('the browser preserves the specific provider quota explanation during cooldown',()=>{
  const c=require('../request-backoff.js')(()=>0);c.block('account','/api/devices',300000,{message:'Quota integrazione raggiunta',code:'provider_quota'});const error=c.error('account','/api/devices');assert.equal(error.message,'Quota integrazione raggiunta');assert.equal(error.code,'provider_quota');assert.equal(error.retryAfterMs,300000);
 });
+
+ test('quota block rejects repeated web widget and schedule requests for the full hour',async()=>{
+ let time=0,calls=0;const c=create({now:()=>time,globalGap:0,endpointGap:0});c.limit('/v2/family',60000,412);
+ for(time=1000;time<3600000;time+=1000){await assert.rejects(c.run({...request('/v2/device/thing','user-'+time%3),fresh:true},async()=>{calls++;return {};}),{code:'provider_quota'});}
+ assert.equal(calls,0);time=3600001;await c.run(request('/v2/family'),async()=>{calls++;return {};});assert.equal(calls,1);
+ });
+ test('family metadata is reused for five minutes but scheduled reads still bypass it',async()=>{
+ let time=0,calls=0;const c=create({now:()=>time,globalGap:0,endpointGap:0}),args=request('/v2/family'),op=async()=>({version:++calls});
+ await c.run(args,op);time=299999;assert.equal((await c.run(args,op)).version,1);
+ assert.equal((await c.run({...args,fresh:true},op)).version,2);time=600000;assert.equal((await c.run(args,op)).version,3);
+ });
