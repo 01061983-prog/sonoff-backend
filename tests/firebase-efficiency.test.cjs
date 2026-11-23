@@ -14,7 +14,7 @@ test('a failed stream invalidates the index and reconnects with a delay',()=>{
  let next,fail,job,subscribed=0,cancelled=0;
  const index=createIndex({query:()=>({onSnapshot(n,e){subscribed++;next=n;fail=e;return ()=>cancelled++;}}),setTimer:(fn,ms)=>{job={fn,ms};return 1;},clearTimer:()=>{job=null;}});
  index.start();next({docs:[doc('one',{nextAt:0})]});fail(Object.assign(Error('unavailable'),{code:14}));assert.equal(index.all(),null);assert.equal(job.ms,60000);
- job.fn();assert.equal(subscribed,2);next({docs:[]});assert.equal(index.all().docs.length,0);index.stop();assert.equal(cancelled,1);
+ job.fn();assert.equal(subscribed,2);next({docs:[]});assert.equal(index.all().docs.length,0);index.stop();assert.equal(cancelled,2);
 });
 test('confirmed Firebase quota stops work for an hour without extending on locally blocked calls',()=>{
  let time=0;const quota=quotaFactory({now:()=>time});const e=quota.record(Object.assign(Error('8 RESOURCE_EXHAUSTED: Quota exceeded.'),{code:8}));assert.equal(e.status,503);assert.equal(e.code,'firebase_quota');
@@ -38,4 +38,8 @@ test('browser database cooldown applies across accounts and API paths without cl
  assert.equal(b.wait('second','/api/devices'),3600000);assert.equal(b.error('second','/api/devices').status,503);assert.equal(b.error('second','/api/app/session').code,'firebase_quota');
  b.block('third','/api/app/session',1000,{code:'firebase_quota'});assert.equal(b.wait('second','/api/devices'),3600000);
  time=3600001;assert.equal(b.wait('second','/api/devices'),0);
+});
+test('quota exhaustion closes existing Firestore listeners, not just future queries',()=>{
+ let time=0,closed=0,next,task;const guard=quotaFactory({now:()=>time});const index=createIndex({quotaGuard:guard,query:()=>({onSnapshot(n){next=n;return ()=>closed++;}}),setTimer:(fn,ms)=>{task={fn,ms};return 1;},clearTimer:()=>{task=null;}});
+ index.start();next({docs:[]});guard.record(Object.assign(Error('Quota exceeded'),{code:8}));assert.equal(closed,1);assert.equal(index.all(),null);assert.equal(task.ms,3600000);index.stop();assert.equal(task,null);
 });
