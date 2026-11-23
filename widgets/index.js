@@ -2,6 +2,7 @@
 const path=require('node:path'),crypto=require('node:crypto');
 const {createWidgetService,installRoutes}=require('./service.cjs');
 const createAuth=require('./auth.cjs'),createSnapshots=require('./snapshots.cjs'),createAPNs=require('./apns.cjs'),createUsage=require('./usage-cache.cjs');
+const requestReads=require('../request-reads.cjs'),firebaseQuota=require('../firebase-quota.cjs');
 const failure=(status,code)=>Object.assign(new Error(code),{status,code});
 module.exports=function installWidgets({app,db,accounts,firebaseAuth,programming,api,listDevices,assertNoSceneRunning,assertLinkedDeviceChannels,protectManualCommands,physicalOutlets,appid,region,googleAccessToken,projectId}){
  const collection=name=>db().collection(name),hash=s=>crypto.createHash('sha256').update(s).digest('hex');
@@ -9,8 +10,8 @@ module.exports=function installWidgets({app,db,accounts,firebaseAuth,programming
  const apns=createAPNs({teamId:process.env.PACE_APNS_TEAM_ID,keyId:process.env.PACE_APNS_KEY_ID,privateKey:process.env.PACE_APNS_PRIVATE_KEY,topic:process.env.PACE_APNS_WIDGET_TOPIC,production:process.env.PACE_APNS_PRODUCTION!=='false'});
  const fcm=require('./fcm.cjs')({enabled:process.env.PACE_WIDGETS_FCM_ENABLED==='true',projectId,accessToken:googleAccessToken});
  const directory={
-  async account(id){if(!/^[a-f0-9]{64}$/.test(id||''))return null;const s=await collection('ewelinkAppAccounts').doc(id).get();return s.exists?{...s.data(),id:s.id}:null;},
-  async isSuperadmin(actor){if(actor.role!=='admin')return false;const s=await collection('ewelinkAppSettings').doc('administrator').get();return s.data()?.uid===actor.uid;},
+  async account(id){if(!/^[a-f0-9]{64}$/.test(id||''))return null;const s=await requestReads.get(collection('ewelinkAppAccounts').doc(id));return s.exists?{...s.data(),id:s.id}:null;},
+  async isSuperadmin(actor){if(actor.role!=='admin')return false;const s=await requestReads.get(collection('ewelinkAppSettings').doc('administrator'));return s.data()?.uid===actor.uid;},
   async activeAccounts(){const s=await collection('ewelinkAppAccounts').where('status','==','active').get();return s.docs.map(d=>({...d.data(),id:d.id}));},
   async grantedAccounts(id){const s=await collection('ewelinkAppAccounts').where('dashboardAccess.'+id+'.control','==',true).get();return s.docs.map(d=>({...d.data(),id:d.id}));}
  };
@@ -53,7 +54,7 @@ module.exports=function installWidgets({app,db,accounts,firebaseAuth,programming
   if(attempts.size>5000)return res.status(503).json({ok:false,error:'temporarily_unavailable'});attempts.set(key,window);next();
  }
  const bearer=req=>{const m=/^Bearer ([A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43})$/.exec(req.get('authorization')||'');if(!m)throw failure(401,'login_required');return m[1];};
- const route=fn=>async(req,res)=>{res.set('Cache-Control','no-store');try{res.json(await fn(req));}catch(e){if(e.retryAfterMs)res.set('Retry-After',String(Math.ceil(e.retryAfterMs/1000)));res.status(e.status||503).json({ok:false,error:e.code||'temporarily_unavailable',retryAfterMs:e.retryAfterMs});}};
+ const route=fn=>async(req,res)=>{res.set('Cache-Control','no-store');try{res.json(await fn(req));}catch(e){e=firebaseQuota.record(e);if(e.retryAfterMs)res.set('Retry-After',String(Math.ceil(e.retryAfterMs/1000)));res.status(e.status||503).json({ok:false,error:e.code||'temporarily_unavailable',retryAfterMs:e.retryAfterMs});}};
  app.get('/widgets/connect.html',(_req,res)=>{res.set('Referrer-Policy','no-referrer');res.set('X-Frame-Options','DENY');res.sendFile(path.join(__dirname,'connect.html'));});
  app.get('/widgets/connect.js',(_req,res)=>res.sendFile(path.join(__dirname,'connect.js')));
  app.get('/api/widgets/config',(_req,res)=>res.json({ok:true,enabled:true,pushAvailable:apns.configured,androidPushAvailable:fcm.configured}));

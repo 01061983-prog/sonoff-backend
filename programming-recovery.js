@@ -1,5 +1,5 @@
 'use strict';
-const crypto=require('crypto'),core=require('./programming-core');
+const crypto=require('crypto'),core=require('./programming-core'),firebaseQuota=require('./firebase-quota.cjs');
 const targets=s=>s.kind==='scene'?(s.targets||[]):[s];
 const key=(deviceId,outlet)=>deviceId+':'+(outlet===null?'single':outlet);
 const channels=t=>t.kind==='multi'?t.outlets:[null];
@@ -7,7 +7,7 @@ function latest(s,time){
  const from=s.repeat==='date'?0:time-Math.max(8,(s.intervalDays||0)+2)*core.DAY;
  return core.events(s,from,time).filter(e=>e.at>=(s.updatedAt||s.createdAt||0)).at(-1)||null;
 }
-module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,readScheduledDevices,api,runScene,getScene,completedOnce}){
+module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,readScheduledDevices,api,runScene,getScene,completedOnce,enabledSchedules=()=>null}){
  const readDevices=readScheduledDevices||async function(owner){const credentials=await access(owner,{scheduled:true});return {credentials,devices:await listDevices(credentials.accessToken)};};
  const ledger=owner=>db().collection('ewelinkProgrammingIntents').doc(owner);
  function eligible(s){return ['on','off'].includes(s.action)&&targets(s).length>0&&targets(s).every(t=>['on','off'].includes(t.action)&&!isImpulseDevice(t.deviceId)&&['single','multi'].includes(t.kind));}
@@ -114,7 +114,7 @@ module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar
  async function monitorActive(){
   if(monitorAt>now())return;
   monitorAt=now()+60000;
-  const snapshot=await db().collection('ewelinkProgrammingSchedules').where('enabled','==',true).get(),owners=new Map();
+  const snapshot=enabledSchedules()||await db().collection('ewelinkProgrammingSchedules').where('enabled','==',true).get(),owners=new Map();
   for(const doc of snapshot.docs){const s=doc.data();
    if(!eligible(s)||s.recoveryAt||!core.activeWindow(s,now())||s.last?.status==='claimed'&&s.last.until>now()||s.last?.finishedAt>now()-60000)continue;
    if(!owners.has(s.owner))owners.set(s.owner,[]);owners.get(s.owner).push({doc,s});
@@ -137,7 +137,7 @@ module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar
       t.set(doc.ref,{...data,recoveryAt:now(),recovery:{since:now(),message:'Verifica e ripristino della fascia attiva dopo un’interruzione o un cambio di stato.'}});
      });
     }
-   }catch{console.error('Verifica delle fasce attive temporaneamente in attesa di connessione o accesso.');}
+   }catch(e){firebaseQuota.record(e);console.error('Verifica delle fasce attive temporaneamente in attesa di connessione o accesso.');}
   }
  }
  let migrationPasses=0,migrationAt=0;
