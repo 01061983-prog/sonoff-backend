@@ -7,6 +7,8 @@ const path = require("path");
 const fetch = (...args) => import("node-fetch").then(m => m.default(...args));
 
 const app = express();
+const firebaseQuota=require('./firebase-quota.cjs'),requestReads=require('./request-reads.cjs');
+app.use(requestReads.middleware);
 const APPID = process.env.EWELINK_APP_ID;
 const APPSECRET = process.env.EWELINK_APP_SECRET;
 const API_BASE = process.env.EWELINK_API_BASE || "https://eu-apia.coolkit.cc";
@@ -114,6 +116,7 @@ function requireLogin(req, res, next) {
   return renewSession(req, res).then(() => next()).catch(error => failure(res, error, req));
 }
 function failure(res, error, req) {
+  error=firebaseQuota.record(error);
   if(['app_link_owner','app_link_workspace','app_oauth_account','app_workspace','app_desktop'].includes(error.code)&&['/login','/oauth/callback'].includes(req?.path)){
     const message=String(error.message||'Accesso non autorizzato.').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     return res.status(error.status||403).type('html').send('<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Collegamento eWeLink · PACE</title><style>body{font:18px/1.5 system-ui;background:#f7f8fa;color:#252b35;margin:0;padding:24px}main{max-width:560px;margin:10vh auto;background:white;padding:28px;border:1px solid #e3e6eb;border-radius:24px}a{display:inline-block;padding:12px;background:#b94712;color:white;border-radius:12px;text-decoration:none}</style><main><h1>Collegamento eWeLink</h1><p>'+message+'</p><a href="/app/index.html">Torna alla plancia</a><p><small>PACE · powered by #gm83</small></p></main></html>');
@@ -550,6 +553,7 @@ app.get("/api/scenes", requireLogin, route(async (req, res) => {
 // Credenziali soltanto sul server Render, mai nel frontend o in GitHub.
 let sceneDatabase;
 function getSceneDatabase() {
+  firebaseQuota.check();
   if (sceneDatabase) return sceneDatabase;
   if (!process.env.GOOGLE_APPLICATION_CREDENTIALS && !process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     throw cloudError(503, "sync_not_configured", "Sincronizzazione Firebase non ancora configurata sul server.");

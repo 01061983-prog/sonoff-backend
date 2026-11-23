@@ -1,12 +1,14 @@
 'use strict';
 const crypto=require('crypto');
-const core=require('./programming-core');
+const core=require('./programming-core'),firebaseQuota=require('./firebase-quota.cjs');
 module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch,authorizeOwner=async()=>null,isImpulseDevice=id=>id==='1000ac81a0',wakeSetTimeout=setTimeout,wakeClearTimeout=clearTimeout,onExecuted=()=>{}}){
  const astronomy=require('./astronomy')({db,fetch:solarFetch,now});
- const recovery=require('./programming-recovery')({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,readScheduledDevices,api,runScene,getScene,completedOnce});
+ const recovery=require('./programming-recovery')({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,readScheduledDevices,api,runScene,getScene,completedOnce,enabledSchedules:()=>scheduleIndex.all()});
  const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
  const encryptionKey=crypto.hkdfSync('sha256',Buffer.from(secret),Buffer.from(appid),Buffer.from('ewelink-programming-token-v1'),32);
  const accounts=()=>db().collection('ewelinkProgrammingAccounts'), schedules=()=>db().collection('ewelinkProgrammingSchedules'), aliases=()=>db().collection('ewelinkProgrammingSessions');
+ const scheduleIndex=require('./schedule-index.cjs')({query:()=>schedules().where('enabled','==',true),now,onChange:()=>{if(timer)void tick().catch(e=>{firebaseQuota.record(e);console.error('Aggiornamento programmazioni temporaneamente non disponibile.');});}});
+ const accountIndex=require('./schedule-index.cjs')({query:accounts,now,onChange:()=>{if(timer)void tick().catch(e=>firebaseQuota.record(e));}});
  const error=(status,code,msg)=>Object.assign(new Error(msg),{status,code});
  function seal(value){const iv=crypto.randomBytes(12),c=crypto.createCipheriv('aes-256-gcm',encryptionKey,iv);const data=Buffer.concat([c.update(JSON.stringify(value),'utf8'),c.final()]);return {v:1,iv:iv.toString('base64'),tag:c.getAuthTag().toString('base64'),data:data.toString('base64')};}
  function open(box){const c=crypto.createDecipheriv('aes-256-gcm',encryptionKey,Buffer.from(box.iv,'base64'));c.setAuthTag(Buffer.from(box.tag,'base64'));return JSON.parse(Buffer.concat([c.update(Buffer.from(box.data,'base64')),c.final()]).toString('utf8'));}
@@ -496,7 +498,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   if(!timer)return;
   const epoch=++wakeEpoch;
   if(wakeTimer)wakeClearTimeout(wakeTimer);wakeTimer=null;
-  const due=await schedules().where('nextAt','<=',now()+30000).limit(100).get();
+  const due=scheduleIndex.due('nextAt',now()+30000,100)||await schedules().where('nextAt','<=',now()+30000).limit(100).get();
   if(epoch!==wakeEpoch||!timer)return;
   const deadlines=due.docs.map(doc=>doc.data()).filter(s=>s.enabled).map(s=>s.last?.status==='claimed'&&s.last.until>now()?Math.max(s.nextAt,s.last.until):s.nextAt);
   if(!deadlines.length)return;
@@ -504,15 +506,15 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   wakeTimer=wakeSetTimeout(()=>{wakeTimer=null;void tick().catch(()=>console.error('Esecuzione timer temporaneamente non disponibile.'));},delay);wakeTimer?.unref?.();
  }
  async function tick(){
-  if(busy)return;busy=true;
+  if(firebaseQuota.wait()||busy)return;busy=true;
   try{
    await recovery.adoptLegacy();
-   const refresh=await schedules().where('solarRefreshAt','<=',now()).limit(5).get();for(const doc of refresh.docs)if(doc.data().enabled&&core.usesSolar(doc.data()))await refreshSolar({...doc.data(),id:doc.id});
-   const due=await schedules().where('nextAt','<=',now()).limit(20).get();for(const doc of due.docs)try{await execute(doc.ref);}catch{console.error('Programmazione temporaneamente sospesa: dati necessari non disponibili.');}
+   const refresh=scheduleIndex.due('solarRefreshAt',now(),5)||await schedules().where('solarRefreshAt','<=',now()).limit(5).get();for(const doc of refresh.docs)if(doc.data().enabled&&core.usesSolar(doc.data()))await refreshSolar({...doc.data(),id:doc.id});
+   const due=scheduleIndex.due('nextAt',now(),20)||await schedules().where('nextAt','<=',now()).limit(20).get();for(const doc of due.docs)try{await execute(doc.ref);}catch(e){firebaseQuota.record(e);console.error('Programmazione temporaneamente sospesa: dati necessari non disponibili.');}
    await recovery.monitorActive();
-   const pending=await schedules().where('recoveryAt','<=',now()).limit(20).get();for(const doc of pending.docs)try{await recovery.run(doc.ref);}catch{console.error('Ripristino temporaneamente in attesa: nessun comando non verificato.');}
+   const pending=scheduleIndex.due('recoveryAt',now(),20)||await schedules().where('recoveryAt','<=',now()).limit(20).get();for(const doc of pending.docs)try{await recovery.run(doc.ref);}catch(e){firebaseQuota.record(e);console.error('Ripristino temporaneamente in attesa: nessun comando non verificato.');}
    // Mantiene valida l'autorizzazione anche per prenotazioni lontane nel tempo.
-   const renewals=await accounts().where('renewAt','<=',now()).limit(5).get();
+   const renewals=accountIndex.due('renewAt',now(),5)||await accounts().where('renewAt','<=',now()).limit(5).get();
    for(const doc of renewals.docs){
     const data=doc.data();
     const linkedAccount=await authorizeOwner(doc.id).catch(()=>false);
@@ -520,8 +522,8 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
     if(!data.revoked&&(linkedAccount||automatic(data)||(data.browserUntil||0)>now()))await access(doc.id).catch(()=>{});
     else if(!automatic(data))await accounts().doc(doc.id).set({credentials:null,revoked:true,renewAt:core.NEVER},{merge:true});
    }
-  }finally{busy=false;await armWake();}
+  }catch(e){throw firebaseQuota.record(e);}finally{busy=false;if(!firebaseQuota.wait())await armWake();}
  }
- function start(){if(timer)return;timer=setInterval(()=>{void tick().catch(()=>console.error('Controllo programmazioni non riuscito.'));},30000);timer.unref?.();void tick().catch(()=>console.error('Avvio programmazioni non riuscito.'));}
- return {protectManual,solarPreview,linkedDevices,registerLinkedDevice,list,mutate,identity,resolveOAuthOwner,restoreSession,connectBrowser,logoutBrowser,markAuthenticationRequired,remember,access,readScheduledDevices,start,tick,seal,open,stop(){if(timer)clearInterval(timer);timer=null;++wakeEpoch;if(wakeTimer)wakeClearTimeout(wakeTimer);wakeTimer=null;}};
+ function start(){if(timer)return;timer=setInterval(()=>{void tick().catch(()=>console.error('Controllo programmazioni non riuscito.'));},30000);timer.unref?.();scheduleIndex.start();accountIndex.start();void tick().catch(e=>{firebaseQuota.record(e);console.error('Avvio programmazioni non riuscito.');});}
+ return {protectManual,solarPreview,linkedDevices,registerLinkedDevice,list,mutate,identity,resolveOAuthOwner,restoreSession,connectBrowser,logoutBrowser,markAuthenticationRequired,remember,access,readScheduledDevices,start,tick,seal,open,stop(){scheduleIndex.stop();accountIndex.stop();if(timer)clearInterval(timer);timer=null;++wakeEpoch;if(wakeTimer)wakeClearTimeout(wakeTimer);wakeTimer=null;}};
 };

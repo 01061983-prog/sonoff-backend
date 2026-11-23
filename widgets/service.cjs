@@ -1,5 +1,5 @@
 'use strict';
-const {createHash}=require('node:crypto');
+const {createHash}=require('node:crypto'),firebaseQuota=require('../firebase-quota.cjs');
 const error=(status,code)=>Object.assign(new Error(code),{status,code});
 // All ports are mandatory. There is deliberately no production fallback to demo data.
 function createWidgetService({authenticate,directory,snapshots,commands,receipts,subscriptions,push,usage,now=Date.now}) {
@@ -84,7 +84,7 @@ function createWidgetService({authenticate,directory,snapshots,commands,receipts
 }
 function installRoutes(app,service,{limit}) {
  if(typeof limit!=='function')throw new Error('A per-installation rate limiter is required');
- const route=fn=>async(req,res)=>{res.set('Cache-Control','no-store');try{res.json(await fn(req));}catch(e){res.status(e.status||503).json({ok:false,error:e.code||'temporarily_unavailable'});}};
+ const route=fn=>async(req,res)=>{res.set('Cache-Control','no-store');try{res.json(await fn(req));}catch(e){e=firebaseQuota.record(e);if(e.retryAfterMs)res.set('Retry-After',String(Math.ceil(e.retryAfterMs/1000)));res.status(e.status||503).json({ok:false,error:e.code||'temporarily_unavailable',retryAfterMs:e.retryAfterMs});}};
  const credential=req=>{const match=/^Bearer (\S{16,8192})$/.exec(req.get('authorization')||'');if(!match)throw error(401,'login_required');return match[1];};
  app.get('/api/widgets/boards',limit,route(req=>service.boards(credential(req))));
  app.get('/api/widgets/snapshot/:id',limit,route(req=>service.snapshot(credential(req),req.params.id)));

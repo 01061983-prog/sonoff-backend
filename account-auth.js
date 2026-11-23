@@ -14,9 +14,10 @@
  function explicitlySignedOut(){try{return logoutPending||localStorage.getItem(logoutKey)==='yes';}catch{return logoutPending;}}
  function rememberLogout(value){logoutPending=value;try{if(value)localStorage.setItem(logoutKey,'yes');else localStorage.removeItem(logoutKey);}catch{}}
  const request=async(path,body)=>{
+  const pause=window.PaceRequestBackoff;if(body===undefined&&pause?.wait('app-auth',path))throw pause.error('app-auth',path);
   const c=new AbortController(),timer=setTimeout(()=>c.abort(),20000);
   try{const r=await fetch(base+path,{method:body===undefined?'GET':'POST',credentials:'include',cache:'no-store',signal:c.signal,...(body===undefined?{}:{headers:{'Content-Type':'application/json','X-App-CSRF':state.csrf},body:JSON.stringify(body)})});
-   let d;try{d=await r.json();}catch{throw new Error('Risposta del server non disponibile. Riprova.');}if(!r.ok||!d.ok)throw Object.assign(new Error(d.msg||'Accesso non disponibile.'),{code:d.error});return d;
+   let d;try{d=await r.json();}catch{throw new Error('Risposta del server non disponibile. Riprova.');}if(d?.error==='firebase_quota')pause?.block('app-auth',path,d.retryAfterMs||3600000,{code:d.error,message:d.msg});if(!r.ok||!d.ok)throw Object.assign(new Error(d.msg||'Accesso non disponibile.'),{code:d.error});return d;
   }finally{clearTimeout(timer);}
  };
  function message(text){$('accountMessage').textContent=text;}

@@ -1,6 +1,6 @@
 // Identità della webapp, separate dai token eWeLink. Nessuna password sul server.
 'use strict';
-const crypto=require('crypto');
+const crypto=require('crypto'),requestReads=require('./request-reads.cjs');
 module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,webConfig,programming,listDevices=async()=>[],now=Date.now}){
  const COOKIE='ewelink_app',ACT='ewelink_actas',PROVIDER='ewelink_provider',INTENT='ewelink_link_intent',WORKSPACE='ewelink_workspace',DAY=86400000;
  const opts={httpOnly:true,secure:true,sameSite:'lax',path:'/'};
@@ -154,9 +154,9 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
  function originCheck(req){if(req.headers?.origin!==origin)throw fail(403,'app_origin','Richiesta non autorizzata: riapri la plancia dal suo indirizzo ufficiale.');}
  function csrf(req){originCheck(req);const expected=mac(req.cookies?.[COOKIE]||'');const supplied=req.headers?.['x-app-csrf']||'';if(supplied.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected)))throw fail(403,'app_csrf','Sessione aggiornata. Ricarica la pagina prima di riprovare.');}
  function desktop(req){return !/Mobile|Android|iPhone|iPad|Tablet/i.test(req.headers?.['user-agent']||'');}
- async function read(id){if(!/^[a-f0-9]{64}$/.test(id||''))throw fail(400,'app_account','Account non valido.');const s=await profiles().doc(id).get();if(!s.exists)throw fail(404,'app_account','Account non trovato.');return {...s.data(),id};}
+ async function read(id){if(!/^[a-f0-9]{64}$/.test(id||''))throw fail(400,'app_account','Account non valido.');const s=await requestReads.get(profiles().doc(id));if(!s.exists)throw fail(404,'app_account','Account non trovato.');return {...s.data(),id};}
  async function audit(actor,action,target){await db().collection('ewelinkAppAudit').doc(crypto.randomBytes(16).toString('hex')).set({actor:actor.uid,action,target,at:now()});}
- async function isAdmin(actor){if(actor?.role!=='admin')return false;const s=await adminRef().get();return actor.role==='admin'&&s.data()?.uid===actor.uid;}
+ async function isAdmin(actor){if(actor?.role!=='admin')return false;const s=await requestReads.get(adminRef());return actor.role==='admin'&&s.data()?.uid===actor.uid;}
  async function session(req,{active=true,allowActAs=true}={}){
   const cookie=req.cookies?.[COOKIE];
   if(!cookie)throw fail(401,'app_auth_required','Accedi con il tuo account della webapp.');
