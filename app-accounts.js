@@ -382,5 +382,6 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   app.get('/api/app/accounts',wrap(async(req,res)=>res.json(await manage(req,res))));
   app.post('/api/app/accounts',wrap(async(req,res)=>res.json(await manage(req,res))));
  }
- return {install,session,provider,canReconnect,bind,selectedConnection,connectionIdentity,climateOwner,climateScheduleOwner,selectConnection,linkIntent,context,authorizeOwner,tokenAllowed,sealPending,openPending,csrf,publicProfile,providerAccount,accountId};
+ async function bridgeAdmin(req){const a=await admin(req);if(req.method!=='GET'&&req.method!=='HEAD')csrf(req);return a;}
+ return {install,bridgeAdmin,session,provider,canReconnect,bind,selectedConnection,connectionIdentity,climateOwner,climateScheduleOwner,selectConnection,linkIntent,context,authorizeOwner,tokenAllowed,sealPending,openPending,csrf,publicProfile,providerAccount,accountId};
 };

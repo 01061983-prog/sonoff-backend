@@ -47,6 +47,7 @@ let programming = null;
 let pushNotify = null;
 let daikinModule = null;
 let appAccounts = null;
+let homeAssistant = null;
 const APP_AUTH_ENABLED = process.env.EWELINK_APP_AUTH_ENABLED === "true";
 
 function clearSession(res) {
@@ -221,6 +222,7 @@ if(APP_AUTH_ENABLED){
 // Shared across webapp, widgets and scheduled jobs. Commands are never replayed.
 const providerRequests=require('./provider-requests.cjs')({onLimit:(endpoint,providerError)=>console.warn('eWeLink request cooldown',{endpoint,providerError:providerError??'unknown'})});
 async function api(path, token, body, authorization, requestOptions = {}) {
+  if(homeAssistant?.provider.supports(token)){if(appAccounts&&body!==undefined)await appAccounts.tokenAllowed(token);return homeAssistant.provider.call(path,token,body);}
   if (appAccounts && body !== undefined && path === "/v2/device/thing/status") await appAccounts.tokenAllowed(token);
   if(path==="/v2/device/thing/status"&&body?.params?.switches&&singleRelayDevices.has(body.id)){
     const switches=body.params.switches.filter(channel=>channel.outlet===0);
@@ -272,7 +274,7 @@ app.use("/app", express.static(path.join(__dirname, "public"), { index: "index.h
 // Compatibilità con i file caricati accanto a server.js su GitHub.
 // Sono esposti soltanto gli asset elencati, mai il codice del backend.
 const WEBAPP_ASSETS = [
-  "index.html", "sonoff.html.html", "request-backoff.js", "app.css", "text-size.js", "scene-pages.js", "room-map.js", "room-map.css", "account-auth.js", "account-auth.css", "menu-bar.js", "menu-bar.css", "push-settings.js", "climate.js", "climate.css", "manifest.webmanifest", "sw.js",
+  "index.html", "sonoff.html.html", "ha-settings.js", "request-backoff.js", "app.css", "text-size.js", "scene-pages.js", "room-map.js", "room-map.css", "account-auth.js", "account-auth.css", "menu-bar.js", "menu-bar.css", "push-settings.js", "climate.js", "climate.css", "manifest.webmanifest", "sw.js",
   "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png",
   "icons/icon-maskable.png", "icons/apple-touch-icon.png"
 ];
@@ -387,6 +389,7 @@ app.post("/logout", route(async (req, res) => {
 }));
 
 async function families(token, {fresh=false} = {}) {
+  if(homeAssistant?.provider.supports(token))return homeAssistant.provider.families(token);
   const response = await api("/v2/family", token, undefined, undefined, {fresh});
   if (!Array.isArray(response.data?.familyList)) throw new Error("Elenco family non valido.");
   return response.data.familyList;
@@ -426,6 +429,7 @@ async function readLinkedDevice(token,id,workspaceId){
   return {deviceid:id,name:d.name||id,online:d.online===true,params:{switches},familyId:workspaceId,itemType:found.itemType,ownership:deviceOwnership(found),uiid:2,linkedById:true};
 }
 async function assertLinkedDeviceChannels(token,id,outlets,registry){
+  if(homeAssistant?.provider.supports(token))return homeAssistant.provider.assertChannels(token,id,outlets);
   if(!programming?.linkedDevices)return;
   const entry=(registry||await programming.linkedDevices(token)).find(d=>d.id===id);
   if(entry&&(!Array.isArray(outlets)||!outlets.length||outlets.some(o=>![0,1].includes(o))))throw cloudError(400,"invalid_linked_channels","Per questo dispositivo scegli soltanto Canale 1 o Canale 2.");
@@ -441,6 +445,7 @@ app.post("/api/linked-devices",requireLogin,route(async(req,res)=>{
 }));
 
 async function listDevices(token, homes, {includeOwnership = false, nativeOwnership = false, deviceIds = null, linkedRegistry, fresh=false} = {}) {
+  if(homeAssistant?.provider.supports(token))return homeAssistant.provider.devices(token,homes,{deviceIds});
   homes = homes || await families(token,{fresh});
   const devices = new Map();
   for (const home of homes) {
@@ -502,7 +507,7 @@ app.get("/api/devices", requireLogin, route(async (req, res) => {
 app.get("/api/device-diagnostics", requireLogin, route(async (req, res) => {
   const id=req.query.deviceId;
   if(typeof id!=="string"||!/^[0-9a-f]{10}$/i.test(id))throw cloudError(400,"invalid_device","Indica un ID dispositivo eWeLink valido.");
-  const token=req.cookies.ewelink_access,homes=await families(token),checks=[],matches=[];
+  const token=req.cookies.ewelink_access;if(homeAssistant?.provider.supports(token)){const devices=await homeAssistant.provider.devices(token,undefined,{deviceIds:[id]});if(!devices.length)throw cloudError(404,'ha_device','Dispositivo non associato.');return res.json({ok:true,provider:'home_assistant',devices});}const homes=await families(token),checks=[],matches=[];
   const info=thing=>{
     const d=thing.itemData||{},p=d.params||{};
     return {deviceId:d.deviceid,name:d.name||null,itemType:thing.itemType,brand:d.brandName||null,model:d.productModel||null,uiid:d.extra?.uiid??d.extra?.extra?.uiid??d.uiid??null,online:typeof d.online==="boolean"?d.online:null,switch:["on","off"].includes(p.switch)?p.switch:null,channels:Array.isArray(p.switches)?p.switches.map(c=>({outlet:c.outlet,state:["on","off"].includes(c.switch)?c.switch:null})):[]};
@@ -797,8 +802,11 @@ app.get("/api/user-scenes/events", requireLogin, route(async (req, res) => {
   const context = await sceneContext(req);
   res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
   res.flushHeaders();
-  let unsubscribe = () => {};
+  let unsubscribe = () => {},unsubscribeLocal=()=>{};
   const send = (name, payload) => { if (!res.writableEnded) res.write("event: " + name + "\ndata: " + JSON.stringify(payload) + "\n\n"); };
+  const localToken=req.cookies.ewelink_access;
+  const sendLocal=async()=>{if(!homeAssistant?.provider.supports(localToken))return;try{if(appAccounts)await appAccounts.session(req);const snap=await homeAssistant.provider.snapshot(localToken);send('devices',{ok:true,devices:snap.devices,provider:'home_assistant'});}catch{send('sync-error',{message:'Aggiornamento dispositivi non disponibile.'});res.end();}};
+  if(homeAssistant?.provider.supports(localToken)){unsubscribeLocal=await homeAssistant.provider.watch(localToken,()=>{void sendLocal();});await sendLocal();}
   unsubscribe = context.ref.onSnapshot(async snapshot => {
     try{if(appAccounts)await appAccounts.session(req);send("scenes",scenePayload(context,snapshot));}
     catch{send("sync-error",{message:"Accesso alla plancia non più autorizzato."});res.end();}
@@ -807,18 +815,19 @@ app.get("/api/user-scenes/events", requireLogin, route(async (req, res) => {
     res.end();
   });
   const heartbeat = setInterval(async () => {
-    try{if(appAccounts)await appAccounts.session(req);if(!res.writableEnded)send("heartbeat",{});}
+    try{if(appAccounts)await appAccounts.session(req);if(!res.writableEnded)send("heartbeat",{provider:homeAssistant?.provider.supports(localToken)?"home_assistant":"ewelink"});}
     catch{send("sync-error",{message:"Sessione terminata. Accedi nuovamente."});res.end();}
   }, 20000);
   // Una nuova connessione verifica periodicamente che l'account sia ancora autenticato.
   const maximum = setTimeout(() => res.end(), 15 * 60 * 1000);
-  res.on("close", () => { unsubscribe(); clearInterval(heartbeat); clearTimeout(maximum); });
+  res.on("close", () => { unsubscribe(); unsubscribeLocal(); clearInterval(heartbeat); clearTimeout(maximum); });
 }));
 
 async function protectManualCommands(token,actions){
   return programming?.protectManual?programming.protectManual(token,actions):{actions,protected:[],message:null};
 }
 async function runCloudScene(context, run, scene, accessToken) {
+  const confirmation=homeAssistant?.provider.supports(accessToken)?'Stato confermato da Home Assistant.':'Comandi accettati da eWeLink.';
   let completed = 0, failure = null, protectionMessage = null;
   try {
     const linkedRegistry=programming?.linkedDevices?await programming.linkedDevices(accessToken):[];
@@ -863,11 +872,11 @@ async function runCloudScene(context, run, scene, accessToken) {
       const data = workspaceData(snapshot);
       if (data.executions?.[scene.id]?.runId !== run.runId) return;
       const result = { ...run, status: failure ? "failed" : "succeeded", completed, finishedAt: Date.now(),
-        protectionMessage,message: failure ? failure.message : protectionMessage || "Comandi accettati da eWeLink." };
+        protectionMessage,message: failure ? failure.message : protectionMessage || confirmation };
       transaction.set(context.ref, { ...data, executions: { ...data.executions, [scene.id]: result } });
     });
   } catch { console.error("Impossibile registrare l’esito dello scenario", run.runId); }
-  return {status:failure?"failed":"succeeded",completed,message:failure?failure.message:protectionMessage||"Comandi accettati da eWeLink."};
+  return {status:failure?"failed":"succeeded",completed,message:failure?failure.message:protectionMessage||confirmation};
 }
 
 
@@ -966,7 +975,7 @@ app.post("/api/toggle-multi", requireLogin, route(async (req, res) => {
 if (process.env.EWELINK_PROGRAMMING_ENABLED === "true") {
   pushNotify = require("./push-notify")({db:getSceneDatabase,accountLabel:req=>appAccounts?.connectionIdentity(req.appAccount,appAccounts.selectedConnection(req,req.appAccount))?.label||'', identity:req=>requireProgramming().identity(req), requireLogin, route, cloudError});
   pushNotify.install(app);
-  programming = require("./programming")({onExecuted:(s,status,message)=>pushNotify.scheduleExecuted(s,status,message),daikin:()=>daikinModule,db:getSceneDatabase, api, listDevices, appid:APPID, secret:APPSECRET, saveSession, authorizeOwner:owner=>appAccounts?appAccounts.authorizeOwner(owner):null, solarFetch:fetch, getScene:getProgrammingScene, runScene:runProgrammingScene, region:new URL(API_BASE).hostname.split("-")[0]});
+  programming = require("./programming")({onExecuted:(s,status,message)=>pushNotify.scheduleExecuted(s,status,message),daikin:()=>daikinModule,db:getSceneDatabase, api, listDevices, localProvider:()=>homeAssistant?.provider, appid:APPID, secret:APPSECRET, saveSession, authorizeOwner:owner=>appAccounts?appAccounts.authorizeOwner(owner):null, solarFetch:fetch, getScene:getProgrammingScene, runScene:runProgrammingScene, region:new URL(API_BASE).hostname.split("-")[0]});
   programming.start();
 }
 function requireProgramming() {
@@ -987,7 +996,7 @@ if (process.env.PACE_WIDGETS_ENABLED === "true") {
   require("./widgets")({app,db:getSceneDatabase,accounts:appAccounts,
     firebaseAuth:()=>require('firebase-admin/auth').getAuth(require('firebase-admin/app').getApps().find(a=>a.name==='san-luigi-scenes')),
     programming,api,listDevices,assertNoSceneRunning,assertLinkedDeviceChannels,protectManualCommands,physicalOutlets,
-    appid:APPID,region:new URL(API_BASE).hostname.split('-')[0],projectId:process.env.FIREBASE_PROJECT_ID||'ewelink-oratorio',
+    appid:APPID,region:new URL(API_BASE).hostname.split('-')[0],projectId:process.env.FIREBASE_PROJECT_ID||'ewelink-oratorio',localProvider:()=>homeAssistant?.provider,
     googleAccessToken:async()=>{getSceneDatabase();const firebaseApp=require('firebase-admin/app').getApps().find(a=>a.name==='san-luigi-scenes');return (await firebaseApp.options.credential.getAccessToken()).access_token;}});
 }
 
@@ -999,4 +1008,10 @@ app.use((error, _req, res, _next) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => console.log("Server avviato sulla porta", PORT));
+if(process.env.PACE_HA_BRIDGE_ENABLED==='true'){
+ if(!appAccounts||!programming)throw Error('Home Assistant richiede account PACE e programmazioni attivi.');
+ homeAssistant=require('./home-assistant/index.cjs')({app,db:getSceneDatabase,accounts:appAccounts,programming,secret:APPSECRET,appid:APPID,origin:new URL(HOME).origin,allowedAccounts:(process.env.PACE_HA_ALLOWED_ACCOUNT_IDS||'').split(',').filter(Boolean),allowedEmails:(process.env.PACE_HA_ALLOWED_ACCOUNT_EMAILS||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean)});
+}
+const httpServer=app.listen(PORT, () => console.log("Server avviato sulla porta", PORT));
+homeAssistant?.bridge.attach(httpServer);
+if(homeAssistant)for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{homeAssistant.stop();httpServer.close(()=>process.exit(0));setTimeout(()=>process.exit(0),2000).unref();});

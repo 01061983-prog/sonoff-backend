@@ -30,3 +30,25 @@ test('live schedule changes arm exact deadlines without polling schedule collect
  time=offAt;const off=[...tasks].find(([,t])=>t.at===offAt);tasks.delete(off[0]);off[1].fn();await drain();assert.deepEqual(commands,[{at:due,state:'on'},{at:offAt,state:'off'}]);
  }finally{s.stop();}
 });
+
+test('HA schedules keep precise ON/OFF deadlines with revoked cloud credentials and no eWeLink calls',async()=>{
+ const db=fixture();let time=core.localTime('2026-11-25','14:00'),serial=0;const tasks=new Map(),commands=[];
+ const localOwner='a'.repeat(64);db.store.set('ewelinkProgrammingAccounts/'+localOwner,{credentials:'expired-cloud-data',revoked:true,automationEnabled:true,renewAt:0});const local={isConfigured:async()=>true,supports:t=>t==='local-handle',owner:async()=>localOwner,credentials:async o=>o===localOwner?{accessToken:'local-handle',atExpiredTime:Number.MAX_SAFE_INTEGER}:null};
+ const device={deviceid:'fixture-light',name:'Fixture',online:true,params:{switch:'off'}};
+ const s=create({localProvider:()=>local,db:()=>db,now:()=>time,appid:'fixture',secret:'fixture-only',listDevices:async()=>[device],saveSession(){},wakeSetTimeout:(fn,ms)=>{tasks.set(++serial,{fn,at:time+ms});return serial;},wakeClearTimeout:id=>tasks.delete(id),api:async(path,token,body)=>{assert.equal(token,'local-handle');if(path==='/v2/device/thing/status'){commands.push({at:time,state:body.params.switch});device.params.switch=body.params.switch;return {error:0};}throw Error('unexpected fixture API '+path);}});
+ s.start();await drain();
+ try{
+ const req={cookies:{ewelink_access:'local-handle',ewelink_refresh:'fixture-refresh',ewelink_expires:String(time+86400000)},body:{op:'save',authorize:true,schedule:{deviceId:'fixture-light',action:'on',repeat:'date',date:'2026-11-25',start:'14:01',end:'14:02',enabled:true}}};
+ await s.mutate(req);await drain();
+ // At 14:00:40 the regular safety tick only consults the live execution index.
+ time=core.localTime('2026-11-25','14:00')+40000;await s.tick();await drain();
+ const due=core.localTime('2026-11-25','14:01');assert.ok([...tasks.values()].some(t=>t.at===due));assert.equal(commands.length,0);
+ const before=db.queries.filter(q=>q.col==='ewelinkProgrammingSchedules').length;
+ for(let i=0;i<20;i++)await s.tick();assert.equal(db.queries.filter(q=>q.col==='ewelinkProgrammingSchedules').length,before);
+ time=due;const next=[...tasks].find(([,t])=>t.at===due);tasks.delete(next[0]);next[1].fn();await drain();assert.deepEqual(commands,[{at:due,state:'on'}]);
+ // Another tick cannot duplicate a command; the transaction is authoritative.
+ await s.tick();assert.equal(commands.length,1);
+ time=due+40000;await s.tick();await drain();const offAt=core.localTime('2026-11-25','14:02');assert.ok([...tasks.values()].some(t=>t.at===offAt));
+ time=offAt;const off=[...tasks].find(([,t])=>t.at===offAt);tasks.delete(off[0]);off[1].fn();await drain();assert.deepEqual(commands,[{at:due,state:'on'},{at:offAt,state:'off'}]);
+ }finally{s.stop();}
+});

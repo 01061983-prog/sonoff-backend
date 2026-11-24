@@ -9,7 +9,7 @@ function normalize(d){
  return {id:d.deviceid,name:d.name||d.deviceid,online:typeof d.online==='boolean'?d.online:null,state,
   kind:pulse?'pulse':values.length&&values.every(v=>v==='on'||v==='off')?'switch':'unsupported',outlets:outlets.map(c=>c.outlet),homeId:d.familyId};
 }
-module.exports=function createSnapshots({access,listDevices,appid,region='eu',onChanged=async()=>{},fetch=globalThis.fetch,WebSocket=globalThis.WebSocket,now=Date.now}){
+module.exports=function createSnapshots({access,listDevices,localProvider=()=>null,appid,region='eu',onChanged=async()=>{},fetch=globalThis.fetch,WebSocket=globalThis.WebSocket,now=Date.now}){
  const owners=new Map(),intervals=new Set();
  function owner(workspace){
   if(!workspace.providerOwner)throw error(409,'ewelink_not_connected');
@@ -22,6 +22,11 @@ module.exports=function createSnapshots({access,listDevices,appid,region='eu',on
   if(entry.job)return entry.job;
   entry.job=(async()=>{
    const credentials=await access(entry.owner);
+   if(localProvider()?.supports(credentials.accessToken)){
+    if(entry.reconnect){clearTimeout(entry.reconnect);entry.reconnect=null;}if(entry.socket){const old=entry.socket;entry.socket=null;old.close();}if(entry.heartbeat){clearInterval(entry.heartbeat);intervals.delete(entry.heartbeat);entry.heartbeat=null;}entry.apikey=null;const snap=await localProvider().snapshot(credentials.accessToken);entry.raw=new Map(snap.devices.map(d=>[d.deviceid,d]));entry.devices=snap.devices.map(normalize);entry.version++;entry.observedAt=snap.observedAt||now();entry.loadedAt=now();entry.credentials=credentials;entry.live=snap.ready;
+    if(entry.watching&&!entry.unsubscribeLocal)entry.unsubscribeLocal=await localProvider().watch(credentials.accessToken,()=>{void refresh(entry).then(()=>emit(entry,entry.devices.map(d=>d.id))).catch(()=>{entry.live=false;entry.devices=entry.devices.map(d=>({...d,online:false,state:'unknown'}));emit(entry,entry.devices.map(d=>d.id));});});return entry;
+   }
+   if(entry.unsubscribeLocal){entry.unsubscribeLocal();entry.unsubscribeLocal=null;}
    const devices=await listDevices(credentials.accessToken,undefined,{nativeOwnership:true});
    // Only itemType=1 devices expose ownerApikey in PACE; never use keys from shared devices.
    const keys=new Set(devices.filter(d=>d.itemType===1&&typeof d.ownerApikey==='string'&&d.ownerApikey).map(d=>d.ownerApikey));
@@ -92,10 +97,10 @@ module.exports=function createSnapshots({access,listDevices,appid,region='eu',on
  }
  return {
   async read(workspace){const entry=owner(workspace);if(!entry.loadedAt||!entry.live&&now()-entry.loadedAt>15000)await refresh(entry);return {version:entry.version,observedAt:entry.observedAt,liveUpdates:entry.live===true,devices:entry.devices};},
-  async watch(workspace){const entry=owner(workspace);entry.watching=true;if(!entry.loadedAt)await refresh(entry);else if(entry.credentials)await connect(entry,entry.credentials);},
-  unwatch(workspaceId){for(const entry of owners.values()){entry.workspaces.delete(workspaceId);if(!entry.workspaces.size){entry.watching=false;entry.closed=true;if(entry.reconnect)clearTimeout(entry.reconnect);if(entry.flush)clearTimeout(entry.flush);entry.socket?.close();owners.delete(entry.owner);}}},
+  async watch(workspace){const entry=owner(workspace);entry.watching=true;if(!entry.loadedAt)await refresh(entry);else if(entry.credentials&&localProvider()?.supports(entry.credentials.accessToken))await refresh(entry);else if(entry.credentials)await connect(entry,entry.credentials);},
+  unwatch(workspaceId){for(const entry of owners.values()){entry.workspaces.delete(workspaceId);if(!entry.workspaces.size){entry.watching=false;entry.closed=true;if(entry.reconnect)clearTimeout(entry.reconnect);if(entry.flush)clearTimeout(entry.flush);entry.unsubscribeLocal?.();entry.socket?.close();owners.delete(entry.owner);}}},
   async refresh(workspace){const entry=owner(workspace);await refresh(entry);emit(entry,entry.devices.map(d=>d.id));return {version:entry.version,observedAt:entry.observedAt,devices:entry.devices};},
-  stop(){for(const e of owners.values()){e.closed=true;if(e.flush)clearTimeout(e.flush);if(e.reconnect)clearTimeout(e.reconnect);if(e.handshake)clearTimeout(e.handshake);e.socket?.close();}for(const i of intervals)clearInterval(i);owners.clear();}
+  stop(){for(const e of owners.values()){e.closed=true;if(e.flush)clearTimeout(e.flush);if(e.reconnect)clearTimeout(e.reconnect);if(e.handshake)clearTimeout(e.handshake);e.unsubscribeLocal?.();e.socket?.close();}for(const i of intervals)clearInterval(i);owners.clear();}
  };
 };
 module.exports.normalize=normalize;

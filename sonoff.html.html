@@ -13,7 +13,8 @@
   <link rel="manifest" href="manifest.webmanifest?v=65">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg?v=65">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=65">
-  <script src="account-auth.js?v=94"></script>
+  <script src="account-auth.js?v=95"></script>
+  <script defer src="ha-settings.js?v=95"></script>
   <script src="request-backoff.js?v=94"></script>
   <link rel="stylesheet" href="account-auth.css?v=91">
   <script src="text-size.js?v=64"></script>
@@ -236,6 +237,7 @@
     const newSceneBtn     = document.getElementById("newSceneBtn");
 
     let currentDevices = [];
+    let haDeviceStreamAt=0;
     let editingSceneId = null;
     let sceneEditorSnapshot = null;
 
@@ -1045,6 +1047,7 @@
         updateControlLocks();
     }
     function closeSceneStream() {
+        haDeviceStreamAt=0;
         if (sceneStream) { sceneStream.close(); sceneStream = null; }
         if (sceneReconnect) { clearTimeout(sceneReconnect); sceneReconnect = null; }
     }
@@ -1052,7 +1055,11 @@
         if (typeof EventSource === "undefined" || !sceneWorkspace || sceneStream || document.visibilityState === "hidden") return;
         sceneStream = new EventSource(BACKEND_URL + "/api/user-scenes/events?workspaceId=" + encodeURIComponent(sceneWorkspace.id) + (window.AppAccounts?.state.enabled ? "&accountContext="+encodeURIComponent(window.AppAccounts.state.account.id)+"&providerContext="+encodeURIComponent(window.AppAccounts.state.selectedProvider||"") : ""), {withCredentials: true});
         sceneLastHeartbeat = Date.now();
-        sceneStream.addEventListener("heartbeat", () => { sceneLastHeartbeat = Date.now(); });
+        const activeStream=sceneStream;
+        sceneStream.addEventListener("heartbeat", event => { sceneLastHeartbeat = Date.now();try{if(JSON.parse(event.data).provider==='home_assistant')haDeviceStreamAt=Date.now();}catch{} });
+        sceneStream.addEventListener("devices", event => {
+            try{if(sceneStream!==activeStream||commandBusy)return;const data=JSON.parse(event.data);if(!Array.isArray(data.devices)||data.provider!=='home_assistant')return;haDeviceStreamAt=Date.now();devicesReadSerial++;applyDeviceSnapshot(data);renderDashboard();updateControlLocks();}catch{}
+        });
         sceneStream.addEventListener("scenes", event => {
             sceneLastHeartbeat = Date.now();
             try { acceptCloudScenes(JSON.parse(event.data)); }
@@ -1606,6 +1613,7 @@
     let backgroundDevicesBusy = false;
     let lastBackgroundAttempt = 0;
     async function refreshDeviceStatus() {
+        if(haDeviceStreamAt&&Date.now()-haDeviceStreamAt<45000&&currentDevices.some(d=>d.provider==='home_assistant'))return false;
         if (window.PaceRequestBackoff.wait(sessionContextKey(),'/api/devices') || document.visibilityState === 'hidden' || navigator.onLine === false || authRequired || backgroundDevicesBusy ||
             devicesLoading || commandBusy || activeCloudExecution() || sceneSyncTask || programmingBusy ||
             sceneEditorEl.style.display === 'block' || !programmingElement('Form').hidden ||

@@ -1,0 +1,56 @@
+[
+  {
+    "name": "Basket",
+    "deviceId": "10028bfc87",
+    "entityId": "switch.basket_sonoff_10028bfc87_1",
+    "kind": "multi",
+    "outlets": [
+      0
+    ]
+  },
+  {
+    "name": "Calcetto",
+    "deviceId": "100279027d",
+    "entityId": "switch.calcetto_sonoff_100279027d_1",
+    "kind": "multi",
+    "outlets": [
+      0
+    ]
+  },
+  {
+    "name": "Luci Tennis",
+    "deviceId": "100278e450",
+    "entityId": "switch.luci_tennis_sonoff_100278e450_1",
+    "kind": "multi",
+    "outlets": [
+      0
+    ]
+  },
+  {
+    "name": "Luci Vialetto",
+    "deviceId": "100278ef4d",
+    "entityId": "switch.luci_vialetto_sonoff_100278ef4d_1",
+    "kind": "multi",
+    "outlets": [
+      0
+    ]
+  },
+  {
+    "name": "Parco giochi",
+    "deviceId": "100278aed3",
+    "entityId": "switch.parco_gioci_sonoff_100278aed3_1",
+    "kind": "multi",
+    "outlets": [
+      0
+    ]
+  },
+  {
+    "name": "Riscaldamento",
+    "deviceId": "10027902d1",
+    "entityId": "switch.riscaldamento_sonoff_10027902d1_1",
+    "kind": "multi",
+    "outlets": [
+      0
+    ]
+  }
+]
