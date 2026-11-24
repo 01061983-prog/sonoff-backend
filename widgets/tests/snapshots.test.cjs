@@ -19,3 +19,8 @@ test('an authorized stream updates only known devices after authenticated handsh
  socket.emit('message',{data:JSON.stringify({action:'update',deviceid:'test-light',params:{switch:'on'}})});assert.equal((await snapshots.read(workspace)).devices[0].state,'on');
  await new Promise(r=>setTimeout(r,650));assert.equal(events.length,1);assert.deepEqual(events[0][1],['test-light']);snapshots.stop();
 });
+test('HA state changes update widget snapshots automatically; identical events and refreshes do not send pushes',async()=>{
+ let notify;const events=[];let raw=structuredClone(base);const local={supports:t=>t==='local',snapshot:async()=>({devices:[structuredClone(raw)],ready:true,observedAt:Date.now()}),watch:async(t,fn)=>{notify=fn;return ()=>{};}};
+ const snapshots=create({localProvider:()=>local,access:async()=>({accessToken:'local'}),listDevices:async()=>{throw Error('cloud read forbidden');},appid:'fake',onChanged:async(...args)=>events.push(args)}),workspace={id:'fixture',providerOwner:'owner'};
+ try{await snapshots.watch(workspace);const version=(await snapshots.read(workspace)).version;notify();await new Promise(r=>setTimeout(r,650));assert.equal(events.length,0);assert.equal((await snapshots.read(workspace)).version,version);raw.params.switch='on';notify();await new Promise(r=>setTimeout(r,650));assert.equal(events.length,1);assert.equal((await snapshots.read(workspace)).devices[0].state,'on');await snapshots.refresh(workspace);await new Promise(r=>setTimeout(r,650));assert.equal(events.length,1);raw.online=false;notify();await new Promise(r=>setTimeout(r,650));assert.equal(events.length,2);assert.equal((await snapshots.read(workspace)).devices[0].online,false);}finally{snapshots.stop();}
+});

@@ -17,21 +17,22 @@ module.exports=function createSnapshots({access,listDevices,localProvider=()=>nu
   if(!entry){entry={owner:workspace.providerOwner,workspaces:new Set(),raw:new Map(),devices:[],version:0,observedAt:0,loadedAt:0,job:null,socket:null,opening:false,failures:0,retryAt:0,changed:new Set(),closed:false};owners.set(entry.owner,entry);}
   entry.workspaces.add(workspace.id);return entry;
  }
- function emit(entry,ids){for(const id of ids)entry.changed.add(id);if(entry.flush)return;entry.flush=setTimeout(()=>{entry.flush=null;const changed=[...entry.changed];entry.changed.clear();for(const workspaceId of entry.workspaces)void onChanged(workspaceId,changed,entry.version).catch(()=>{});},600);entry.flush.unref?.();}
+ function different(before,after){const old=new Map(before.map(d=>[d.id,JSON.stringify(d)]));return [...new Set([...after.filter(d=>old.get(d.id)!==JSON.stringify(d)).map(d=>d.id),...before.filter(d=>!after.some(n=>n.id===d.id)).map(d=>d.id)])];}
+ function emit(entry,ids){if(!ids.length)return;for(const id of ids)entry.changed.add(id);if(entry.flush)return;entry.flush=setTimeout(()=>{entry.flush=null;const changed=[...entry.changed];entry.changed.clear();for(const workspaceId of entry.workspaces)void onChanged(workspaceId,changed,entry.version).catch(()=>{});},600);entry.flush.unref?.();}
  async function refresh(entry){
   if(entry.job)return entry.job;
   entry.job=(async()=>{
    const credentials=await access(entry.owner);
    if(localProvider()?.supports(credentials.accessToken)){
-    if(entry.reconnect){clearTimeout(entry.reconnect);entry.reconnect=null;}if(entry.socket){const old=entry.socket;entry.socket=null;old.close();}if(entry.heartbeat){clearInterval(entry.heartbeat);intervals.delete(entry.heartbeat);entry.heartbeat=null;}entry.apikey=null;const snap=await localProvider().snapshot(credentials.accessToken);entry.raw=new Map(snap.devices.map(d=>[d.deviceid,d]));entry.devices=snap.devices.map(normalize);entry.version++;entry.observedAt=snap.observedAt||now();entry.loadedAt=now();entry.credentials=credentials;entry.live=snap.ready;
-    if(entry.watching&&!entry.unsubscribeLocal)entry.unsubscribeLocal=await localProvider().watch(credentials.accessToken,()=>{void refresh(entry).then(()=>emit(entry,entry.devices.map(d=>d.id))).catch(()=>{entry.live=false;entry.devices=entry.devices.map(d=>({...d,online:false,state:'unknown'}));emit(entry,entry.devices.map(d=>d.id));});});return entry;
+    if(entry.reconnect){clearTimeout(entry.reconnect);entry.reconnect=null;}if(entry.socket){const old=entry.socket;entry.socket=null;old.close();}if(entry.heartbeat){clearInterval(entry.heartbeat);intervals.delete(entry.heartbeat);entry.heartbeat=null;}entry.apikey=null;const snap=await localProvider().snapshot(credentials.accessToken);entry.raw=new Map(snap.devices.map(d=>[d.deviceid,d]));const next=snap.devices.map(normalize);entry.lastChanged=different(entry.devices,next);entry.devices=next;if(entry.lastChanged.length)entry.version++;entry.observedAt=snap.observedAt||now();entry.loadedAt=now();entry.credentials=credentials;entry.live=snap.ready;
+    if(entry.watching&&!entry.unsubscribeLocal)entry.unsubscribeLocal=await localProvider().watch(credentials.accessToken,()=>{void refresh(entry).then(()=>emit(entry,entry.lastChanged||[])).catch(()=>{entry.live=false;entry.devices=entry.devices.map(d=>({...d,online:false,state:'unknown'}));emit(entry,entry.devices.map(d=>d.id));});});return entry;
    }
    if(entry.unsubscribeLocal){entry.unsubscribeLocal();entry.unsubscribeLocal=null;}
    const devices=await listDevices(credentials.accessToken,undefined,{nativeOwnership:true});
    // Only itemType=1 devices expose ownerApikey in PACE; never use keys from shared devices.
    const keys=new Set(devices.filter(d=>d.itemType===1&&typeof d.ownerApikey==='string'&&d.ownerApikey).map(d=>d.ownerApikey));
    entry.apikey=keys.size===1?[...keys][0]:null;
-   entry.raw=new Map(devices.map(d=>[d.deviceid,d]));entry.devices=devices.map(normalize);entry.version++;entry.observedAt=now();entry.loadedAt=now();
+   entry.raw=new Map(devices.map(d=>[d.deviceid,d]));const next=devices.map(normalize);entry.lastChanged=different(entry.devices,next);entry.devices=next;if(entry.lastChanged.length)entry.version++;entry.observedAt=now();entry.loadedAt=now();
    entry.credentials=credentials;if(entry.watching)void connect(entry,credentials).catch(()=>{});return entry;
   })();
   try{return await entry.job;}finally{entry.job=null;}
@@ -90,7 +91,7 @@ module.exports=function createSnapshots({access,listDevices,localProvider=()=>nu
      const patch=new Map(p.switches.filter(c=>['on','off'].includes(c.switch)).map(c=>[c.outlet,c.switch]));
      d.params={...d.params,switches:d.params.switches.map(c=>patch.has(c.outlet)?{...c,switch:patch.get(c.outlet)}:c)};
     }
-    entry.devices=[...entry.raw.values()].map(normalize);entry.version++;entry.observedAt=now();emit(entry,[message.deviceid]);
+    const next=[...entry.raw.values()].map(normalize),changed=different(entry.devices,next);entry.devices=next;if(changed.length)entry.version++;entry.observedAt=now();emit(entry,changed);
    });
   }catch(e){entry.retryAt=now()+60000;entry.live=false;scheduleReconnect(entry);}
   finally{entry.opening=false;}
@@ -99,7 +100,7 @@ module.exports=function createSnapshots({access,listDevices,localProvider=()=>nu
   async read(workspace){const entry=owner(workspace);if(!entry.loadedAt||!entry.live&&now()-entry.loadedAt>15000)await refresh(entry);return {version:entry.version,observedAt:entry.observedAt,liveUpdates:entry.live===true,devices:entry.devices};},
   async watch(workspace){const entry=owner(workspace);entry.watching=true;if(!entry.loadedAt)await refresh(entry);else if(entry.credentials&&localProvider()?.supports(entry.credentials.accessToken))await refresh(entry);else if(entry.credentials)await connect(entry,entry.credentials);},
   unwatch(workspaceId){for(const entry of owners.values()){entry.workspaces.delete(workspaceId);if(!entry.workspaces.size){entry.watching=false;entry.closed=true;if(entry.reconnect)clearTimeout(entry.reconnect);if(entry.flush)clearTimeout(entry.flush);entry.unsubscribeLocal?.();entry.socket?.close();owners.delete(entry.owner);}}},
-  async refresh(workspace){const entry=owner(workspace);await refresh(entry);emit(entry,entry.devices.map(d=>d.id));return {version:entry.version,observedAt:entry.observedAt,devices:entry.devices};},
+  async refresh(workspace){const entry=owner(workspace);await refresh(entry);emit(entry,entry.lastChanged||[]);return {version:entry.version,observedAt:entry.observedAt,devices:entry.devices};},
   stop(){for(const e of owners.values()){e.closed=true;if(e.flush)clearTimeout(e.flush);if(e.reconnect)clearTimeout(e.reconnect);if(e.handshake)clearTimeout(e.handshake);e.unsubscribeLocal?.();e.socket?.close();}for(const i of intervals)clearInterval(i);owners.clear();}
  };
 };
