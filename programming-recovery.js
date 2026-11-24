@@ -7,7 +7,8 @@ function latest(s,time){
  const from=s.repeat==='date'?0:time-Math.max(8,(s.intervalDays||0)+2)*core.DAY;
  return core.events(s,from,time).filter(e=>e.at>=(s.updatedAt||s.createdAt||0)).at(-1)||null;
 }
-module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,readScheduledDevices,api,runScene,getScene,completedOnce,enabledSchedules=()=>null}){
+module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,readScheduledDevices,api,runScene,getScene,completedOnce,enabledSchedules=()=>null,onManualRequired=()=>{}}){
+ const backoff=require('./recovery-backoff.cjs')({now});
  const readDevices=readScheduledDevices||async function(owner){const credentials=await access(owner,{scheduled:true});return {credentials,devices:await listDevices(credentials.accessToken)};};
  const ledger=owner=>db().collection('ewelinkProgrammingIntents').doc(owner);
  function eligible(s){return ['on','off'].includes(s.action)&&targets(s).length>0&&targets(s).every(t=>['on','off'].includes(t.action)&&!isImpulseDevice(t.deviceId)&&['single','multi'].includes(t.kind));}
@@ -60,19 +61,30 @@ module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar
   const kept=await db().runTransaction(async t=>{const snapshot=await t.get(ref),data=snapshot.data();if(!data?.enabled||data.version!==s.version||data.last?.id!==claim)return false;const next={...data,last:{...data.last,until:now()+budget}};if(data.recoveryAt)next.recoveryAt=now()+budget;t.set(ref,next);return true;});
   if(!kept)throw new Error('Comando sostituito o programmazione sospesa: nessun invio effettuato.');
  }
- async function run(ref){
+ const manualMessage='Dopo 5 tentativi non è stato possibile confermare lo stato previsto. Recupero automatico fermato: controlla e intervieni manualmente da PACE o Home Assistant.';
+ async function defer(ref,initial,message,pause){
+  const manual=pause.attempt>=5;let notify=false;
+  await db().runTransaction(async t=>{notify=false;const snap=await t.get(ref),s=snap.data();if(!s?.enabled||s.version!==initial.version||s.recovery?.needsManual||!s.recoveryAt||s.last?.status==='claimed'&&s.last.until>now())return;
+   const next={...s,recovery:{...s.recovery,attempts:pause.attempt,message:manual?manualMessage:message,...(manual?{needsManual:true,noticeAt:now()}: {})}};
+   if(manual){delete next.recoveryAt;next.last={...s.last,status:'unknown',message:manualMessage,finishedAt:now(),until:0};notify=true;}else next.recoveryAt=pause.until;t.set(ref,next);
+  });if(notify)try{await onManualRequired({...initial,id:ref.id},manualMessage);}catch{console.error('Avviso di intervento manuale non disponibile.');}
+ }
+ async function run(ref,hint){
+  if(hint?.recovery?.needsManual||hint?.owner&&backoff.paused(hint.owner))return;
   const before=await ref.get(),initial=before.data();
+  if(initial?.recovery?.needsManual||initial?.owner&&backoff.paused(initial.owner))return;
   if(!initial?.enabled||!eligible(initial)||!initial.recoveryAt||initial.recoveryAt>now())return;
   if(initial.last?.status==='claimed'&&initial.last.until>now())return;
+  if((initial.recovery?.attempts||0)>=5){await defer(ref,initial,manualMessage,{attempt:5,until:now()});return;}
   try{await ensureSolar(initial.owner,{...initial,id:ref.id},8);await prepare(initial.owner);}
-  catch(e){await db().runTransaction(async t=>{const snap=await t.get(ref),s=snap.data();if(s?.version===initial.version&&s.recoveryAt&&!(s.last?.status==='claimed'&&s.last.until>now()))t.set(ref,{...s,recoveryAt:now()+60000,recovery:{...s.recovery,message:'Ripristino in attesa di dati o connessione validi.'}});});return;}
+  catch(e){e=firebaseQuota.record(e);if(e.code==='firebase_quota')throw e;const pause=backoff.fail(initial.owner,e,initial.recovery?.attempts||0);await defer(ref,initial,'Ripristino in attesa di dati o connessione validi.',pause);return;}
   const acquired=await db().runTransaction(async t=>{
    const snapshot=await t.get(ref),s=snapshot.data();
    if(!s?.enabled||!eligible(s)||s.version!==initial.version||!s.recoveryAt||s.recoveryAt>now()||s.last?.status==='claimed'&&s.last.until>now())return null;
    const claim=crypto.randomUUID(),last={id:claim,status:'claimed',at:now(),scheduledAt:s.recovery?.since||s.last?.scheduledAt||now(),until:now()+180000,scheduleVersion:s.version,message:'Verifica e ripristino dello stato programmato.'};
-   t.set(ref,{...s,recoveryAt:now()+180000,last});return {s:{...s,id:ref.id},claim};
+   t.set(ref,{...s,recoveryAt:now()+180000,recovery:{...s.recovery,attempts:(s.recovery?.attempts||0)+1},last});return {s:{...s,id:ref.id},claim};
   });if(!acquired)return;
-  const {s,claim}=acquired;let status='unknown',message='Ripristino non confermato.',needsReview=false;
+  const {s,claim}=acquired;let status='unknown',message='Ripristino non confermato.',needsReview=false,pause=null;
   try{
    const {credentials,devices}=await readDevices(s.owner),records=await owned(s.owner),stored=(await ledger(s.owner).get()).data()?.entries;
    if(s.kind==='scene'){const scene=getScene&&await getScene({cookies:{ewelink_access:credentials.accessToken}},s.sceneId,s.workspaceId);if(!scene||scene.mode!=='toggle'||scene.signature!==s.sceneSignature)throw Object.assign(new Error('Scenario modificato o eliminato: apri e salva di nuovo la programmazione.'),{status:409,code:'scene_changed'});}
@@ -100,15 +112,19 @@ module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar
     await renew(ref,claim,s);await api('/v2/device/thing/status',credentials.accessToken,{type:1,id:action.deviceId,params});
    }
    status='succeeded';message=actions.length?'Stato programmato ripristinato: comandi accettati da eWeLink.':'Stato verificato: il dispositivo è già coerente con le programmazioni attuali.';
-  }catch(e){needsReview=[400,403,404,409].includes(e.status)&&e.code!=='scene_busy';message=e.status===401?'Ripristino sospeso: ricollega l’account eWeLink.':String(e.message||message).slice(0,250);}
+  }catch(e){e=firebaseQuota.record(e);if(e.code==='firebase_quota')throw e;pause=backoff.fail(s.owner,e,s.recovery?.attempts||0);needsReview=[400,403,404,409].includes(e.status)&&e.code!=='scene_busy';message=e.status===401?'Ripristino sospeso: ricollega l’account eWeLink.':String(e.message||message).slice(0,250);}
+  if(status==='succeeded')backoff.connected(s.owner);
+  let manualNotice=false;
   await db().runTransaction(async t=>{
-   const snapshot=await t.get(ref),data=snapshot.data();if(data?.last?.id!==claim)return;
+   manualNotice=false;const snapshot=await t.get(ref),data=snapshot.data();if(data?.last?.id!==claim)return;
    const next={...data,last:{...data.last,status,message,finishedAt:now(),until:0}};
    await finishIntent(t,s,claim,status==='succeeded',true);
    if(status==='succeeded'||needsReview){delete next.recovery;delete next.recoveryAt;}
-   else{next.recoveryAt=now()+60000;next.recovery={...next.recovery,message};}
+   else if(pause?.attempt>=5){delete next.recoveryAt;next.recovery={...next.recovery,attempts:5,needsManual:true,noticeAt:now(),message:manualMessage};next.last.message=manualMessage;manualNotice=true;}
+   else{next.recoveryAt=pause?.until||now()+60000;next.recovery={...next.recovery,attempts:pause?.attempt||1,message};}
    if(completedOnce(next)){t.set(db().collection('ewelinkProgrammingHistory').doc(crypto.createHash('sha256').update(next.owner+':'+ref.id).digest('hex')),{...next,id:ref.id,archivedAt:now(),enabled:false});t.delete(ref);}else t.set(ref,next);
   });
+  if(manualNotice)try{await onManualRequired(s,manualMessage);}catch{console.error('Avviso di intervento manuale non disponibile.');}
  }
  let monitorAt=0;
  async function monitorActive(){
@@ -116,10 +132,11 @@ module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar
   monitorAt=now()+60000;
   const snapshot=enabledSchedules()||await db().collection('ewelinkProgrammingSchedules').where('enabled','==',true).get(),owners=new Map();
   for(const doc of snapshot.docs){const s=doc.data();
-   if(!eligible(s)||s.recoveryAt||!core.activeWindow(s,now())||s.last?.status==='claimed'&&s.last.until>now()||s.last?.finishedAt>now()-60000)continue;
+   if(!eligible(s)||s.recovery?.needsManual||s.recoveryAt||!core.activeWindow(s,now())||s.last?.status==='claimed'&&s.last.until>now()||s.last?.finishedAt>now()-60000)continue;
    if(!owners.has(s.owner))owners.set(s.owner,[]);owners.get(s.owner).push({doc,s});
   }
   for(const[owner,records]of owners){
+   if(backoff.paused(owner))continue;
    try{
     // Read once per account. Even a brief outage missed between polls is detected
     // by the relay returning OFF inside a currently active ON interval.
@@ -145,11 +162,11 @@ module.exports=function createRecovery({db,now,isImpulseDevice,owned,ensureSolar
   if(migrationPasses>=2||migrationAt>now())return;
   for(const status of ['unknown','skipped','claimed']){
    const snapshot=await db().collection('ewelinkProgrammingSchedules').where('last.status','==',status).get();
-   for(const doc of snapshot.docs){const s=doc.data();if(!s.enabled||!eligible(s)||s.recoveryAt||s.last?.message?.startsWith('Spegnimento evitato:')||status==='claimed'&&s.last.until>now()||(s.last?.scheduleVersion!==undefined?s.last.scheduleVersion!==s.version:s.last?.at<(s.updatedAt||0)))continue;
+   for(const doc of snapshot.docs){const s=doc.data();if(!s.enabled||!eligible(s)||s.recovery?.needsManual||s.recoveryAt||s.last?.message?.startsWith('Spegnimento evitato:')||status==='claimed'&&s.last.until>now()||(s.last?.scheduleVersion!==undefined?s.last.scheduleVersion!==s.version:s.last?.at<(s.updatedAt||0)))continue;
     await db().runTransaction(async t=>{const current=await t.get(doc.ref),data=current.data();if(data?.enabled&&data.version===s.version&&!data.recoveryAt&&data.last?.id===s.last?.id)t.set(doc.ref,{...data,recoveryAt:now(),recovery:{since:data.last?.scheduledAt||data.last?.at||now(),message:'Verifica dello stato dopo un comando non completato.'}});});
    }
   }
   migrationPasses++;migrationAt=now()+180001;
  }
- return {eligible,prepare,claimIntent,finishIntent,renew,run,adoptLegacy,monitorActive};
+ return {eligible,prepare,claimIntent,finishIntent,renew,run,adoptLegacy,monitorActive,connected:owner=>backoff.connected(owner)};
 };

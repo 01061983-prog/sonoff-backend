@@ -43,3 +43,5 @@ test('quota exhaustion closes existing Firestore listeners, not just future quer
  let time=0,closed=0,next,task;const guard=quotaFactory({now:()=>time});const index=createIndex({quotaGuard:guard,query:()=>({onSnapshot(n){next=n;return ()=>closed++;}}),setTimer:(fn,ms)=>{task={fn,ms};return 1;},clearTimer:()=>{task=null;}});
  index.start();next({docs:[]});guard.record(Object.assign(Error('Quota exceeded'),{code:8}));assert.equal(closed,1);assert.equal(index.all(),null);assert.equal(task.ms,3600000);index.stop();assert.equal(task,null);
 });
+
+test('quota pause does not hide the daily reset behind another hour of cooldown',()=>{let time=Date.parse('2026-11-25T07:50:00Z');const q=quotaFactory({now:()=>time}),error=()=>Object.assign(Error('8 RESOURCE_EXHAUSTED: Quota exceeded.'),{code:8});q.record(error());assert.equal(q.wait(),11*60000);time=Date.parse('2026-11-25T08:01:00Z');assert.equal(q.wait(),0);q.record(error());assert.equal(q.wait(),60000);});

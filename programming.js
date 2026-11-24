@@ -3,7 +3,7 @@ const crypto=require('crypto');
 const core=require('./programming-core'),firebaseQuota=require('./firebase-quota.cjs');
 module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,localProvider=()=>null,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch,authorizeOwner=async()=>null,isImpulseDevice=id=>id==='1000ac81a0',wakeSetTimeout=setTimeout,wakeClearTimeout=clearTimeout,onExecuted=()=>{}}){
  const astronomy=require('./astronomy')({db,fetch:solarFetch,now});
- const recovery=require('./programming-recovery')({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,readScheduledDevices,api,runScene,getScene,completedOnce,enabledSchedules:()=>scheduleIndex.all()});
+ const recovery=require('./programming-recovery')({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,readScheduledDevices,api,runScene,getScene,completedOnce,onManualRequired:(s,message)=>onExecuted(s,'unknown',message),enabledSchedules:()=>scheduleIndex.all()});
  const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
  const encryptionKey=crypto.hkdfSync('sha256',Buffer.from(secret),Buffer.from(appid),Buffer.from('ewelink-programming-token-v1'),32);
  const accounts=()=>db().collection('ewelinkProgrammingAccounts'), schedules=()=>db().collection('ewelinkProgrammingSchedules'), aliases=()=>db().collection('ewelinkProgrammingSessions');
@@ -494,7 +494,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,lo
     }
    }
   }catch(e){status='unknown';message=e.status===401?'Accesso scaduto: ricollega eWeLink.':String(e.message||'Esito non confermato.').slice(0,250);}
-  await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data?.last?.id===claim){const next={...data,last:{...data.last,status,message,finishedAt:now(),until:0}};const success=status==='succeeded'||status==='skipped'&&message.startsWith('Spegnimento evitato:');await recovery.finishIntent(t,s,claim,success);if(recovery.eligible(s)){if(success){delete next.recoveryAt;delete next.recovery;}else{next.recoveryAt=now()+60000;next.recovery={since:s.nextAt,message:'Ripristino automatico in attesa di connessione e stato verificabili.'};}}if(completedOnce(next)){t.set(db().collection('ewelinkProgrammingHistory').doc(hash(next.owner+':'+ref.id)),{...next,id:ref.id,archivedAt:now(),enabled:false});t.delete(ref);}else t.set(ref,next);}});
+  await db().runTransaction(async t=>{const snap=await t.get(ref),data=snap.data();if(data?.last?.id===claim){const next={...data,last:{...data.last,status,message,finishedAt:now(),until:0}};const success=status==='succeeded'||status==='skipped'&&message.startsWith('Spegnimento evitato:');await recovery.finishIntent(t,s,claim,success);if(recovery.eligible(s)){if(success){delete next.recoveryAt;delete next.recovery;}else{next.recoveryAt=now()+60000;next.recovery={since:s.nextAt,attempts:1,message:'Ripristino automatico in attesa di connessione e stato verificabili.'};}}if(completedOnce(next)){t.set(db().collection('ewelinkProgrammingHistory').doc(hash(next.owner+':'+ref.id)),{...next,id:ref.id,archivedAt:now(),enabled:false});t.delete(ref);}else t.set(ref,next);}});
   try{onExecuted({...s,id:ref.id},status,message);}catch{}
  }
  let busy=false,timer=null,wakeTimer=null,wakeEpoch=0;
@@ -517,7 +517,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,lo
    const refresh=scheduleIndex.due('solarRefreshAt',now(),5)||await schedules().where('solarRefreshAt','<=',now()).limit(5).get();for(const doc of refresh.docs)if(doc.data().enabled&&core.usesSolar(doc.data()))await refreshSolar({...doc.data(),id:doc.id});
    const due=scheduleIndex.due('nextAt',now(),20)||await schedules().where('nextAt','<=',now()).limit(20).get();for(const doc of due.docs)try{await execute(doc.ref);}catch(e){firebaseQuota.record(e);console.error('Programmazione temporaneamente sospesa: dati necessari non disponibili.');}
    await recovery.monitorActive();
-   const pending=scheduleIndex.due('recoveryAt',now(),20)||await schedules().where('recoveryAt','<=',now()).limit(20).get();for(const doc of pending.docs)try{await recovery.run(doc.ref);}catch(e){firebaseQuota.record(e);console.error('Ripristino temporaneamente in attesa: nessun comando non verificato.');}
+   const pending=scheduleIndex.due('recoveryAt',now(),20)||await schedules().where('recoveryAt','<=',now()).limit(20).get();for(const doc of pending.docs)try{await recovery.run(doc.ref,doc.data());}catch(e){firebaseQuota.record(e);console.error('Ripristino temporaneamente in attesa: nessun comando non verificato.');}
    // Mantiene valida l'autorizzazione anche per prenotazioni lontane nel tempo.
    const renewals=accountIndex.due('renewAt',now())||await accounts().where('renewAt','<=',now()).limit(25).get();
    let renewed=0;for(const doc of renewals.docs){
