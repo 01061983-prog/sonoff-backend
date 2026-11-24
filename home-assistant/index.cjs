@@ -1,0 +1,67 @@
+'use strict';
+const crypto=require('node:crypto'),createBridge=require('./bridge.cjs'),createProvider=require('./provider.cjs'),{fail,hash,id,binding}=require('./protocol.cjs');
+module.exports=function install({app,db,accounts,programming,secret,appid,allowedAccounts=[],allowedEmails=[],origin}){
+ const allowed=new Set(allowedAccounts),configs=()=>db().collection('paceHomeAssistantBindings');let bridge;
+ const configIndex=require('../schedule-index.cjs')({query:configs});configIndex.start();
+ const rows=()=>{const current=configIndex.all();if(!current)throw fail(503,'ha_configuration_unavailable','Configurazione dei collegamenti in aggiornamento. Riprova tra poco.');return current.docs;};
+ const load=async owner=>{if(!id(owner))return null;return rows().find(d=>d.id===owner)?.data()||null;};
+ async function scoped(owner){const a=await accounts.authorizeOwner(owner);if(!a||a.status!=='active'||(!allowed.has(a.id)&&!allowedEmails.includes(a.email)))throw fail(403,'ha_scope','Home Assistant non autorizzato per questa plancia.');return a;}
+ bridge=createBridge({authenticate:async(agentId,token)=>{
+  const [nonce,signature]=token.split('.'),expected=crypto.createHmac('sha256',secret).update('ha-agent:'+agentId+':'+nonce).digest('hex');
+  if(!signature||signature.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(signature),Buffer.from(expected)))throw fail(401,'ha_auth');const tokenHash=hash(token);
+  const matches=rows().filter(d=>d.data().agentId===agentId);if(matches.length!==1)throw fail(401,'ha_auth');const c=matches[0].data();
+  if(c.revoked||typeof c.tokenHash!=='string'||c.tokenHash.length!==64||!crypto.timingSafeEqual(Buffer.from(c.tokenHash),Buffer.from(tokenHash)))throw fail(401,'ha_auth');
+  const a=await scoped(c.owner);if(a.id!==c.accountId)throw fail(401,'ha_auth');return c;
+ }});
+ const provider=createProvider({load,authorize:scoped,bridge,secret});
+ const publicConfig=c=>c?{owner:c.owner,accountId:c.accountId,workspaceId:c.workspaceId,workspaceName:c.workspaceName,revision:c.revision,agentId:c.agentId,enabled:c.enabled,revoked:!!c.revoked,devices:c.devices}:null;
+ const wrap=fn=>async(req,res)=>{res.set('Cache-Control','no-store');try{await accounts.bridgeAdmin(req);res.json(await fn(req));}catch(e){e=require('../firebase-quota.cjs').record(e);if(e.retryAfterMs)res.set('Retry-After',String(Math.ceil(e.retryAfterMs/1000)));res.status(e.status||503).json({ok:false,error:e.code||'ha_unavailable',msg:e.message,retryAfterMs:e.retryAfterMs});}};
+ async function coverage(t,c,a){
+  const schedules=await t.get(db().collection('ewelinkProgrammingSchedules').where('owner','==',c.owner));
+  const workspaceKey=hash(appid+':app:'+a.id+':'+c.workspaceId+(c.owner!==a.providerOwner?':provider:'+c.owner:''));
+  const workspace=await t.get(db().collection('sanLuigiScenarioWorkspaces').doc(workspaceKey));
+  const mapped=new Set(c.devices.map(d=>d.deviceId));const check=action=>{if(!mapped.has(action.deviceId)||action.kind==='gate'||action.action==='pulse'||action.pulse===true||action.outlets?.some(o=>o!==0))throw fail(409,'ha_coverage','Dispositivi o canali di uno scenario o programma non ancora mappati. Nessuna attivazione eseguita.');};
+  for(const doc of schedules.docs){const s=doc.data();if(s.last?.status==='claimed'&&s.last.until>Date.now())throw fail(409,'ha_busy','Attendi la fine del comando programmato.');if(s.kind==='daikin')continue;for(const target of s.kind==='scene'?s.targets||[]:[s])check(target);}
+  if(Object.values(workspace.data()?.executions||{}).some(r=>r.status==='running'&&r.expiresAt>Date.now())||bridge.busy(c))throw fail(409,'ha_busy','Attendi la fine dei comandi in corso.');
+  for(const room of workspace.data()?.rooms||[])for(const member of room.members||[])if(member.type==='device'||member.kind==='device')check({deviceId:member.deviceId||member.id});
+  for(const scene of workspace.data()?.scenes||[])for(const action of scene.actions||[])check(action);
+  return {schedules:schedules.docs.length,workspaceExists:workspace.exists};
+ }
+ app.get('/api/app/home-assistant/devices',wrap(async req=>{await scoped(req.query.owner);const c=await load(req.query.owner);if(!c)throw fail(409,'ha_prepare','Prepara prima il collegamento.');return {ok:true,devices:await bridge.discover(c),revision:c.revision};}));
+ app.get('/api/app/home-assistant',wrap(async req=>{
+  const a=await scoped(req.query.owner),c=await load(req.query.owner);if(c&&c.accountId!==a.id)throw fail(403,'ha_scope');const s=c?bridge.snapshot(c):null;
+  return {ok:true,initialDevices:require('./san-siro-devices.json'),config:publicConfig(c),bridge:s?{ready:s.ready,observedAt:s.observedAt,states:[...s.states.values()]}:null};
+ }));
+ app.post('/api/app/home-assistant',wrap(async req=>{
+  const b=req.body||{},a=await scoped(b.owner),ref=configs().doc(b.owner);
+  if(b.op==='prepare'){
+   const clean=binding({...b.mapping,owner:b.owner,accountId:a.id}),agentId=crypto.randomBytes(32).toString('hex'),nonce=crypto.randomBytes(32).toString('base64url'),token=nonce+'.'+crypto.createHmac('sha256',secret).update('ha-agent:'+agentId+':'+nonce).digest('hex');let created,oldAgent;
+   await db().runTransaction(async t=>{const current=await t.get(ref),old=current.data();if(old?.enabled)throw fail(409,'ha_active','Disattiva il provider prima di cambiare la mappatura.');if((old?.revision||0)!==b.expectedRevision)throw fail(409,'ha_revision');oldAgent=old?.agentId;const proof=await coverage(t,clean,a);created={...clean,agentId,tokenHash:hash(token),revision:(old?.revision||0)+1,enabled:false,revoked:false,preparedBy:req.appActor.uid,preparedAt:Date.now(),coverage:proof};t.set(ref,created);});
+   if(oldAgent)bridge.revoke(oldAgent);return {ok:true,config:publicConfig(created),agentOptions:{bridge_url:new URL('/api/ha/bridge',origin).href.replace(/^https:/,'wss:'),agent_id:agentId,bridge_token:token,entities:created.devices.map(d=>d.entityId)}};
+  }
+  if(b.op==='add'){
+   let updated;
+   await db().runTransaction(async t=>{const current=await t.get(ref),c=current.data();if(!c||c.revoked||c.revision!==b.expectedRevision)throw fail(409,'ha_revision');
+    if(!Array.isArray(b.entityIds)||!b.entityIds.length||b.entityIds.length>200)throw fail(400,'ha_mapping');
+    const found=bridge.catalogue(c),add=b.entityIds.map(e=>found.find(d=>d.entityId===e));if(add.some(d=>!d))throw fail(400,'ha_mapping','Ripeti la ricerca dei dispositivi.');
+    const devices=[...c.devices,...add.filter(d=>!c.devices.some(old=>old.entityId===d.entityId)).map(d=>({...d,kind:'multi',outlets:[0]}))];
+    const clean=binding({...c,devices});await coverage(t,clean,a);updated={...c,...clean,revision:c.revision+1,updatedAt:Date.now(),updatedBy:req.appActor.uid};t.set(ref,updated);
+   });bridge.configure(updated);return {ok:true,config:publicConfig(updated)};
+  }
+  if(!['activate','deactivate','revoke'].includes(b.op))throw fail(400,'ha_operation');
+  let previous;
+  await db().runTransaction(async t=>{const current=await t.get(ref),c=current.data();if(!c||c.accountId!==a.id||c.revision!==b.expectedRevision)throw fail(409,'ha_revision');previous=c;
+   if(b.op==='activate'){
+    if(c.revoked||!bridge.snapshot(c).ready||b.confirmedLocalDeviceIds?.length!==c.devices.length||new Set(b.confirmedLocalDeviceIds).size!==c.devices.length||c.devices.some(d=>!b.confirmedLocalDeviceIds.includes(d.deviceId)))throw fail(409,'ha_verify','Verifica prima ogni dispositivo in locale e collega il ponte.');
+    const s=bridge.snapshot(c);if(c.devices.some(d=>!['on','off'].includes(s.states.get(d.entityId)?.state)))throw fail(409,'ha_verify','Uno o più relè non sono disponibili.');
+    await coverage(t,c,a);
+   }
+   if(b.op!=='activate')await coverage(t,c,a);
+   // Keep every existing schedule, credential and scene document in place.
+   t.set(ref,{...c,enabled:b.op==='activate',revoked:b.op==='revoke',updatedAt:Date.now(),updatedBy:req.appActor.uid});
+  });
+  if(b.op==='revoke')bridge.revoke(previous.agentId);
+  return {ok:true,enabled:b.op==='activate'};
+ }));
+ return {provider,bridge,load,stop:()=>{configIndex.stop();bridge.stop();}};
+};

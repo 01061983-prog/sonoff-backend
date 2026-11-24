@@ -4,7 +4,7 @@ const {createWidgetService,installRoutes}=require('./service.cjs');
 const createAuth=require('./auth.cjs'),createSnapshots=require('./snapshots.cjs'),createAPNs=require('./apns.cjs'),createUsage=require('./usage-cache.cjs');
 const requestReads=require('../request-reads.cjs'),firebaseQuota=require('../firebase-quota.cjs');
 const failure=(status,code)=>Object.assign(new Error(code),{status,code});
-module.exports=function installWidgets({app,db,accounts,firebaseAuth,programming,api,listDevices,assertNoSceneRunning,assertLinkedDeviceChannels,protectManualCommands,physicalOutlets,appid,region,googleAccessToken,projectId}){
+module.exports=function installWidgets({app,db,accounts,firebaseAuth,programming,api,listDevices,assertNoSceneRunning,assertLinkedDeviceChannels,protectManualCommands,physicalOutlets,appid,region,googleAccessToken,projectId,localProvider=()=>null}){
  const collection=name=>db().collection(name),hash=s=>crypto.createHash('sha256').update(s).digest('hex');
  const auth=createAuth({db,accounts,firebaseAuth,secret:process.env.EWELINK_APP_SECRET});
  const apns=createAPNs({teamId:process.env.PACE_APNS_TEAM_ID,keyId:process.env.PACE_APNS_KEY_ID,privateKey:process.env.PACE_APNS_PRIVATE_KEY,topic:process.env.PACE_APNS_WIDGET_TOPIC,production:process.env.PACE_APNS_PRODUCTION!=='false'});
@@ -26,7 +26,7 @@ module.exports=function installWidgets({app,db,accounts,firebaseAuth,programming
   async remove(s){await collection('paceWidgetSubscriptions').doc(s._id||subscriptionId(s)).delete();}
  };
  let service;
- const snapshots=createSnapshots({access:owner=>programming.access(owner),listDevices,appid,region,onChanged:async(id,devices,version)=>{const r=await service.changed(id,devices,version);if(!r.subscribers)snapshots.unwatch(id);}});
+ const snapshots=createSnapshots({localProvider,access:owner=>programming.access(owner),listDevices,appid,region,onChanged:async(id,devices,version)=>{const r=await service.changed(id,devices,version);if(!r.subscribers)snapshots.unwatch(id);}});
  service=createWidgetService({authenticate:token=>auth.authenticate(token),directory,snapshots,receipts,subscriptions,
   push:{async invalidate(sub,event){const g=await collection('paceWidgetGrants').doc(sub.grantId).get();if(!g.exists||g.data().revoked){await subscriptions.remove(sub);return;}if(sub.transport==='fcm')await fcm.invalidate(sub,event);else await apns.invalidate(sub,event);}},
   usage:createUsage({fetchUsage:require('./monitoring.cjs')({projectId,accessToken:googleAccessToken})}),

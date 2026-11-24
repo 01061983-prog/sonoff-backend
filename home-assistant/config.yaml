@@ -1,0 +1,22 @@
+name: PACE LAN Bridge
+version: "0.1.0"
+slug: pace_lan_bridge
+url: https://github.com/01061983-prog/sonoff-backend
+description: Ponte locale autenticato per PACE, senza porte pubbliche
+arch:
+  - aarch64
+startup: application
+boot: auto
+init: false
+homeassistant_api: true
+options:
+  bridge_url: "wss://sonoff-backend-k8sh.onrender.com/api/ha/bridge"
+  agent_id: ""
+  bridge_token: ""
+  entities: []
+schema:
+  bridge_url: str
+  agent_id: str
+  bridge_token: password
+  entities:
+    - str

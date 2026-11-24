@@ -1,7 +1,7 @@
 'use strict';
 const crypto=require('crypto');
 const core=require('./programming-core'),firebaseQuota=require('./firebase-quota.cjs');
-module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch,authorizeOwner=async()=>null,isImpulseDevice=id=>id==='1000ac81a0',wakeSetTimeout=setTimeout,wakeClearTimeout=clearTimeout,onExecuted=()=>{}}){
+module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,localProvider=()=>null,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch,authorizeOwner=async()=>null,isImpulseDevice=id=>id==='1000ac81a0',wakeSetTimeout=setTimeout,wakeClearTimeout=clearTimeout,onExecuted=()=>{}}){
  const astronomy=require('./astronomy')({db,fetch:solarFetch,now});
  const recovery=require('./programming-recovery')({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,readScheduledDevices,api,runScene,getScene,completedOnce,enabledSchedules:()=>scheduleIndex.all()});
  const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
@@ -15,7 +15,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
  function tokens(cookies){return {accessToken:cookies.ewelink_access,refreshToken:cookies.ewelink_refresh,atExpiredTime:Number(cookies.ewelink_expires)||now()+30*core.DAY,rtExpiredTime:now()+60*core.DAY};}
  const browserCookie={httpOnly:true,secure:true,sameSite:'Lax',path:'/'};
  function browserRef(session){return aliases().doc(hash(appid+':browser:'+session));}
- function automatic(data){return !!data?.credentials&&!data.revoked&&(data.automationEnabled===true||data.automationEnabled===undefined);}
+ function automatic(data){return (!!data?.credentials||data?.provider==='home_assistant')&&!data.revoked&&(data.automationEnabled===true||data.automationEnabled===undefined);}
  function applyCredentials(req,data){
   req.cookies.ewelink_access=data.accessToken;req.cookies.ewelink_refresh=data.refreshToken;req.cookies.ewelink_expires=String(data.atExpiredTime);
  }
@@ -52,6 +52,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
  const identityCache=new Map();
  async function identity(req,providerData){
   const accessToken=req.cookies.ewelink_access,key=hash(accessToken||'');
+  if(localProvider()?.supports(accessToken))return localProvider().owner(accessToken);
   // This argument comes only from the server-to-server OAuth token exchange.
   // Resolve it before /profile, which is not available to every OAuth APPID.
   if(providerData?.user?.apikey!==undefined){
@@ -104,7 +105,9 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   identityCache.set(hash(token),{owner,until:now()+5*60000});req.programmingOwner=owner;return owner;
  }
  async function remember(req,{browserLogin=false}={}){
-  const owner=await identity(req),credentials=tokens(req.cookies);
+  const owner=await identity(req);
+  if(localProvider()?.supports(req.cookies.ewelink_access)){await accounts().doc(owner).set({automationEnabled:true,lastError:null,updatedAt:now()},{merge:true});return owner;}
+  const credentials=tokens(req.cookies);
   if(!credentials.accessToken||!credentials.refreshToken)throw error(401,'not_authenticated','Accedi nuovamente a eWeLink per attivare i timer.');
   const ref=accounts().doc(owner);
   await db().runTransaction(async t=>{
@@ -154,6 +157,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
  async function access(owner,{scheduled=false,inspection=false,rejectedToken}={}){
   if(scheduled&&inspection)throw error(403,"app_readonly","La consultazione amministrativa non può eseguire timer.");
   const linkedAccount=inspection?null:await authorizeOwner(owner);
+  const local=await localProvider()?.credentials(owner);if(local){const data=(await accounts().doc(owner).get()).data();if(scheduled&&(!data||data.automationEnabled===false))throw error(401,'automation_disabled','Esecuzione automatica disattivata.');return local;}
   const ref=accounts().doc(owner),claim=crypto.randomUUID();
   const result=await db().runTransaction(async t=>{
    const snap=await t.get(ref),data=snap.exists?snap.data():{};
@@ -198,6 +202,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   }
  }
  async function linkedDevices(token){
+  if(localProvider()?.supports(token))return [];
   const owner=await identity({cookies:{ewelink_access:token}}),snap=await db().collection('ewelinkLinkedDevices').doc(owner).get();
   return (snap.data()?.devices||[]).filter(d=>typeof d.id==='string'&&/^[a-f0-9]{10}$/i.test(d.id)&&typeof d.workspaceId==='string').slice(0,20);
  }
@@ -227,7 +232,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   const off=actions.filter(a=>a.state==='off'&&!a.pulse&&a.kind!=='gate'&&!isImpulseDevice(a.deviceId));
   if(!off.length)return {actions,protected:[],message:null};
   const owner=await identity({cookies:{ewelink_access:token}}),account=await accounts().doc(owner).get();
-  if(!automatic(account.data()))return {actions,protected:[],message:null};
+  if(localProvider()?.supports(token)?account.data()?.automationEnabled===false:!automatic(account.data()))return {actions,protected:[],message:null};
   await ensureSolar(owner,{id:'manual',kind:'scene',targets:off});
   const records=expandedSchedules(await owned(owner)),time=now(),protectedChannels=[],safe=[];
   for(const action of actions){
@@ -303,7 +308,7 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
   });
   return changedFolderId;
  }
- async function list(req){const owner=await identity(req),account=await accounts().doc(owner).get(),records=await owned(owner),org=organizationData(await organizations().doc(owner).get()),colors=appearanceData(await appearances().doc(owner).get());await archiveCompleted(records);return {ok:true,targetColors:colors,accountId:owner,timeZone:core.ZONE,connected:account.exists&&automatic(account.data()),connectionError:account.data()?.lastError||null,folders:org.folders.sort((a,b)=>a.name.localeCompare(b.name,'it')),organizationRevision:org.revision,schedules:records.filter(s=>!s.archivedAt&&!completedOnce(s)).map(s=>({...visible(s),folderId:folderForSchedule(org,s.id)})).sort((a,b)=>a.nextAt-b.nextAt)};}
+ async function list(req){const owner=await identity(req),account=await accounts().doc(owner).get(),records=await owned(owner),org=organizationData(await organizations().doc(owner).get()),colors=appearanceData(await appearances().doc(owner).get());await archiveCompleted(records);return {ok:true,targetColors:colors,accountId:owner,timeZone:core.ZONE,connected:account.exists&&(localProvider()?.supports(req.cookies.ewelink_access)?account.data()?.automationEnabled!==false:automatic(account.data())),connectionError:localProvider()?.supports(req.cookies.ewelink_access)?null:account.data()?.lastError||null,folders:org.folders.sort((a,b)=>a.name.localeCompare(b.name,'it')),organizationRevision:org.revision,schedules:records.filter(s=>!s.archivedAt&&!completedOnce(s)).map(s=>({...visible(s),folderId:folderForSchedule(org,s.id)})).sort((a,b)=>a.nextAt-b.nextAt)};}
  async function mutate(req){
   const owner=await identity(req),op=req.body?.op;
   if(op==='color'){
@@ -482,10 +487,10 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
      if(!runScene)throw new Error('Esecuzione scenari non disponibile.');
      await recovery.renew(ref,claim,s);const result=await runScene(s,credentials,actions);
      if(!result||result.status!=='succeeded')throw new Error('Scenario interrotto: '+(result?.completed||0)+'/'+actions.length+' comandi accettati. '+(result?.message||'Verifica l’esito.'));
-     status='succeeded';message='Scenario completato: '+result.completed+' comandi accettati da eWeLink.';
+     status='succeeded';message='Scenario completato: '+result.completed+(localProvider()?.supports(credentials.accessToken)?' comandi confermati da Home Assistant.':' comandi accettati da eWeLink.');
     }else{
      const action=actions[0],params=action.kind==='multi'?{switches:action.outlets.map(outlet=>({outlet,switch:action.state}))}:{switch:action.state};
-     await recovery.renew(ref,claim,s);await api('/v2/device/thing/status',credentials.accessToken,{type:1,id:action.deviceId,params});status='succeeded';message=action.pulse?'Impulso accettato da eWeLink.':(action.state==='on'?'Accensione':'Spegnimento')+' accettato da eWeLink.';
+     await recovery.renew(ref,claim,s);await api('/v2/device/thing/status',credentials.accessToken,{type:1,id:action.deviceId,params});status='succeeded';message=localProvider()?.supports(credentials.accessToken)?(action.state==='on'?'Accensione':'Spegnimento')+' confermato dallo stato Home Assistant.':action.pulse?'Impulso accettato da eWeLink.':(action.state==='on'?'Accensione':'Spegnimento')+' accettato da eWeLink.';
     }
    }
   }catch(e){status='unknown';message=e.status===401?'Accesso scaduto: ricollega eWeLink.':String(e.message||'Esito non confermato.').slice(0,250);}
@@ -514,9 +519,9 @@ module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,ap
    await recovery.monitorActive();
    const pending=scheduleIndex.due('recoveryAt',now(),20)||await schedules().where('recoveryAt','<=',now()).limit(20).get();for(const doc of pending.docs)try{await recovery.run(doc.ref);}catch(e){firebaseQuota.record(e);console.error('Ripristino temporaneamente in attesa: nessun comando non verificato.');}
    // Mantiene valida l'autorizzazione anche per prenotazioni lontane nel tempo.
-   const renewals=accountIndex.due('renewAt',now(),5)||await accounts().where('renewAt','<=',now()).limit(5).get();
-   for(const doc of renewals.docs){
-    const data=doc.data();
+   const renewals=accountIndex.due('renewAt',now())||await accounts().where('renewAt','<=',now()).limit(25).get();
+   let renewed=0;for(const doc of renewals.docs){
+    const data=doc.data();if(await localProvider()?.isConfigured?.(doc.id))continue;if(renewed++>=5)break;
     const linkedAccount=await authorizeOwner(doc.id).catch(()=>false);
     if(linkedAccount===false)continue;
     if(!data.revoked&&(linkedAccount||automatic(data)||(data.browserUntil||0)>now()))await access(doc.id).catch(()=>{});
