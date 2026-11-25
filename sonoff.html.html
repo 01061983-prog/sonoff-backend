@@ -16,6 +16,7 @@
   <script src="account-auth.js?v=95"></script>
   <script defer src="ha-settings.js?v=96"></script>
   <script src="request-backoff.js?v=94"></script>
+  <script src="command-feedback.js?v=97"></script>
   <link rel="stylesheet" href="account-auth.css?v=91">
   <script src="text-size.js?v=64"></script>
   <script src="scene-pages.js?v=46"></script>
@@ -412,7 +413,9 @@
         let error = null, result = null;
         try { result = await apiRequest(path, body); localDeviceCommand.percent = 50; renderDeviceCards(); }
         catch (err) { error = err; }
-        const refreshed = await loadDevices();
+        const confirmed = !error && window.PaceCommandFeedback?.(currentDevices,result,body);
+        if(confirmed)applyDeviceSnapshot({devices:confirmed});
+        const refreshed = confirmed ? true : await loadDevices();
         if (!error && refreshed) deviceProgressDone.set(body.deviceId,{until:Date.now()+1800,outlets:body.outlets||null});
         setMessage(error ? "Comando non confermato: " + error.message : refreshed
             ? result?.protectionMessage || "Comando accettato. Stato aggiornato dal server."
