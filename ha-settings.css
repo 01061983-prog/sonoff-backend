@@ -1,0 +1,42 @@
+.pace-ha-dialog{box-sizing:border-box;width:min(650px,calc(100vw - 28px));max-width:650px;max-height:calc(100dvh - 40px);padding:0;border:1px solid #e3e6eb;border-radius:26px;background:#fff;color:var(--text-main,#252b35);font:inherit;box-shadow:0 24px 90px #20242c30;overflow:auto}
+.pace-ha-dialog::backdrop{background:#202a3570;backdrop-filter:blur(4px)}
+.pace-ha-dialog .ha-header{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:14px;padding:24px 26px;background:#fff;border-bottom:1px solid #edf0f3}
+.pace-ha-dialog .ha-header-mark{display:grid;place-items:center;flex:none;width:48px;height:48px;border-radius:15px;background:#fff0e5;color:#b94712;font-size:38px;line-height:1;font-weight:600}
+.pace-ha-dialog .ha-header p{margin:0 0 5px;color:#687180;font-size:.65rem;letter-spacing:.13em;font-weight:700;line-height:1.4}
+.pace-ha-dialog .ha-header h2{margin:0;font-size:1.5rem;letter-spacing:-.03em;line-height:1.25}
+.pace-ha-dialog .ha-close{margin-left:auto;flex:none;min-width:44px;min-height:44px;padding:0;border:1px solid #e3e6eb;border-radius:50%;background:white;color:#687180;font-size:26px;font-weight:400}
+.pace-ha-dialog .ha-body{padding:24px 26px;display:flex;flex-direction:column;gap:24px}
+.pace-ha-dialog p{line-height:1.6;margin:0;font-size:.9rem}
+.pace-ha-dialog .ha-connection{display:flex;align-items:flex-start;gap:12px;padding:18px;border:1px solid #ead8ad;border-radius:16px;background:#fff9eb;color:#765511}
+.pace-ha-dialog .ha-connection.is-connected{background:#edf8f1;border-color:#cde8d8;color:#17684a}
+.pace-ha-dialog .ha-connection h3{margin:0 0 5px;font-size:1rem;letter-spacing:-.01em}
+.pace-ha-dialog .ha-connection p{font-size:.82rem;color:inherit}
+.pace-ha-dialog .ha-connection-dot{flex:none;width:10px;height:10px;border-radius:50%;margin-top:6px;background:currentColor;box-shadow:0 0 0 4px #ffffffb0}
+.pace-ha-dialog .ha-section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:13px}
+.pace-ha-dialog .ha-section-heading h3{margin:0;font-size:.88rem;font-weight:650;letter-spacing:0}
+.pace-ha-dialog .ha-section-heading>span{display:grid;place-items:center;min-width:28px;height:26px;padding:0 8px;border-radius:9px;background:#f0f2f5;color:#687180;font-size:.75rem;font-weight:700}
+.pace-ha-dialog .ha-device-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;padding:0;margin:0;list-style:none}
+.pace-ha-dialog .ha-device-list li{padding:12px 14px;border:1px solid #e8ebef;border-radius:12px;background:#fafbfc;font-size:.87rem;overflow-wrap:anywhere}
+.pace-ha-dialog .ha-actions{display:flex;flex-wrap:wrap;gap:10px}
+.pace-ha-dialog button{font:inherit;font-weight:600;font-size:.85rem;min-height:48px;border-radius:12px;padding:12px 16px;white-space:normal}
+.pace-ha-dialog .ha-actions>button{flex:1}
+.pace-ha-dialog button.primary-button{background:#b94712;border-color:#b94712;color:#fff}
+.pace-ha-dialog button.primary-button:hover:not(:disabled){background:#96380c;color:#fff}
+.pace-ha-dialog .ha-advanced{border-top:1px solid #edf0f3;padding-top:10px;color:#687180}
+.pace-ha-dialog .ha-advanced summary{display:flex;align-items:center;min-height:44px;cursor:pointer;font-size:.8rem;gap:10px}
+.pace-ha-dialog .ha-advanced summary:before{content:'›';font-size:20px;transition:transform .15s}
+.pace-ha-dialog .ha-advanced[open] summary:before{transform:rotate(90deg)}
+.pace-ha-dialog .ha-advanced p{font-size:.8rem;margin:4px 0 12px}
+.pace-ha-dialog .ha-found{border:1px solid #e3e6eb;border-radius:16px;padding:16px;margin:0;min-width:0}
+.pace-ha-dialog .ha-found legend{padding:0 6px;font-weight:650;font-size:.9rem}
+.pace-ha-dialog .ha-found-row{display:flex;align-items:center;gap:12px;padding:12px 0;min-height:48px;border-bottom:1px solid #edf0f3;cursor:pointer}
+.pace-ha-dialog input[type=checkbox]{width:21px;height:21px;flex:none;accent-color:#b94712}
+.pace-ha-dialog .ha-found-row>span{min-width:0;overflow-wrap:anywhere;font-size:.87rem}
+.pace-ha-dialog .ha-state{margin-left:auto;flex:none;background:#f0f2f5;padding:5px 8px;border-radius:7px;color:#687180;font-size:.72rem}
+.pace-ha-dialog .ha-found>button{width:100%;margin-top:16px}
+.pace-ha-dialog .ha-notice{margin:0 26px 20px;padding:12px 14px;border-radius:12px;background:#f2f5f8;color:#526171;font-size:.82rem;overflow-wrap:anywhere}
+.pace-ha-dialog .ha-notice:empty{display:none}
+.pace-ha-dialog .ha-notice.is-error{background:#fff0ed;color:#a33229}
+.pace-ha-dialog .ha-footer{position:sticky;bottom:0;display:flex;justify-content:flex-end;padding:16px 26px;border-top:1px solid #edf0f3;background:#fff}
+.pace-ha-dialog textarea{box-sizing:border-box;max-width:100%;padding:14px;border:1px solid #d7dde4;border-radius:12px;background:#f7f8fa;color:#252b35;font:12px/1.5 ui-monospace,monospace;resize:vertical}
+@media(max-width:520px){.pace-ha-dialog{max-height:calc(100dvh - 24px);border-radius:20px}.pace-ha-dialog .ha-header{padding:18px;gap:12px}.pace-ha-dialog .ha-header h2{font-size:1.25rem}.pace-ha-dialog .ha-body{padding:18px;gap:20px}.pace-ha-dialog .ha-actions{flex-direction:column}.pace-ha-dialog .ha-notice{margin:0 18px 18px}.pace-ha-dialog .ha-footer{padding:14px 18px}.pace-ha-dialog .ha-footer>button{width:100%}.pace-ha-dialog .ha-device-list{gap:8px}.pace-ha-dialog .ha-device-list li{padding:11px;font-size:.82rem}.pace-ha-dialog .ha-state{white-space:normal;max-width:95px}}
