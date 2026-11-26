@@ -1010,7 +1010,7 @@ const PORT = process.env.PORT || 3000;
 
 if(process.env.PACE_HA_BRIDGE_ENABLED==='true'){
  if(!appAccounts||!programming)throw Error('Home Assistant richiede account PACE e programmazioni attivi.');
- homeAssistant=require('./home-assistant/index.cjs')({app,db:getSceneDatabase,accounts:appAccounts,programming,secret:APPSECRET,appid:APPID,origin:new URL(HOME).origin,allowedAccounts:(process.env.PACE_HA_ALLOWED_ACCOUNT_IDS||'').split(',').filter(Boolean),allowedEmails:(process.env.PACE_HA_ALLOWED_ACCOUNT_EMAILS||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean)});
+ homeAssistant=require('./home-assistant/index.cjs')({app,db:getSceneDatabase,accounts:appAccounts,programming,secret:APPSECRET,appid:APPID,origin:new URL(HOME).origin,allowedAccounts:(process.env.PACE_HA_ALLOWED_ACCOUNT_IDS||'').split(',').filter(Boolean),allowedEmails:(process.env.PACE_HA_ALLOWED_ACCOUNT_EMAILS||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean).concat(process.env.PACE_HA_LANDRIANO_ENABLED==='true'?['gabriele.maini83@gmail.com']:[])});
 }
 const httpServer=app.listen(PORT, () => console.log("Server avviato sulla porta", PORT));
 homeAssistant?.bridge.attach(httpServer);
