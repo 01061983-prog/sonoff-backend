@@ -382,6 +382,16 @@ module.exports=function createAccounts({db,auth,secret,appid,adminEmail,origin,w
   app.get('/api/app/accounts',wrap(async(req,res)=>res.json(await manage(req,res))));
   app.post('/api/app/accounts',wrap(async(req,res)=>res.json(await manage(req,res))));
  }
+ async function bridgeManager(req,owner){
+  const a=await session(req),selected=selectedConnection(req,a),write=!['GET','HEAD'].includes(req.method);
+  if(a.status!=='active'||req.appReadOnly||!await canReconnect(req))throw fail(403,'app_forbidden','Non hai il permesso di gestire il collegamento di questa plancia.');
+  if(!selected||selected.owner!==owner)throw fail(403,'app_provider_forbidden','Seleziona la plancia da gestire.');
+  const account=req.headers?.['x-app-account'],provider=req.headers?.['x-app-provider'];
+  if(account&&account!==a.id||write&&account!==a.id)throw fail(409,'app_context_changed','La plancia aperta è cambiata. Ricarica la pagina.');
+  if(provider&&provider!==owner||write&&provider!==owner)throw fail(409,'app_provider_context_changed','Il collegamento selezionato è cambiato. Ricarica la pagina.');
+  if(write)csrf(req);
+  return {canConfigure:desktop(req)&&await isAdmin(req.appActor)};
+ }
  async function bridgeAdmin(req){const a=await admin(req);if(req.method!=='GET'&&req.method!=='HEAD')csrf(req);return a;}
- return {install,bridgeAdmin,session,provider,canReconnect,bind,selectedConnection,connectionIdentity,climateOwner,climateScheduleOwner,selectConnection,linkIntent,context,authorizeOwner,tokenAllowed,sealPending,openPending,csrf,publicProfile,providerAccount,accountId};
+ return {install,bridgeManager,bridgeAdmin,session,provider,canReconnect,bind,selectedConnection,connectionIdentity,climateOwner,climateScheduleOwner,selectConnection,linkIntent,context,authorizeOwner,tokenAllowed,sealPending,openPending,csrf,publicProfile,providerAccount,accountId};
 };
