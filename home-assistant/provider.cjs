@@ -1,5 +1,5 @@
 'use strict';
-const crypto=require('node:crypto'),{fail,id}=require('./protocol.cjs');
+const crypto=require('node:crypto'),{fail,id,legacyChannels}=require('./protocol.cjs');
 module.exports=function createProvider({load,authorize,bridge,secret}){
  const prefix='paceha1:',sign=(owner,revision)=>crypto.createHmac('sha256',secret).update('pace-ha:'+owner+':'+revision).digest('hex');
  const supports=token=>typeof token==='string'&&token.startsWith(prefix);
@@ -14,7 +14,7 @@ module.exports=function createProvider({load,authorize,bridge,secret}){
   async owner(token){return (await resolve(token)).owner;},
   async families(token){const c=await resolve(token);return homes(c);},
   async devices(token,homes,{deviceIds}={}){const c=await resolve(token);if(homes?.some(h=>h.id!==c.workspaceId&&!c.workspaces?.some(w=>w.id===h.id)))throw fail(403,'workspace_forbidden');return normalized(c,bridge.snapshot(c)).filter(d=>!deviceIds||deviceIds.includes(d.deviceid));},
-  async assertChannels(token,deviceId,outlets){const c=await resolve(token),d=c.devices.find(d=>d.deviceId===deviceId);if(!d)throw fail(403,'ha_device','Dispositivo non associato a questa plancia.');if(outlets!==null&&outlets!==undefined&&(!Array.isArray(outlets)||outlets.length!==1||outlets[0]!==0))throw fail(400,'ha_channels','MINIR4 dispone soltanto del canale fisico 1.');},
+  async assertChannels(token,deviceId,outlets){const c=await resolve(token),d=c.devices.find(d=>d.deviceId===deviceId);if(!d)throw fail(403,'ha_device','Dispositivo non associato a questa plancia.');if(outlets!==null&&outlets!==undefined&&(!Array.isArray(outlets)||outlets.length!==1||outlets[0]!==0)&&!legacyChannels(d,outlets))throw fail(400,'ha_channels','MINIR4 dispone soltanto del canale fisico 1.');},
   async call(path,token,body){
    const c=await resolve(token),url=new URL(path,'https://provider.invalid');
    if(url.pathname==='/v2/family'&&body===undefined)return {error:0,data:{familyList:homes(c)}};
@@ -22,7 +22,10 @@ module.exports=function createProvider({load,authorize,bridge,secret}){
     if(body.type!==1||typeof body.id!=='string'||!body.params||typeof body.params!=='object')throw fail(400,'ha_command');
     const keys=Object.keys(body.params);let state;
     if(keys.length===1&&keys[0]==='switch')state=body.params.switch;
-    else if(keys.length===1&&keys[0]==='switches'&&Array.isArray(body.params.switches)&&body.params.switches.length===1&&body.params.switches[0].outlet===0&&Object.keys(body.params.switches[0]).every(k=>['outlet','switch'].includes(k)))state=body.params.switches[0].switch;
+    else if(keys.length===1&&keys[0]==='switches'&&Array.isArray(body.params.switches)){
+     const channels=body.params.switches,d=c.devices.find(d=>d.deviceId===body.id);
+     if(channels.every(s=>s&&typeof s==='object'&&Object.keys(s).every(k=>['outlet','switch'].includes(k)))&&((channels.length===1&&channels[0].outlet===0)||legacyChannels(d,channels.map(s=>s.outlet)))&&channels.every(s=>s.switch===channels[0].switch))state=channels[0].switch;
+    }
     if(!['on','off'].includes(state))throw fail(400,'ha_command','Sono consentiti soltanto comandi espliciti ON/OFF al relè verificato.');
     const result=await bridge.command(c,{deviceId:body.id,state});return {error:0,data:result,provider:'home_assistant'};
    }

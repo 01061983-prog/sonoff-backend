@@ -20,8 +20,11 @@ function binding(input){
  if(excludedDevices!==undefined&&(!Array.isArray(excludedDevices)||excludedDevices.length>200||excludedDevices.some(d=>!d||typeof d.deviceId!=='string'||! /^[a-f0-9]{10}$/.test(d.deviceId)||ids.has(d.deviceId)||typeof d.name!=='string'||!d.name.trim()||d.name.length>100||!Array.isArray(d.outlets)||!d.outlets.length||d.outlets.some(o=>!Number.isInteger(o)||o<0||o>3)||new Set(d.outlets).size!==d.outlets.length)||new Set(excludedDevices.map(d=>d.deviceId)).size!==excludedDevices.length))throw fail(400,'ha_exclusions','Dispositivi esclusi non validi.');
  return {owner:input.owner,accountId:input.accountId,workspaceId:input.workspaceId,workspaceName:input.workspaceName.trim(),devices,...(excludedDevices?{excludedDevices:excludedDevices.map(d=>({deviceId:d.deviceId,name:d.name.trim(),outlets:d.outlets}))}:{}),...(workspaces?{workspaces:workspaces.map(h=>({id:h.id,name:h.name.trim()}))}:{})};
 }
+// Older cloud catalogues advertised four channels for a single-relay MINIR4.
+// Accept only the complete historical group, never an isolated virtual channel.
+const legacyChannels=(d,outlets)=>d?.model==='MINIR4'&&Array.isArray(outlets)&&outlets.length===4&&new Set(outlets).size===4&&outlets.every(o=>Number.isInteger(o)&&o>=0&&o<=3);
 function safeState(s){
  if(!s||!entity(s.entity_id)||typeof s.state!=='string')throw fail(400,'ha_state','Stato Home Assistant non valido.');
  return {entity_id:s.entity_id,state:['on','off','unavailable','unknown'].includes(s.state)?s.state:'unknown',last_updated:typeof s.last_updated==='string'?s.last_updated:null};
 }
-module.exports={fail,hash,id,entity,binding,safeState};
+module.exports={fail,hash,id,entity,binding,safeState,legacyChannels};
