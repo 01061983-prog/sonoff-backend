@@ -15,7 +15,7 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=65">
   <script src="account-auth.js?v=102"></script>
   <link rel="stylesheet" href="ha-settings.css?v=98">
-  <script defer src="ha-settings.js?v=102"></script>
+  <script defer src="ha-settings.js?v=103"></script>
   <script src="request-backoff.js?v=94"></script>
   <script src="command-feedback.js?v=97"></script>
   <link rel="stylesheet" href="account-auth.css?v=91">
@@ -535,9 +535,9 @@
         let stateHtml = "—";
         let controlHtml = "—";
 
-        if (d.deviceid === "1000ac81a0") {
+        if (isPulseDevice(d)) {
             stateHtml = "Posizione non rilevata";
-            controlHtml = `<button data-device-command data-offline="${!d.online}" onclick="toggleDevice(${jsArg(d.deviceid)}, true)">Apri cancello</button>`;
+            controlHtml = `<button data-device-command data-offline="${!d.online}" onclick="toggleDevice(${jsArg(d.deviceid)}, true)">Invia impulso</button>`;
         } else if (d.params && typeof d.params.switch !== "undefined") {
             const isOn = d.params.switch === "on";
             stateHtml = isOn
@@ -709,7 +709,7 @@
         }
 
         currentDevices.forEach(dev => {
-            const isGate  = dev.deviceid === "1000ac81a0";
+            const isGate  = isPulseDevice(dev);
             const isMulti = dev.params && Array.isArray(dev.params.switches);
 
             const row = document.createElement("div");
@@ -729,7 +729,7 @@
                         <option value="none">Nessuna azione</option>
                         ${
                             isGate
-                                ? '<option value="gate">Comando cancello ON</option>'
+                                ? '<option value="gate">Invia impulso</option>'
                                 : isMulti
                                     ? '<option value="multi_on">Tutti ON</option><option value="multi_off">Tutti OFF</option>' + dev.params.switches.map(channel => `<option value="pulse_${channel.outlet}">Impulso CH ${channel.outlet + 1}</option>`).join('')
                                     : '<option value="on">ON</option><option value="off">OFF</option><option value="pulse_single">Impulso</option>'
@@ -1155,7 +1155,7 @@
     }
     function makeSceneTile(scene, manage = false) {
         const tile = document.createElement("div");
-        const pulse = scene.actions.some(action => action.kind === "gate" || action.pulse === true);
+        const pulse = scene.actions.some(action => action.kind === "gate" || action.pulse === true || isPulseDevice(currentDevices.find(d=>d.deviceid===action.deviceId)));
         const state = sceneState(scene);
         const availability = sceneAvailability(scene);
         const unavailable = availability.offline || availability.missing;
@@ -1258,8 +1258,9 @@
         if (name === "climate") window.Climate?.open();
         window.scrollTo({top: 0, behavior: "instant"});
     }
+    function isPulseDevice(dev){return dev?.deviceid==='1000ac81a0'||dev?.controlMode==='pulse';}
     function deviceOn(dev) {
-        if (dev.deviceid === "1000ac81a0") return false;
+        if (isPulseDevice(dev)) return false;
         return dev.params?.switch === "on" || dev.params?.switches?.some(channel => channel.switch === "on");
     }
     function deviceChannels(dev) {
@@ -1280,7 +1281,7 @@
         return filter==='all'||filter==='online'&&dev.online||filter==='offline'&&!dev.online||['owned','shared'].includes(filter)&&ownershipKind(dev)===filter;
     }
     function deviceCard(dev) {
-        const gate = dev.deviceid === '1000ac81a0', channels = deviceChannels(dev), multi = channels.length > 0 && !gate;
+        const gate = isPulseDevice(dev), channels = deviceChannels(dev), multi = channels.length > 0 && !gate;
         const values = multi ? channels.map(outlet=>dev.params.switches.find(c=>c.outlet===outlet)?.switch) : [gate ? dev.params?.switches?.find(c=>c.outlet===0)?.switch ?? dev.params?.switch : dev.params?.switch];
         const known = (devicesFresh || devicesLoading) && dev.online && values.every(value=>['on','off'].includes(value));
         const allOn = known && values.every(value=>value==='on'), someOn = known && values.some(value=>value==='on');
@@ -1289,7 +1290,7 @@
         const state = pending ? 'running' : !dev.online ? 'offline' : !gate && someOn ? 'on' : 'off';
         const label = pending ? 'Comando in esecuzione…' : !dev.online ? 'Non in linea' : gate ? 'Comando a impulso · a riposo' : !known ? 'Stato non disponibile' : allOn ? 'Acceso' : someOn ? 'Parzialmente acceso' : 'Spento';
         const progress = pending || finished ? commandProgress(pending ? localDeviceCommand.percent : 100) : '<span class="pad-dot"></span>';
-        return `<article class="device-card device-tile"><button type="button" class="device-primary scenario-pad state-${state}" data-device-primary="${escapeHtml(dev.deviceid)}" data-device-command data-offline="${!dev.online}" ${!dev.online?'disabled':''} aria-busy="${pending}" aria-label="${escapeHtml(dev.name || 'Dispositivo')}. ${label}. ${ownershipLabel(dev)}${dev.ownership?.sharedToOthers===true&&ownershipKind(dev)==='owned'?'. Condiviso da te':''}${multi ? '. Tocco: tutti i canali. Pressione prolungata: scegli canali.' : ''}" onclick="handleDeviceTap(event,${jsArg(dev.deviceid)})"><span class="pad-top"><span class="pad-icon">${icon(gate?'gate':'bulb')}</span>${ownershipBadge(dev)}${progress}</span><span class="pad-name">${escapeHtml(dev.name || 'Dispositivo')}</span><span class="pad-state">${label}</span><span class="pad-result">${gate ? 'La posizione del cancello non è rilevata' : multi ? 'Tocco: tutti i canali' : 'Tocca per accendere o spegnere'}</span></button>${multi ? `<button type="button" class="device-channel-options secondary-button" onclick="openChannelPicker(${jsArg(dev.deviceid)})" aria-label="Scegli canali di ${escapeHtml(dev.name || 'Dispositivo')}">Scegli canali · tieni premuto</button>` : ''}</article>`;
+        return `<article class="device-card device-tile"><button type="button" class="device-primary scenario-pad state-${state}" data-device-primary="${escapeHtml(dev.deviceid)}" data-device-command data-offline="${!dev.online}" ${!dev.online?'disabled':''} aria-busy="${pending}" aria-label="${escapeHtml(dev.name || 'Dispositivo')}. ${label}. ${ownershipLabel(dev)}${dev.ownership?.sharedToOthers===true&&ownershipKind(dev)==='owned'?'. Condiviso da te':''}${multi ? '. Tocco: tutti i canali. Pressione prolungata: scegli canali.' : ''}" onclick="handleDeviceTap(event,${jsArg(dev.deviceid)})"><span class="pad-top"><span class="pad-icon">${icon(gate?'gate':'bulb')}</span>${ownershipBadge(dev)}${progress}</span><span class="pad-name">${escapeHtml(dev.name || 'Dispositivo')}</span><span class="pad-state">${label}</span><span class="pad-result">${gate ? 'La posizione non è rilevata · tocca per inviare un impulso' : multi ? 'Tocco: tutti i canali' : 'Tocca per accendere o spegnere'}</span></button>${multi ? `<button type="button" class="device-channel-options secondary-button" onclick="openChannelPicker(${jsArg(dev.deviceid)})" aria-label="Scegli canali di ${escapeHtml(dev.name || 'Dispositivo')}">Scegli canali · tieni premuto</button>` : ''}</article>`;
     }
     function renderDeviceCards() {
         const search = document.getElementById("deviceSearch").value.trim().toLocaleLowerCase("it");
@@ -1556,7 +1557,7 @@
         const device=currentDevices.find(device=>device.deviceid===id);
         if(!device?.online){setMessage('Dispositivo non in linea.','error');return;}
         deviceTapTimes.set(id,Date.now());
-        if(id==='1000ac81a0'){void toggleDevice(id,true);return;}
+        if(isPulseDevice(device)){void toggleDevice(id,true);return;}
         const channels=deviceChannels(device);
         const values=channels.length?channels.map(outlet=>device.params.switches.find(channel=>channel.outlet===outlet)?.switch):[device.params?.switch];
         if(values.some(value=>!['on','off'].includes(value))){setMessage('Stato del dispositivo non disponibile. Aggiorna prima di inviare un comando.','error');return;}
@@ -1565,7 +1566,7 @@
     }
     function openChannelPicker(id) {
         const device=currentDevices.find(device=>device.deviceid===id),channels=device?deviceChannels(device):[];
-        if(!device||!channels.length||id==='1000ac81a0')return;
+        if(!device||!channels.length||isPulseDevice(device))return;
         if(commandBusy||activeCloudExecution()){setMessage('Attendi la fine del comando.','error');return;}
         channelDeviceId=id;
         document.getElementById('channelDialogTitle').textContent=device.name+' · scegli canali';
@@ -1599,14 +1600,14 @@
             const outside=event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom;
             if(gesture.cancelled||outside){deviceSuppressedClicks.set(gesture.id,Date.now()+800);return;}
             const device=currentDevices.find(device=>device.deviceid===gesture.id);
-            if(Date.now()-gesture.time>=550&&device&&deviceChannels(device).length&&gesture.id!=='1000ac81a0'){
+            if(Date.now()-gesture.time>=550&&device&&deviceChannels(device).length&&!isPulseDevice(device)){
                 deviceSuppressedClicks.set(gesture.id,Date.now()+800);event.preventDefault();openChannelPicker(gesture.id);
             }
         });
         document.addEventListener('contextmenu',event=>{
             const button=event.target.closest?.('[data-device-primary]');
             const device=currentDevices.find(device=>device.deviceid===button?.dataset.devicePrimary);
-            if(device&&deviceChannels(device).length&&device.deviceid!=='1000ac81a0'){
+            if(device&&deviceChannels(device).length&&!isPulseDevice(device)){
                 event.preventDefault();deviceGesture=null;deviceSuppressedClicks.set(device.deviceid,Date.now()+800);
                 if(!document.getElementById('channelDialog').open)openChannelPicker(device.deviceid);
             }
@@ -2085,7 +2086,7 @@
     }
     function programmingDeviceChanged(selected=[],savedAction){
         const {device,scene,daikin}=programmingTarget(),actionSelect=programmingElement('Action'),previous=savedAction||actionSelect.value;
-        const choices=daikin?[['on','Accendere lo split'],['off','Spegnere lo split']]:scene?(scene.mode==='toggle'?[['on','Accendere lo scenario'],['off','Spegnere lo scenario']]:[['run','Eseguire lo scenario']]):[['on','Accendere'],['off','Spegnere'],['pulse','Inviare un impulso']];
+        const choices=daikin?[['on','Accendere lo split'],['off','Spegnere lo split']]:scene?(scene.mode==='toggle'?[['on','Accendere lo scenario'],['off','Spegnere lo scenario']]:[['run','Eseguire lo scenario']]):device?.controlMode==='pulse'?[['pulse','Inviare un impulso']]:[['on','Accendere'],['off','Spegnere'],['pulse','Inviare un impulso']];
         actionSelect.innerHTML=choices.map(([value,label])=>`<option value="${value}">${label}</option>`).join('');actionSelect.value=choices.some(([value])=>value===previous)?previous:choices[0][0];
         programmingElement('Details').hidden=!device&&!scene&&!daikin;programmingElement('SceneNote').hidden=!scene;
         const daikinBox=programmingElement('Daikin');if(daikin)window.Climate.renderProgramming(daikinBox,daikin.id,programmingEditing?.deviceId===daikin.id?programmingEditing.daikin:null);else daikinBox.innerHTML='';

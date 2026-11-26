@@ -1,5 +1,5 @@
 'use strict';
-const createHA=require('./ha-client.cjs'),createJournal=require('./journal.cjs'),{entity}=require('../protocol.cjs');
+const createHA=require('./ha-client.cjs'),createJournal=require('./journal.cjs'),{entity,pulseProfile}=require('../protocol.cjs');
 module.exports=function createAgent({bridgeURL,agentId,bridgeToken,entities,restURL='http://supervisor/core/api',websocketURL='ws://supervisor/core/websocket',haToken,journalFile='/data/commands.json',WebSocket=globalThis.WebSocket,fetch=globalThis.fetch,now=Date.now,allowLocalTest=false}){
  const url=new URL(bridgeURL);if((url.protocol!=='wss:'&&!(allowLocalTest&&url.protocol==='ws:'&&['127.0.0.1','localhost'].includes(url.hostname)))||url.username||url.password||url.search||url.pathname!=='/api/ha/bridge')throw Error('An HTTPS/WSS PACE bridge URL is required');
  if(!/^[a-f0-9]{64}$/.test(agentId)||! /^[A-Za-z0-9_-]{43}\.[a-f0-9]{64}$/.test(bridgeToken)||!haToken||!Array.isArray(entities)||!entities.length||entities.some(e=>!entity(e))||new Set(entities).size!==entities.length)throw Error('Invalid local agent configuration');
@@ -9,7 +9,7 @@ module.exports=function createAgent({bridgeURL,agentId,bridgeToken,entities,rest
  ha.events.on('availability',snapshot);ha.events.on('state',state=>{if(snapshotSent)send({type:'states',seq:++seq,states:[state]});});
  function connect(){if(stopped||socket)return;const ws=new WebSocket(bridgeURL);socket=ws;revision=null;snapshotSent=false;seq=0;
   const authTimer=setTimeout(()=>ws.close(),10000);authTimer.unref?.();
-  ws.addEventListener('open',()=>ws.send(JSON.stringify({type:'auth',agentId,token:bridgeToken})));
+  ws.addEventListener('open',()=>ws.send(JSON.stringify({type:'auth',agentId,token:bridgeToken,capabilities:['native-pulse-v1']})));
   ws.addEventListener('message',async event=>{try{
    const m=JSON.parse(event.data);
    if(m.type==='welcome'){
@@ -23,7 +23,9 @@ module.exports=function createAgent({bridgeURL,agentId,bridgeToken,entities,rest
     snapshotSent=false;allowed.clear();for(const e of m.entities)allowed.add(e);await ha.select(m.entities);revision=m.revision;snapshot();return;
    }
    if(m.type!=='command'||revision===null||m.revision!==revision||! /^[a-f0-9-]{36}$/.test(m.id||'')||!allowed.has(m.entityId)||!['on','off'].includes(m.state)||!Number.isFinite(m.expiresAt)||m.expiresAt>now()+15000)throw Error('Invalid command');
-   const result=await journal.run(m,()=>ha.set(m.entityId,m.state));if(socket===ws&&ws.readyState===1)send({type:'result',id:m.id,...result});
+   if(m.mode!==undefined&&m.mode!=='pulse')throw Error('Invalid command mode');
+   const profile=m.mode==='pulse'?pulseProfile({deviceId:m.deviceId,model:m.model,entityId:m.entityId}):null;if(m.mode==='pulse'&&(!profile||m.state!=='on'))throw Error('Invalid pulse');
+   const result=await journal.run(m,()=>profile?ha.pulse(m.entityId,profile.pulseMs):ha.set(m.entityId,m.state));if(socket===ws&&ws.readyState===1)send({type:'result',id:m.id,...result});
   }catch{ws.close(1008,'Invalid bridge command');}});
   const disconnected=()=>{if(socket!==ws)return;socket=null;revision=null;snapshotSent=false;clearTimeout(authTimer);if(heartbeat)clearInterval(heartbeat);heartbeat=null;if(!stopped&&!retry){retry=setTimeout(()=>{retry=null;connect();},Math.min(60000,1000*2**Math.min(failures++,6))+Math.floor(Math.random()*500));retry.unref?.();}};
   ws.addEventListener('close',disconnected);ws.addEventListener('error',()=>{ws.close();disconnected();});

@@ -1,7 +1,7 @@
 'use strict';
 const crypto=require('crypto');
 const core=require('./programming-core'),firebaseQuota=require('./firebase-quota.cjs');
-module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,localProvider=()=>null,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch,authorizeOwner=async()=>null,isImpulseDevice=id=>id==='1000ac81a0',wakeSetTimeout=setTimeout,wakeClearTimeout=clearTimeout,onExecuted=()=>{}}){
+module.exports=function createProgramming({daikin=()=>null,db,api,listDevices,localProvider=()=>null,appid,secret,saveSession,getScene,runScene,region='eu',now=Date.now,solarFetch=globalThis.fetch,authorizeOwner=async()=>null,isImpulseDevice=id=>['1000ac81a0','10028e5762'].includes(id),wakeSetTimeout=setTimeout,wakeClearTimeout=clearTimeout,onExecuted=()=>{}}){
  const astronomy=require('./astronomy')({db,fetch:solarFetch,now});
  const recovery=require('./programming-recovery')({db,now,isImpulseDevice,owned,ensureSolar,access,listDevices,readScheduledDevices,api,runScene,getScene,completedOnce,onManualRequired:(s,message)=>onExecuted(s,'unknown',message),enabledSchedules:()=>scheduleIndex.all()});
  const hash=s=>crypto.createHash('sha256').update(s).digest('hex');

@@ -36,6 +36,20 @@ module.exports=function createHAClient({restURL,websocketURL,token,entities,WebS
    const [rows,registry,devices]=await Promise.all([request('get_states'),request('config/entity_registry/list'),request('config/device_registry/list')]);
    return require('../catalogue.cjs').discover(rows,registry,devices);
   },
+  async pulse(entityId,pulseMs){
+   if(!allowed.has(entityId)||![500,1000].includes(pulseMs))throw fail(403,'ha_entity');
+   if(!ready||states.get(entityId)?.state!=='off')throw fail(503,'ha_device_offline');
+   // Exactly one ON edge. The native inching timer remains enabled on the relay.
+   await request('call_service',{domain:entityId.split('.')[0],service:'turn_on',target:{entity_id:entityId}});
+   await new Promise(resolve=>setTimeout(resolve,pulseMs+150));
+   const read=async()=>{const response=await fetch(restURL+'/states/'+encodeURIComponent(entityId),{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(1500)});if(!response.ok)throw fail(502,'ha_readback');const value=safeState(await response.json());if(value.entity_id!==entityId)throw fail(502,'ha_readback');apply(value);return value;};
+   let state=await read();
+   // OFF releases the contact; it never repeats the ON pulse. This also protects
+   // against a native inching option being changed after configuration.
+   if(state.state==='on'){await request('call_service',{domain:entityId.split('.')[0],service:'turn_off',target:{entity_id:entityId}});state=await read();}
+   if(state.state!=='off')throw fail(504,'ha_uncertain');
+   return state; // HA accepted the command and relay is at rest; position is unknown.
+  },
   async set(entityId,state){
    if(!allowed.has(entityId)||!['on','off'].includes(state))throw fail(403,'ha_entity');if(!ready||!['on','off'].includes(states.get(entityId)?.state))throw fail(503,'ha_device_offline');
    await request('call_service',{domain:entityId.split('.')[0],service:state==='on'?'turn_on':'turn_off',target:{entity_id:entityId}});

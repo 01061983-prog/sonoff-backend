@@ -20,7 +20,7 @@ module.exports=function createBridge({authenticate,now=Date.now,timeout=12000,he
      if(!config||config.agentId!==message.agentId)throw fail(401,'ha_auth');
      if(socket.readyState!==1)return;
      const old=peers.get(config.agentId);if(old){old.socket.close(4001,'Replaced');disconnect(old);}
-     peer={socket,config,ready:false,seenAt:now(),seq:-1,states:new Map(),pending:new Map(),discovery:null,catalogue:[]};peers.set(config.agentId,peer);clearTimer(authTimer);
+     peer={socket,config,capabilities:Array.isArray(message.capabilities)?message.capabilities.filter(c=>c==='native-pulse-v1'):[],ready:false,seenAt:now(),seq:-1,states:new Map(),pending:new Map(),discovery:null,catalogue:[]};peers.set(config.agentId,peer);clearTimer(authTimer);
      send(peer,{type:'welcome',revision:config.revision,entities:entitiesOf(config)});return;
     }
     if(peers.get(peer.config.agentId)!==peer)throw fail(401,'ha_session');
@@ -41,9 +41,9 @@ module.exports=function createBridge({authenticate,now=Date.now,timeout=12000,he
     }
     if(message.type==='result'){
      const job=peer.pending.get(message.id);if(!job)return;
-     if(message.status==='confirmed'){
-      const state=safeState(message.state);if(state.entity_id!==job.entityId||state.state!==job.state)throw fail(400,'ha_confirmation');
-      peer.pending.delete(message.id);clearTimer(job.timer);peer.states.set(state.entity_id,{...state,receivedAt:now()});changed(peer);job.resolve({status:'confirmed',state:state.state,observedAt:now(),source:'home_assistant'});
+     if(message.status==='confirmed'&&!job.pulse||message.status==='pulse_accepted'&&job.pulse){
+      const state=safeState(message.state);if(state.entity_id!==job.entityId||state.state!==(job.pulse?'off':job.state))throw fail(400,'ha_confirmation');
+      peer.pending.delete(message.id);clearTimer(job.timer);peer.states.set(state.entity_id,{...state,receivedAt:now()});changed(peer);job.resolve({status:job.pulse?'pulse_accepted':'confirmed',state:state.state,observedAt:now(),source:'home_assistant'});
      }else {peer.pending.delete(message.id);clearTimer(job.timer);job.reject(fail(message.status==='failed'?502:504,message.status==='failed'?'ha_failed':'ha_uncertain',message.status==='failed'?'Home Assistant non ha eseguito il comando.':'Stato non confermato da Home Assistant. Verifica prima di riprovare.'));}
      return;
     }
@@ -62,8 +62,10 @@ module.exports=function createBridge({authenticate,now=Date.now,timeout=12000,he
    const d=config.devices.find(d=>d.deviceId===deviceId),entityId=d&&channels(d).find(c=>c.outlet===outlet)?.entityId;if(!entityId||!['on','off'].includes(state))throw fail(400,'ha_command');const p=peers.get(config.agentId);
    if(!p||!this.snapshot(config).ready)throw fail(503,'ha_offline','Raspberry o Home Assistant non disponibile. Nessun comando inviato.');
    if(!['on','off'].includes(p.states.get(entityId)?.state))throw fail(503,'ha_device_offline','Il dispositivo non è disponibile in Home Assistant.');
+   const pulse=d.controlMode==='pulse';if(pulse&&(state!=='on'||!p.capabilities.includes('native-pulse-v1')||p.states.get(entityId)?.state!=='off'))throw fail(409,'ha_pulse','Il comando a impulso richiede il ponte aggiornato e il relè a riposo.');
+   if(pulse&&[...p.pending.values()].some(job=>job.entityId===entityId))throw fail(409,'ha_command_pending');
    if(p.pending.has(id))throw fail(409,'ha_command_pending');
-   return new Promise((resolve,reject)=>{const timer=setTimer(()=>{p.pending.delete(id);reject(fail(504,'ha_uncertain','Conferma Home Assistant non ricevuta. Nessun reinvio automatico.'));},timeout);timer.unref?.();p.pending.set(id,{resolve,reject,timer,entityId,state});try{send(p,{type:'command',id,entityId,state,expiresAt:now()+timeout-1000,revision:config.revision});}catch(e){clearTimer(timer);p.pending.delete(id);reject(e);}});
+   return new Promise((resolve,reject)=>{const timer=setTimer(()=>{p.pending.delete(id);reject(fail(504,'ha_uncertain','Conferma Home Assistant non ricevuta. Nessun reinvio automatico.'));},timeout);timer.unref?.();p.pending.set(id,{resolve,reject,timer,entityId,state,pulse});try{send(p,{type:'command',id,entityId,state,...(pulse?{mode:'pulse',deviceId:d.deviceId,model:d.model}:{}),expiresAt:now()+timeout-1000,revision:config.revision});}catch(e){clearTimer(timer);p.pending.delete(id);reject(e);}});
   },
   busy(config){return !!peers.get(config.agentId)?.pending.size;},
   catalogue(config){return peers.get(config.agentId)?.catalogue||[];},
