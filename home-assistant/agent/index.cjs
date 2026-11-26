@@ -13,11 +13,11 @@ module.exports=function createAgent({bridgeURL,agentId,bridgeToken,entities,rest
   ws.addEventListener('message',async event=>{try{
    const m=JSON.parse(event.data);
    if(m.type==='welcome'){
-    if(revision!==null||!Number.isSafeInteger(m.revision)||!Array.isArray(m.entities)||!m.entities.length||m.entities.length>200)throw Error('Invalid mapping');if(m.entities.some(e=>!allowed.has(e))){const found=await ha.discover();catalogue=new Map(found.map(d=>[d.entityId,d]));if(m.entities.some(e=>!allowed.has(e)&&!catalogue.has(e)))throw Error('Mapping differs from local actuators');}allowed.clear();for(const e of m.entities)allowed.add(e);await ha.select(m.entities);
+    if(revision!==null||!Number.isSafeInteger(m.revision)||!Array.isArray(m.entities)||!m.entities.length||m.entities.length>200)throw Error('Invalid mapping');if(m.entities.some(e=>!allowed.has(e))){const found=await ha.discover();catalogue=new Map(found.filter(d=>d.supported!==false).flatMap(d=>(d.channels||[{entityId:d.entityId}]).map(c=>[c.entityId,d])));if(m.entities.some(e=>!allowed.has(e)&&!catalogue.has(e)))throw Error('Mapping differs from local actuators');}allowed.clear();for(const e of m.entities)allowed.add(e);await ha.select(m.entities);
     revision=m.revision;failures=0;clearTimeout(authTimer);snapshot();heartbeat=setInterval(()=>send({type:'heartbeat'}),25000);heartbeat.unref?.();return;
    }
    if(m.type==='heartbeat_ack')return;
-   if(m.type==='discover'){const devices=await ha.discover();catalogue=new Map(devices.map(d=>[d.entityId,d]));send({type:'catalogue',id:m.id,devices});return;}
+   if(m.type==='discover'){const devices=await ha.discover();catalogue=new Map(devices.filter(d=>d.supported!==false).flatMap(d=>(d.channels||[{entityId:d.entityId}]).map(c=>[c.entityId,d])));send({type:'catalogue',id:m.id,devices});return;}
    if(m.type==='configure'){
     if(!Number.isSafeInteger(m.revision)||m.revision<=revision||!Array.isArray(m.entities)||!m.entities.length||m.entities.length>200||m.entities.some(e=>!allowed.has(e)&&!catalogue.has(e)))throw Error('Unapproved entity');
     snapshotSent=false;allowed.clear();for(const e of m.entities)allowed.add(e);await ha.select(m.entities);revision=m.revision;snapshot();return;

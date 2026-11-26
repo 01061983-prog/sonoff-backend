@@ -34,8 +34,7 @@ module.exports=function createHAClient({restURL,websocketURL,token,entities,WebS
   async discover(){
    if(!ready)throw fail(503,'ha_offline');
    const [rows,registry,devices]=await Promise.all([request('get_states'),request('config/entity_registry/list'),request('config/device_registry/list')]);
-   const models=new Map(devices.map(d=>[d.id,d]));
-   return rows.filter(s=>require('../protocol.cjs').entity(s.entity_id)).flatMap(s=>{const e=registry.find(e=>e.entity_id===s.entity_id),d=models.get(e?.device_id),match=s.entity_id.match(/_sonoff_([a-f0-9]{10})_1$/);if(e?.platform!=='sonoff'||d?.model!=='MINIR4'||!match)return [];return [{entityId:s.entity_id,deviceId:match[1],name:String(s.attributes?.friendly_name||s.entity_id).slice(0,100),model:'MINIR4',state:['on','off'].includes(s.state)?s.state:'unknown'}];}).slice(0,200);
+   return require('../catalogue.cjs').discover(rows,registry,devices);
   },
   async set(entityId,state){
    if(!allowed.has(entityId)||!['on','off'].includes(state))throw fail(403,'ha_entity');if(!ready||!['on','off'].includes(states.get(entityId)?.state))throw fail(503,'ha_device_offline');
