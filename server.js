@@ -827,15 +827,21 @@ async function protectManualCommands(token,actions){
   return programming?.protectManual?programming.protectManual(token,actions):{actions,protected:[],message:null};
 }
 async function runCloudScene(context, run, scene, accessToken) {
-  const confirmation=homeAssistant?.provider.supports(accessToken)?'Stato confermato da Home Assistant.':'Comandi accettati da eWeLink.';
+  let confirmation=homeAssistant?.provider.supports(accessToken)?'Stato confermato da Home Assistant.':'Comandi accettati da eWeLink.';
   let completed = 0, failure = null, protectionMessage = null;
   try {
     const linkedRegistry=programming?.linkedDevices?await programming.linkedDevices(accessToken):[];
+    if(homeAssistant?.provider.supports(accessToken)){
+      const devices=await listDevices(accessToken,[context.workspace],{deviceIds:scene.actions.map(a=>a.deviceId),linkedRegistry});
+      scene={...scene,actions:scene.actions.map(action=>{const device=devices.find(d=>d.deviceid===action.deviceId);if(device?.controlMode!=='pulse')return action;if(scene.mode!=='toggle'&&action.state!=='on')throw cloudError(400,'ha_pulse','Il dispositivo richiede un comando a impulso.');return {...action,kind:'gate',pulse:true,state:'on',outlets:[0]};})};
+      if(scene.actions.some(a=>a.pulse))confirmation='Impulso inviato a Home Assistant; posizione non rilevata.';
+    }
     for(const action of scene.actions)await assertLinkedDeviceChannels(accessToken,action.deviceId,action.kind==="multi"?action.outlets:action.kind==="gate"?[0]:null,linkedRegistry);
     if (scene.mode === "toggle") {
       const devices = await listDevices(accessToken, [context.workspace], {deviceIds:scene.actions.map(action=>action.deviceId),linkedRegistry});
       scene={...scene,actions:scene.actions.map(action=>action.kind==='multi'?{...action,outlets:physicalOutlets(action.deviceId,action.outlets)}:action)};
       const states = scene.actions.flatMap(action => {
+        if(action.pulse||action.kind==='gate')return [];
         const device = devices.find(device => device.deviceid === action.deviceId);
         if (!device?.online) throw new Error("Dispositivo non disponibile. Nessun comando inviato.");
         const values = action.kind === "multi" ? action.outlets.map(outlet => device.params.switches?.find(channel=>channel.outlet===outlet)?.switch) : [device.params.switch];
@@ -843,7 +849,7 @@ async function runCloudScene(context, run, scene, accessToken) {
         return values;
       });
       const target = states.every(state=>state==="on") ? "off" : "on";
-      scene = {...scene,actions:scene.actions.map(action=>({...action,state:target}))};
+      scene = {...scene,actions:scene.actions.map(action=>({...action,state:action.pulse||action.kind==='gate'?'on':target}))};
     }
     const guarded=await protectManualCommands(accessToken,scene.actions);
     protectionMessage=guarded.message;

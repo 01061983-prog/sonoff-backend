@@ -56,6 +56,7 @@ function nextEvent(s,after){
 function validate(input,device,now=Date.now()){
  const err=message=>{throw Object.assign(new Error(message),{status:400,code:'invalid_schedule'});};
  if(!input||!device||input.deviceId!==device.deviceid)err('Seleziona un dispositivo del tuo account.');
+ if(device.controlMode==='pulse'&&input.action!=='pulse')err('Questo dispositivo richiede un comando a impulso.');
  if(!['on','off','pulse'].includes(input.action))err('Scegli accensione, spegnimento o impulso.');
  if(!['date','weekly','interval'].includes(input.repeat))err('Scegli una data o i giorni della settimana.');
  if(!solarTime(input.start)&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.start||''))err('Indica un orario valido oppure alba o tramonto.');
