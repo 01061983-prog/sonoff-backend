@@ -14,13 +14,13 @@ module.exports=function install({app,db,accounts,programming,secret,appid,allowe
   const a=await scoped(c.owner);if(a.id!==c.accountId)throw fail(401,'ha_auth');return c;
  }});
  const provider=createProvider({load,authorize:scoped,bridge,secret});
- const publicConfig=c=>c?{owner:c.owner,accountId:c.accountId,workspaceId:c.workspaceId,workspaceName:c.workspaceName,...(c.workspaces?{workspaces:c.workspaces}:{}),revision:c.revision,agentId:c.agentId,enabled:c.enabled,revoked:!!c.revoked,devices:c.devices}:null;
+ const publicConfig=c=>c?{owner:c.owner,accountId:c.accountId,workspaceId:c.workspaceId,workspaceName:c.workspaceName,...(c.workspaces?{workspaces:c.workspaces}:{}),revision:c.revision,agentId:c.agentId,enabled:c.enabled,revoked:!!c.revoked,devices:c.devices,excludedDevices:c.excludedDevices||[]}:null;
  const wrap=fn=>async(req,res)=>{res.set('Cache-Control','no-store');try{await accounts.bridgeAdmin(req);res.json(await fn(req));}catch(e){e=require('../firebase-quota.cjs').record(e);if(e.retryAfterMs)res.set('Retry-After',String(Math.ceil(e.retryAfterMs/1000)));res.status(e.status||503).json({ok:false,error:e.code||'ha_unavailable',msg:e.message,retryAfterMs:e.retryAfterMs});}};
  async function coverage(t,c,a){
   const schedules=await t.get(db().collection('ewelinkProgrammingSchedules').where('owner','==',c.owner));
   const homes=c.workspaces||[{id:c.workspaceId,name:c.workspaceName}],workspaces=[];
   for(const home of homes){const workspaceKey=hash(appid+':app:'+a.id+':'+home.id+(c.owner!==a.providerOwner?':provider:'+c.owner:''));workspaces.push(await t.get(db().collection('sanLuigiScenarioWorkspaces').doc(workspaceKey)));}
-  const mapped=new Set(c.devices.map(d=>d.deviceId));const check=action=>{if(!mapped.has(action.deviceId)||action.kind==='gate'||action.action==='pulse'||action.pulse===true||action.outlets?.some(o=>o!==0))throw fail(409,'ha_coverage','Dispositivi o canali di uno scenario o programma non ancora mappati. Nessuna attivazione eseguita.');};
+  const mapped=new Set(c.devices.map(d=>d.deviceId)),excluded=new Set((c.excludedDevices||[]).map(d=>d.deviceId));const check=action=>{if(!mapped.has(action.deviceId)&&excluded.has(action.deviceId))return;if(!mapped.has(action.deviceId)||action.kind==='gate'||action.action==='pulse'||action.pulse===true||action.outlets?.some(o=>o!==0))throw fail(409,'ha_coverage','Dispositivi o canali di uno scenario o programma non ancora mappati. Nessuna attivazione eseguita.');};
   for(const doc of schedules.docs){const s=doc.data();if(s.last?.status==='claimed'&&s.last.until>Date.now())throw fail(409,'ha_busy','Attendi la fine del comando programmato.');if(s.kind==='daikin')continue;if(s.kind==='scene'&&!homes.some(h=>h.id===s.workspaceId))throw fail(409,'ha_coverage','Una programmazione fa riferimento a una casa non associata.');for(const target of s.kind==='scene'?s.targets||[]:[s])check(target);}
   for(const workspace of workspaces){if(Object.values(workspace.data()?.executions||{}).some(r=>r.status==='running'&&r.expiresAt>Date.now())||bridge.busy(c))throw fail(409,'ha_busy','Attendi la fine dei comandi in corso.');
   for(const room of workspace.data()?.rooms||[])for(const member of room.members||[])if(member.type==='device'||member.kind==='device')check({deviceId:member.deviceId||member.id});
@@ -30,8 +30,9 @@ module.exports=function install({app,db,accounts,programming,secret,appid,allowe
  app.get('/api/app/home-assistant/devices',wrap(async req=>{await scoped(req.query.owner);const c=await load(req.query.owner);if(!c)throw fail(409,'ha_prepare','Prepara prima il collegamento.');return {ok:true,devices:await bridge.discover(c),revision:c.revision};}));
  app.get('/api/app/home-assistant',wrap(async req=>{
   const a=await scoped(req.query.owner),c=await load(req.query.owner);if(c&&c.accountId!==a.id)throw fail(403,'ha_scope');const s=c?bridge.snapshot(c):null;
-  let bootstrapWorkspace=null;if(a.email==='sansiroora@gmail.com'){const homes=require('./san-siro-workspaces.json'),existing=[];for(const home of homes){const key=hash(appid+':app:'+a.id+':'+home.id+(req.query.owner!==a.providerOwner?':provider:'+req.query.owner:'')),s=await db().collection('sanLuigiScenarioWorkspaces').doc(key).get();if(s.exists&&((s.data().scenes||[]).length||(s.data().rooms||[]).length))existing.push(home);}const primary=existing.length===1?existing[0]:homes[0];bootstrapWorkspace={workspaceId:primary.id,workspaceName:primary.name,workspaces:homes};}
-  return {ok:true,bootstrapWorkspace,initialDevices:require('./san-siro-devices.json'),config:publicConfig(c),bridge:s?{ready:s.ready,observedAt:s.observedAt,states:[...s.states.values()]}:null};
+  let initialDevices=[],initialExcluded=[];let bootstrapWorkspace=null;if(a.email==='sansiroora@gmail.com'){const homes=require('./san-siro-workspaces.json'),existing=[];for(const home of homes){const key=hash(appid+':app:'+a.id+':'+home.id+(req.query.owner!==a.providerOwner?':provider:'+req.query.owner:'')),s=await db().collection('sanLuigiScenarioWorkspaces').doc(key).get();if(s.exists&&((s.data().scenes||[]).length||(s.data().rooms||[]).length))existing.push(home);}const primary=existing.length===1?existing[0]:homes[0];bootstrapWorkspace={workspaceId:primary.id,workspaceName:primary.name,workspaces:homes};initialDevices=require('./san-siro-devices.json');}
+  if(a.email==='gabriele.maini83@gmail.com'&&req.query.owner===a.providerOwner){const profile=require('./landriano-initial.json');bootstrapWorkspace={workspaceId:profile.workspaceId,workspaceName:profile.workspaceName};initialDevices=profile.devices;initialExcluded=profile.excludedDevices;}
+  return {ok:true,bootstrapWorkspace,initialDevices,initialExcluded,config:publicConfig(c),bridge:s?{ready:s.ready,observedAt:s.observedAt,states:[...s.states.values()]}:null};
  }));
  app.post('/api/app/home-assistant',wrap(async req=>{
   const b=req.body||{},a=await scoped(b.owner),ref=configs().doc(b.owner);
@@ -46,7 +47,7 @@ module.exports=function install({app,db,accounts,programming,secret,appid,allowe
     if(!Array.isArray(b.entityIds)||!b.entityIds.length||b.entityIds.length>200)throw fail(400,'ha_mapping');
     const found=bridge.catalogue(c),add=b.entityIds.map(e=>found.find(d=>d.entityId===e));if(add.some(d=>!d))throw fail(400,'ha_mapping','Ripeti la ricerca dei dispositivi.');
     const devices=[...c.devices,...add.filter(d=>!c.devices.some(old=>old.entityId===d.entityId)).map(d=>({...d,kind:'multi',outlets:[0]}))];
-    const clean=binding({...c,devices});await coverage(t,clean,a);updated={...c,...clean,revision:c.revision+1,updatedAt:Date.now(),updatedBy:req.appActor.uid};t.set(ref,updated);
+    const clean=binding({...c,devices,excludedDevices:c.excludedDevices?.filter(d=>!devices.some(mapped=>mapped.deviceId===d.deviceId))});await coverage(t,clean,a);updated={...c,...clean,revision:c.revision+1,updatedAt:Date.now(),updatedBy:req.appActor.uid};t.set(ref,updated);
    });bridge.configure(updated);return {ok:true,config:publicConfig(updated)};
   }
   if(!['activate','deactivate','revoke'].includes(b.op))throw fail(400,'ha_operation');
