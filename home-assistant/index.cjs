@@ -55,7 +55,7 @@ module.exports=function install({app,db,accounts,programming,secret,appid,allowe
   await db().runTransaction(async t=>{const current=await t.get(ref),c=current.data();if(!c||c.accountId!==a.id||c.revision!==b.expectedRevision)throw fail(409,'ha_revision');previous=c;
    if(b.op==='activate'){
     if(c.revoked||!bridge.snapshot(c).ready||b.confirmedLocalDeviceIds?.length!==c.devices.length||new Set(b.confirmedLocalDeviceIds).size!==c.devices.length||c.devices.some(d=>!b.confirmedLocalDeviceIds.includes(d.deviceId)))throw fail(409,'ha_verify','Verifica prima ogni dispositivo in locale e collega il ponte.');
-    const s=bridge.snapshot(c);if(c.devices.some(d=>!['on','off'].includes(s.states.get(d.entityId)?.state)))throw fail(409,'ha_verify','Uno o più relè non sono disponibili.');
+    const s=bridge.snapshot(c);require('./activation.cjs')(c,s,b.availableOnly);
     await coverage(t,c,a);
    }
    if(b.op!=='activate')await coverage(t,c,a);
