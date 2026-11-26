@@ -13,9 +13,12 @@ function binding(input){
   ids.add(d.deviceId);entities.add(d.entityId);
   // Initial migration is deliberately limited to verified single-relay MINIR4s.
   if(d.kind==='multi'&&(!Array.isArray(d.outlets)||d.outlets.length!==1||d.outlets[0]!==0))throw fail(400,'ha_channels','MINIR4 supporta soltanto il relè fisico CH 1 (outlet 0).');
-  return {deviceId:d.deviceId,name:d.name.trim(),entityId:d.entityId,kind:d.kind,outlets:d.kind==='multi'?[0]:[],model:'MINIR4'};
+  if(d.model!==undefined&&!['MINIR4','S61STPF'].includes(d.model))throw fail(400,'ha_model','Modello non ancora verificato per questo collegamento.');
+  return {deviceId:d.deviceId,name:d.name.trim(),entityId:d.entityId,kind:d.kind,outlets:d.kind==='multi'?[0]:[],model:d.model||'MINIR4'};
  });
- return {owner:input.owner,accountId:input.accountId,workspaceId:input.workspaceId,workspaceName:input.workspaceName.trim(),devices,...(workspaces?{workspaces:workspaces.map(h=>({id:h.id,name:h.name.trim()}))}:{})};
+ const excludedDevices=input.excludedDevices;
+ if(excludedDevices!==undefined&&(!Array.isArray(excludedDevices)||excludedDevices.length>200||excludedDevices.some(d=>!d||typeof d.deviceId!=='string'||! /^[a-f0-9]{10}$/.test(d.deviceId)||ids.has(d.deviceId)||typeof d.name!=='string'||!d.name.trim()||d.name.length>100||!Array.isArray(d.outlets)||!d.outlets.length||d.outlets.some(o=>!Number.isInteger(o)||o<0||o>3)||new Set(d.outlets).size!==d.outlets.length)||new Set(excludedDevices.map(d=>d.deviceId)).size!==excludedDevices.length))throw fail(400,'ha_exclusions','Dispositivi esclusi non validi.');
+ return {owner:input.owner,accountId:input.accountId,workspaceId:input.workspaceId,workspaceName:input.workspaceName.trim(),devices,...(excludedDevices?{excludedDevices:excludedDevices.map(d=>({deviceId:d.deviceId,name:d.name.trim(),outlets:d.outlets}))}:{}),...(workspaces?{workspaces:workspaces.map(h=>({id:h.id,name:h.name.trim()}))}:{})};
 }
 function safeState(s){
  if(!s||!entity(s.entity_id)||typeof s.state!=='string')throw fail(400,'ha_state','Stato Home Assistant non valido.');

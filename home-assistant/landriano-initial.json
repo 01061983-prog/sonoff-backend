@@ -1,0 +1,135 @@
+{
+  "workspaceId": "678a5875e3d95cb89d891415",
+  "workspaceName": "My Home",
+  "devices": [
+    {
+      "name": "Bar 1",
+      "deviceId": "100266ac07",
+      "entityId": "switch.bar_1_sonoff_100266ac07_1",
+      "kind": "multi",
+      "outlets": [
+        0
+      ],
+      "model": "MINIR4"
+    },
+    {
+      "name": "Caricatore di emergenza",
+      "deviceId": "1002b9755f",
+      "entityId": "switch.caricatore_di_emergenza_sonoff_1002b9755f_1",
+      "kind": "multi",
+      "outlets": [
+        0
+      ],
+      "model": "S61STPF"
+    },
+    {
+      "name": "Luce 1 campo",
+      "deviceId": "10028b905f",
+      "entityId": "switch.luce_1_campo_sonoff_10028b905f_1",
+      "kind": "multi",
+      "outlets": [
+        0
+      ],
+      "model": "MINIR4"
+    },
+    {
+      "name": "Luce portico 1",
+      "deviceId": "10024af722",
+      "entityId": "switch.luce_portico_1_sonoff_10024af722_1",
+      "kind": "multi",
+      "outlets": [
+        0
+      ],
+      "model": "MINIR4"
+    },
+    {
+      "name": "Luce portico 3",
+      "deviceId": "100266a6f9",
+      "entityId": "switch.luce_portico_3_sonoff_100266a6f9_1",
+      "kind": "multi",
+      "outlets": [
+        0
+      ],
+      "model": "MINIR4"
+    },
+    {
+      "name": "Luci campo 2",
+      "deviceId": "10028bb98f",
+      "entityId": "switch.luci_campo_2_sonoff_10028bb98f_1",
+      "kind": "multi",
+      "outlets": [
+        0
+      ],
+      "model": "MINIR4"
+    },
+    {
+      "name": "Luci campo 3",
+      "deviceId": "10028b81dd",
+      "entityId": "switch.luci_campo_3_sonoff_10028b81dd_1",
+      "kind": "multi",
+      "outlets": [
+        0
+      ],
+      "model": "MINIR4"
+    },
+    {
+      "name": "Luci capo 4",
+      "deviceId": "10028b8323",
+      "entityId": "switch.luci_capo_4_sonoff_10028b8323_1",
+      "kind": "multi",
+      "outlets": [
+        0
+      ],
+      "model": "MINIR4"
+    },
+    {
+      "name": "Luci portico 2",
+      "deviceId": "10024aef5a",
+      "entityId": "switch.luci_portico_2_sonoff_10024aef5a_1",
+      "kind": "multi",
+      "outlets": [
+        0
+      ],
+      "model": "MINIR4"
+    }
+  ],
+  "excludedDevices": [
+    {
+      "name": "Basculante",
+      "deviceId": "10028e5762",
+      "outlets": [
+        0
+      ]
+    },
+    {
+      "name": "Cancello Landriano",
+      "deviceId": "1000ac81a0",
+      "outlets": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "Luci campo 5",
+      "deviceId": "10028bda35",
+      "outlets": [
+        0
+      ]
+    },
+    {
+      "name": "Luci esterne",
+      "deviceId": "1000965dd3",
+      "outlets": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "Pompa Sala Prove",
+      "deviceId": "1002b977f0",
+      "outlets": [
+        0
+      ]
+    }
+  ]
+}
