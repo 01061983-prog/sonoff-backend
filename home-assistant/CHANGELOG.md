@@ -1,3 +1,9 @@
+# 0.1.3
+
+- Ricerca su richiesta delle prese Matter con un solo comando ON/OFF, senza elenco fisso di modelli.
+- Aggiunta alla plancia selezionata e sostituzione esplicita di un vecchio collegamento, mantenendo identità e programmazioni PACE.
+- Nessun nuovo polling Firebase o eWeLink.
+
 # 0.1.2
 
 - Pulsanti a impulso per i due relè verificati di cancello e basculante Landriano.
