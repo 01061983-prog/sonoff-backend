@@ -45,8 +45,7 @@ module.exports=function install({app,db,accounts,programming,secret,appid,allowe
    let updated;
    await db().runTransaction(async t=>{const current=await t.get(ref),c=current.data();if(!c||c.revoked||c.revision!==b.expectedRevision)throw fail(409,'ha_revision');
     if(!Array.isArray(b.entityIds)||!b.entityIds.length||b.entityIds.length>200)throw fail(400,'ha_mapping');
-    const found=bridge.catalogue(c),add=b.entityIds.map(e=>found.find(d=>d.entityId===e));if(add.some(d=>!d||d.supported===false))throw fail(400,'ha_mapping','Ripeti la ricerca dei dispositivi.');
-    const devices=[...c.devices,...add.filter(d=>!c.devices.some(old=>old.entityId===d.entityId)).map(d=>({...d,kind:'multi',outlets:d.channels?d.channels.map(c=>c.outlet):[0]}))];
+    const devices=require('./catalogue.cjs').addDevices(c,b.entityIds,bridge.catalogue(c),b.replacements);
     const clean=binding({...c,devices,excludedDevices:c.excludedDevices?.filter(d=>!devices.some(mapped=>mapped.deviceId===d.deviceId))});await coverage(t,clean,a);updated={...c,...clean,revision:c.revision+1,updatedAt:Date.now(),updatedBy:req.appActor.uid};t.set(ref,updated);
    });bridge.configure(updated);return {ok:true,config:publicConfig(updated)};
   }

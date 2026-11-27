@@ -40,3 +40,6 @@
 .pace-ha-dialog .ha-footer{position:sticky;bottom:0;display:flex;justify-content:flex-end;padding:16px 26px;border-top:1px solid #edf0f3;background:#fff}
 .pace-ha-dialog textarea{box-sizing:border-box;max-width:100%;padding:14px;border:1px solid #d7dde4;border-radius:12px;background:#f7f8fa;color:#252b35;font:12px/1.5 ui-monospace,monospace;resize:vertical}
 @media(max-width:520px){.pace-ha-dialog{max-height:calc(100dvh - 24px);border-radius:20px}.pace-ha-dialog .ha-header{padding:18px;gap:12px}.pace-ha-dialog .ha-header h2{font-size:1.25rem}.pace-ha-dialog .ha-body{padding:18px;gap:20px}.pace-ha-dialog .ha-actions{flex-direction:column}.pace-ha-dialog .ha-notice{margin:0 18px 18px}.pace-ha-dialog .ha-footer{padding:14px 18px}.pace-ha-dialog .ha-footer>button{width:100%}.pace-ha-dialog .ha-device-list{gap:8px}.pace-ha-dialog .ha-device-list li{padding:11px;font-size:.82rem}.pace-ha-dialog .ha-state{white-space:normal;max-width:95px}}
+
+.pace-ha-dialog .ha-found-row{flex-wrap:wrap}
+.pace-ha-dialog .ha-found-row>select{box-sizing:border-box;flex-basis:100%;width:100%;min-width:0;min-height:48px;padding:10px;border:1px solid #d7dde4;border-radius:10px;background:#fff;color:inherit;font:inherit;font-size:.85rem}

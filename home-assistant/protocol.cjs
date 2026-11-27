@@ -17,14 +17,15 @@ function binding(input){
  const devices=input.devices.map(d=>{
   if(!d||typeof d.deviceId!=='string'||!/^[a-f0-9]{10}$/i.test(d.deviceId)||!entity(d.entityId)||!['single','multi'].includes(d.kind)||typeof d.name!=='string'||!d.name.trim()||d.name.length>100||ids.has(d.deviceId)||entities.has(d.entityId))throw fail(400,'ha_mapping','Ogni relè richiede un ID PACE e una sola entità switch/light univoci.');
   ids.add(d.deviceId);entities.add(d.entityId);
-  const model=d.model||'MINIR4';
-  if(!['MINIR4','S61STPF','G2'].includes(model)&&!pulseProfile(d))throw fail(400,'ha_model','Modello non ancora verificato per questo collegamento.');
+  const model=d.model||'MINIR4',matter=d.source==='matter';
+  if(d.source!==undefined&&!matter||matter&&(typeof model!=='string'||!model||model.length>100||!d.entityId.startsWith('switch.')||d.controlMode!==undefined||d.channels!==undefined))throw fail(400,'ha_model','Collegamento Matter non valido.');
+  if(!matter&&!['MINIR4','S61STPF','G2'].includes(model)&&!pulseProfile(d))throw fail(400,'ha_model','Modello non ancora verificato per questo collegamento.');
   let channels;
-  if(model==='G2'){
+  if(!matter&&model==='G2'){
    if(d.kind!=='multi'||!Array.isArray(d.channels)||d.channels.length!==2||!Array.isArray(d.outlets)||d.outlets.length!==2||d.outlets[0]!==0||d.outlets[1]!==1)throw fail(400,'ha_channels','G2 richiede due relè fisici distinti.');
    channels=d.channels.map((c,i)=>{if(!c||c.outlet!==i||!entity(c.entityId)||(i===0?c.entityId!==d.entityId:entities.has(c.entityId)))throw fail(400,'ha_channels','Canali G2 non validi.');if(i>0)entities.add(c.entityId);return {outlet:i,entityId:c.entityId};});
   }else if(d.channels!==undefined||(d.kind==='multi'&&(!Array.isArray(d.outlets)||d.outlets.length!==1||d.outlets[0]!==0)))throw fail(400,'ha_channels','Il dispositivo dispone di un solo relè fisico.');
-  return {deviceId:d.deviceId,name:d.name.trim(),entityId:d.entityId,kind:d.kind,outlets:d.kind==='multi'?(channels?[0,1]:[0]):[],model,...(pulseProfile(d)?{controlMode:'pulse',pulseMs:pulseProfile(d).pulseMs}:{}),...(channels?{channels}:{})};
+  return {deviceId:d.deviceId,name:d.name.trim(),entityId:d.entityId,kind:d.kind,outlets:d.kind==='multi'?(channels?[0,1]:[0]):[],model,...(matter?{source:'matter'}:{}),...(!matter&&pulseProfile(d)?{controlMode:'pulse',pulseMs:pulseProfile(d).pulseMs}:{}),...(channels?{channels}:{})};
  });
  const excludedDevices=input.excludedDevices;
  if(excludedDevices!==undefined&&(!Array.isArray(excludedDevices)||excludedDevices.length>200||excludedDevices.some(d=>!d||typeof d.deviceId!=='string'||! /^[a-f0-9]{10}$/.test(d.deviceId)||ids.has(d.deviceId)||typeof d.name!=='string'||!d.name.trim()||d.name.length>100||!Array.isArray(d.outlets)||!d.outlets.length||d.outlets.some(o=>!Number.isInteger(o)||o<0||o>3)||new Set(d.outlets).size!==d.outlets.length)||new Set(excludedDevices.map(d=>d.deviceId)).size!==excludedDevices.length))throw fail(400,'ha_exclusions','Dispositivi esclusi non validi.');
